@@ -1,6 +1,5 @@
 package com.greenicephoenix.voidnote.presentation.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,13 +9,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import java.text.SimpleDateFormat
 import java.util.*
+import com.greenicephoenix.voidnote.presentation.components.ReadOnlyTagChip
 
 /**
  * Note Card Component - Displays a single note in the list
@@ -106,10 +105,11 @@ fun NoteCard(
                 if (note.tags.isNotEmpty()) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(Spacing.extraSmall),
+                        verticalAlignment = Alignment.CenterVertically, // ADD THIS LINE
                         modifier = Modifier.weight(1f)
                     ) {
                         note.tags.take(2).forEach { tag ->
-                            TagChip(tag = tag)
+                            ReadOnlyTagChip(tag = tag)
                         }
                         if (note.tags.size > 2) {
                             Text(
@@ -129,25 +129,6 @@ fun NoteCard(
                 )
             }
         }
-    }
-}
-
-/**
- * Tag Chip - Small pill-shaped tag display
- */
-@Composable
-private fun TagChip(tag: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
-            .padding(horizontal = Spacing.small, vertical = 4.dp)
-    ) {
-        Text(
-            text = tag,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-        )
     }
 }
 

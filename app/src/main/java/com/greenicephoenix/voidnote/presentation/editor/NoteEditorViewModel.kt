@@ -252,6 +252,32 @@ class NoteEditorViewModel @Inject constructor(
             noteRepository.toggleArchive(currentNoteId)
         }
     }
+
+    /**
+     * Add a tag to the note
+     */
+    fun addTag(tag: String) {
+        val trimmedTag = tag.trim()
+        if (trimmedTag.isBlank()) return
+
+        val currentTags = _uiState.value.tags
+        if (trimmedTag !in currentTags) {
+            _uiState.value = _uiState.value.copy(
+                tags = currentTags + trimmedTag
+            )
+            scheduleAutoSave()
+        }
+    }
+
+    /**
+     * Remove a tag from the note
+     */
+    fun removeTag(tag: String) {
+        _uiState.value = _uiState.value.copy(
+            tags = _uiState.value.tags - tag
+        )
+        scheduleAutoSave()
+    }
 }
 
 /**

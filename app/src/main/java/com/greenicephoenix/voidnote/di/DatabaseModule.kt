@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase
 import com.greenicephoenix.voidnote.data.local.dao.FolderDao
 import com.greenicephoenix.voidnote.data.local.dao.NoteDao
+import com.greenicephoenix.voidnote.data.local.PreferencesManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -63,5 +64,16 @@ object DatabaseModule {
     @Singleton
     fun provideFolderDao(database: VoidNoteDatabase): FolderDao {
         return database.folderDao()
+    }
+
+    /**
+     * Provide PreferencesManager
+     */
+    @Provides
+    @Singleton
+    fun providePreferencesManager(
+        @ApplicationContext context: Context
+    ): com.greenicephoenix.voidnote.data.local.PreferencesManager {
+        return com.greenicephoenix.voidnote.data.local.PreferencesManager(context)
     }
 }

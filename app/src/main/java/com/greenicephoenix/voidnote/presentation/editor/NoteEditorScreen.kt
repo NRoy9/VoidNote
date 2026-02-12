@@ -3,6 +3,7 @@ package com.greenicephoenix.voidnote.presentation.editor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -25,7 +26,15 @@ import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
+import com.greenicephoenix.voidnote.presentation.components.EditableTagChip
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.height
 
 /**
  * Note Editor Screen - Create and edit notes
@@ -110,6 +119,15 @@ fun NoteEditorScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            Spacer(modifier = Modifier.height(Spacing.small))
+
+            // Tags Section - ADD THIS ENTIRE BLOCK
+            TagsSection(
+                tags = uiState.tags,
+                onAddTag = { viewModel.addTag(it) },
+                onRemoveTag = { viewModel.removeTag(it) }
+            )
+
             Spacer(modifier = Modifier.height(Spacing.medium))
 
             // Content field
@@ -142,6 +160,8 @@ fun NoteEditorScreen(
             Spacer(modifier = Modifier.height(100.dp)) // Space for toolbar
         }
     }
+
+
 }
 
 /**
@@ -348,4 +368,128 @@ private fun formatLastSaved(timestamp: Long): String {
             dateFormat.format(Date(timestamp))
         }
     }
+}
+
+/**
+ * Tags Section - Add and manage tags
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TagsSection(
+    tags: List<String>,
+    onAddTag: (String) -> Unit,
+    onRemoveTag: (String) -> Unit
+) {
+    var showAddTagDialog by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Tags display
+        if (tags.isNotEmpty()) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.small),
+                verticalArrangement = Arrangement.spacedBy(Spacing.small)
+            ) {
+                tags.forEach { tag ->
+                    EditableTagChip(
+                        tag = tag,
+                        onRemove = { onRemoveTag(tag) }
+                    )
+                }
+
+                // Add tag button
+                AddTagButton(onClick = { showAddTagDialog = true })
+            }
+        } else {
+            // No tags - show add button
+            AddTagButton(onClick = { showAddTagDialog = true })
+        }
+    }
+
+    // Add tag dialog
+    if (showAddTagDialog) {
+        AddTagDialog(
+            onDismiss = { showAddTagDialog = false },
+            onConfirm = { tag ->
+                onAddTag(tag)
+                showAddTagDialog = false
+            }
+        )
+    }
+}
+
+/**
+ * Add tag button
+ */
+@Composable
+private fun AddTagButton(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.height(32.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = Spacing.medium,
+                vertical = Spacing.extraSmall
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.extraSmall)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Add tag",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+            Text(
+                text = "Add tag",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
+/**
+ * Add tag dialog
+ */
+@Composable
+private fun AddTagDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var tagName by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Tag") },
+        text = {
+            OutlinedTextField(
+                value = tagName,
+                onValueChange = { tagName = it },
+                label = { Text("Tag name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(tagName) },
+                enabled = tagName.isNotBlank()
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

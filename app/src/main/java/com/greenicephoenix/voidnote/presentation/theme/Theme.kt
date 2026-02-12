@@ -1,166 +1,117 @@
 package com.greenicephoenix.voidnote.presentation.theme
 
-import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
+import androidx.compose.ui.graphics.Color
 
 /**
- * Dark Color Scheme - Nothing-Inspired Design
- *
- * This is our primary theme - dark mode first approach
- * Pure blacks for OLED battery efficiency
+ * Dark Color Scheme - Primary theme
  */
 private val DarkColorScheme = darkColorScheme(
-    // Primary colors - Main brand color (Nothing Red accent)
     primary = VoidAccent,
     onPrimary = VoidWhite,
-    primaryContainer = VoidAccentDark,
+    primaryContainer = VoidDarkGray,
     onPrimaryContainer = VoidWhite,
 
-    // Secondary colors - Less prominent actions
     secondary = VoidLightGray,
     onSecondary = VoidWhite,
     secondaryContainer = VoidGray,
-    onSecondaryContainer = VoidTextSecondary,
+    onSecondaryContainer = VoidWhite,
 
-    // Tertiary colors - Alternative accent
-    tertiary = VoidTextSecondary,
-    onTertiary = VoidBlack,
-    tertiaryContainer = VoidLightGray,
-    onTertiaryContainer = VoidWhite,
-
-    // Background colors
     background = VoidBlack,
     onBackground = VoidWhite,
 
-    // Surface colors (cards, dialogs, etc.)
     surface = VoidDarkGray,
     onSurface = VoidWhite,
+
     surfaceVariant = VoidGray,
     onSurfaceVariant = VoidTextSecondary,
 
-    // Outline colors (borders, dividers)
     outline = VoidLightGray,
-    outlineVariant = VoidBorderGray,
+    outlineVariant = VoidGray,
 
-    // Error colors
-    error = VoidError,
-    onError = VoidWhite,
-    errorContainer = VoidAccentDark,
-    onErrorContainer = VoidWhite,
-
-    // Inverse colors (for snackbars, etc.)
-    inverseSurface = VoidWhite,
-    inverseOnSurface = VoidBlack,
-    inversePrimary = VoidAccent,
-
-    // Scrim (overlay for dialogs)
-    scrim = VoidBlack.copy(alpha = 0.7f)
+    error = VoidAccent,
+    onError = VoidWhite
 )
 
 /**
- * Light Color Scheme - For users who prefer light mode
- *
- * Inverted color scheme while maintaining Nothing aesthetic
+ * Light Color Scheme
  */
 private val LightColorScheme = lightColorScheme(
-    // Primary colors
     primary = VoidAccent,
     onPrimary = VoidWhite,
-    primaryContainer = VoidAccent.copy(alpha = 0.1f),
-    onPrimaryContainer = VoidAccent,
+    primaryContainer = Color(0xFFFFDAD6),
+    onPrimaryContainer = Color(0xFF410002),
 
-    // Secondary colors
-    secondary = VoidLightTextSecondary,
+    secondary = Color(0xFF775652),
     onSecondary = VoidWhite,
-    secondaryContainer = VoidLightBorder,
-    onSecondaryContainer = VoidLightText,
+    secondaryContainer = Color(0xFFFFDAD6),
+    onSecondaryContainer = Color(0xFF2C1512),
 
-    // Tertiary colors
-    tertiary = VoidLightTextTertiary,
-    onTertiary = VoidWhite,
-    tertiaryContainer = VoidLightBorder,
-    onTertiaryContainer = VoidLightText,
-
-    // Background colors
     background = VoidLightBg,
-    onBackground = VoidLightText,
+    onBackground = Color(0xFF1A1C1E),
 
-    // Surface colors
     surface = VoidLightCard,
-    onSurface = VoidLightText,
-    surfaceVariant = VoidLightBg,
-    onSurfaceVariant = VoidLightTextSecondary,
+    onSurface = Color(0xFF1A1C1E),
 
-    // Outline colors
-    outline = VoidLightBorder,
-    outlineVariant = VoidLightBorder.copy(alpha = 0.5f),
+    surfaceVariant = Color(0xFFF4DDDB),
+    onSurfaceVariant = Color(0xFF534341),
 
-    // Error colors
-    error = VoidError,
-    onError = VoidWhite,
-    errorContainer = VoidError.copy(alpha = 0.1f),
-    onErrorContainer = VoidError,
+    outline = Color(0xFF857371),
+    outlineVariant = Color(0xFFD8C2BF),
 
-    // Inverse colors
-    inverseSurface = VoidLightText,
-    inverseOnSurface = VoidLightBg,
-    inversePrimary = VoidAccent,
-
-    // Scrim
-    scrim = VoidBlack.copy(alpha = 0.5f)
+    error = Color(0xFFBA1A1A),
+    onError = VoidWhite
 )
 
 /**
- * VoidNoteTheme - Main theme composable
- *
- * This wraps your entire app and provides consistent theming
- *
- * @param darkTheme Whether to use dark theme (defaults to system setting)
- * @param content The composable content to theme
+ * Extra Dark Color Scheme - Pure OLED black
+ */
+private val ExtraDarkColorScheme = darkColorScheme(
+    primary = VoidAccent,
+    onPrimary = VoidWhite,
+    primaryContainer = Color(0xFF0A0A0A),
+    onPrimaryContainer = VoidWhite,
+
+    secondary = VoidLightGray,
+    onSecondary = VoidWhite,
+    secondaryContainer = Color(0xFF0A0A0A),
+    onSecondaryContainer = VoidWhite,
+
+    background = Color(0xFF000000), // Pure OLED black
+    onBackground = VoidWhite,
+
+    surface = Color(0xFF0A0A0A),
+    onSurface = VoidWhite,
+
+    surfaceVariant = Color(0xFF121212),
+    onSurfaceVariant = VoidTextSecondary,
+
+    outline = Color(0xFF2C2C2C),
+    outlineVariant = Color(0xFF1E1E1E),
+
+    error = VoidAccent,
+    onError = VoidWhite
+)
+
+/**
+ * Main Theme Composable
  */
 @Composable
 fun VoidNoteTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    extraDark: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    // Select color scheme based on theme
-    val colorScheme = if (darkTheme) {
-        DarkColorScheme
-    } else {
-        LightColorScheme
+    val colorScheme = when {
+        extraDark -> ExtraDarkColorScheme
+        darkTheme -> DarkColorScheme
+        else -> LightColorScheme
     }
 
-    // Get the current view to modify system UI
-    val view = LocalView.current
-
-    // Update system bars (status bar and navigation bar) to match theme
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as Activity).window
-
-            // Set status bar color to match background
-            window.statusBarColor = colorScheme.background.toArgb()
-
-            // Set navigation bar color to match background
-            window.navigationBarColor = colorScheme.background.toArgb()
-
-            // Update system bar icon colors (dark icons on light theme, light icons on dark theme)
-            WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = !darkTheme
-                isAppearanceLightNavigationBars = !darkTheme
-            }
-        }
-    }
-
-    // Apply Material Theme with our custom color scheme and typography
     MaterialTheme(
         colorScheme = colorScheme,
         typography = VoidTypography,

@@ -11,6 +11,8 @@ import com.greenicephoenix.voidnote.presentation.splash.SplashScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.greenicephoenix.voidnote.presentation.folders.FolderNotesScreen
+import com.greenicephoenix.voidnote.presentation.search.SearchScreen
+import com.greenicephoenix.voidnote.presentation.settings.SettingsScreen
 
 /**
  * Navigation Graph - Defines all navigation routes and transitions
@@ -92,14 +94,28 @@ fun SetupNavGraph(
             )
         }
 
-        // Settings Screen (we'll implement this later)
+        // Settings Screen
         composable(route = Screen.Settings.route) {
-            // TODO: SettingsScreen()
+            SettingsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
         }
 
-        // Search Screen (we'll implement this later)
+        // Search Screen
         composable(route = Screen.Search.route) {
-            // TODO: SearchScreen()
+            SearchScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onNoteClick = { noteId ->
+                    navController.navigate(Screen.NoteEditor.createRoute(noteId))
+                },
+                onFolderClick = { folderId ->
+                    navController.navigate(Screen.FolderNotes.createRoute(folderId))
+                }
+            )
         }
 
         // Folders Screen
