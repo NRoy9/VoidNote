@@ -8,37 +8,50 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 /**
- * Dark Color Scheme - Primary theme
+ * Dark Color Scheme - Lifted blacks for better contrast
+ *
+ * This is the DEFAULT dark theme (not pure OLED)
+ * Background: #121212 (Material Design standard)
+ * Provides better depth perception and reduces eye strain
  */
 private val DarkColorScheme = darkColorScheme(
+    // Primary colors
     primary = VoidAccent,
     onPrimary = VoidWhite,
     primaryContainer = VoidDarkGray,
     onPrimaryContainer = VoidWhite,
 
+    // Secondary colors
     secondary = VoidLightGray,
     onSecondary = VoidWhite,
     secondaryContainer = VoidGray,
     onSecondaryContainer = VoidWhite,
 
-    background = VoidBlack,
+    // Background colors - LIFTED from pure black
+    background = VoidBlack,  // ✅ #121212 - Visible difference from Extra Dark!
     onBackground = VoidWhite,
 
-    surface = VoidDarkGray,
+    // Surface colors - Cards, bottom sheets, etc.
+    surface = VoidDarkGray,  // ✅ #1E1E1E - Clear elevation
     onSurface = VoidWhite,
 
-    surfaceVariant = VoidGray,
+    surfaceVariant = VoidGray,  // ✅ #2A2A2A - Secondary surfaces
     onSurfaceVariant = VoidTextSecondary,
 
-    outline = VoidLightGray,
-    outlineVariant = VoidGray,
+    // Outline colors - Borders and dividers
+    outline = VoidLightGray,  // ✅ #3A3A3A - More visible borders
+    outlineVariant = VoidBorderGray,
 
+    // Error colors
     error = VoidAccent,
     onError = VoidWhite
 )
 
 /**
- * Light Color Scheme
+ * Light Color Scheme - Clean, minimal light theme
+ *
+ * Background: #FAFAFA (off-white to reduce eye strain)
+ * Follows Material Design 3 guidelines
  */
 private val LightColorScheme = lightColorScheme(
     primary = VoidAccent,
@@ -52,15 +65,15 @@ private val LightColorScheme = lightColorScheme(
     onSecondaryContainer = Color(0xFF2C1512),
 
     background = VoidLightBg,
-    onBackground = Color(0xFF1A1C1E),
+    onBackground = VoidLightText,
 
     surface = VoidLightCard,
-    onSurface = Color(0xFF1A1C1E),
+    onSurface = VoidLightText,
 
     surfaceVariant = Color(0xFFF4DDDB),
     onSurfaceVariant = Color(0xFF534341),
 
-    outline = Color(0xFF857371),
+    outline = VoidLightBorder,
     outlineVariant = Color(0xFFD8C2BF),
 
     error = Color(0xFFBA1A1A),
@@ -69,36 +82,55 @@ private val LightColorScheme = lightColorScheme(
 
 /**
  * Extra Dark Color Scheme - Pure OLED black
+ *
+ * Background: #000000 (true black for AMOLED screens)
+ * Maximum battery saving and aggressive dark mode
+ * Best for night use and OLED devices
  */
 private val ExtraDarkColorScheme = darkColorScheme(
+    // Primary colors
     primary = VoidAccent,
     onPrimary = VoidWhite,
-    primaryContainer = Color(0xFF0A0A0A),
+    primaryContainer = VoidExtraDarkSurface,
     onPrimaryContainer = VoidWhite,
 
+    // Secondary colors
     secondary = VoidLightGray,
     onSecondary = VoidWhite,
-    secondaryContainer = Color(0xFF0A0A0A),
+    secondaryContainer = VoidExtraDarkSurface,
     onSecondaryContainer = VoidWhite,
 
-    background = Color(0xFF000000), // Pure OLED black
+    // Background - PURE OLED BLACK
+    background = VoidExtraBlack,  // ✅ #000000 - True black for OLED!
     onBackground = VoidWhite,
 
-    surface = Color(0xFF0A0A0A),
+    // Surface colors - Minimal lift for depth
+    surface = VoidExtraDarkSurface,  // ✅ #0A0A0A - Barely visible elevation
     onSurface = VoidWhite,
 
-    surfaceVariant = Color(0xFF121212),
+    surfaceVariant = VoidExtraDarkSecondary,  // ✅ #151515 - Subtle layering
     onSurfaceVariant = VoidTextSecondary,
 
-    outline = Color(0xFF2C2C2C),
-    outlineVariant = Color(0xFF1E1E1E),
+    // Outline colors - Very subtle
+    outline = VoidExtraDarkBorder,  // ✅ #1F1F1F - Minimal borders
+    outlineVariant = VoidExtraDarkSecondary,
 
+    // Error colors
     error = VoidAccent,
     onError = VoidWhite
 )
 
 /**
  * Main Theme Composable
+ *
+ * Provides three distinct visual themes:
+ * 1. Light Mode - Off-white background, best for daytime
+ * 2. Dark Mode - Lifted blacks (#121212), balanced dark theme
+ * 3. Extra Dark - Pure OLED (#000000), maximum battery saving
+ *
+ * @param darkTheme Whether to use dark theme (default: system preference)
+ * @param extraDark Whether to use pure OLED black theme
+ * @param content The content to theme
  */
 @Composable
 fun VoidNoteTheme(
@@ -107,9 +139,18 @@ fun VoidNoteTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-        extraDark -> ExtraDarkColorScheme
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        extraDark -> {
+            // Pure OLED black - Maximum battery saving
+            ExtraDarkColorScheme
+        }
+        darkTheme -> {
+            // Lifted blacks - Better contrast and readability
+            DarkColorScheme
+        }
+        else -> {
+            // Light theme - Off-white background
+            LightColorScheme
+        }
     }
 
     MaterialTheme(

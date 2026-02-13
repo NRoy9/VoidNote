@@ -19,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.core.net.toUri
+import androidx.compose.material.icons.filled.Delete
 
 /**
  * Settings Screen - App configuration and preferences
@@ -33,6 +34,7 @@ import androidx.core.net.toUri
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToTrash: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -100,6 +102,15 @@ fun SettingsScreen(
             // DATA MANAGEMENT SECTION
             item {
                 SectionHeader(text = "DATA MANAGEMENT")
+            }
+
+            item {
+                SettingsItem(
+                    icon = Icons.Default.Delete,
+                    title = "Trash",
+                    subtitle = "View and manage deleted notes",
+                    onClick = onNavigateToTrash
+                )
             }
 
             item {

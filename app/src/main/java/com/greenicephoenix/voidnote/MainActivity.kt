@@ -16,12 +16,16 @@ import com.greenicephoenix.voidnote.presentation.settings.AppTheme
 import com.greenicephoenix.voidnote.presentation.theme.VoidNoteTheme
 import com.greenicephoenix.voidnote.presentation.theme.rememberThemeState
 import dagger.hilt.android.AndroidEntryPoint
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.setValue
-import com.greenicephoenix.voidnote.presentation.theme.rememberThemeState
+import androidx.core.view.WindowCompat  // ✅ ADD THIS IMPORT
 
 /**
  * MainActivity - Entry point of the app
+ *
+ * Responsibilities:
+ * - Theme management (observes user preference from DataStore)
+ * - Status bar configuration (light/dark icons)
+ * - Edge-to-edge display
+ * - Navigation setup
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -29,13 +33,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Enable edge-to-edge display (immersive UI)
         enableEdgeToEdge()
 
         setContent {
             // Observe theme preference from DataStore
             val currentTheme by rememberThemeState()
 
-            // Determine dark theme based on user preference
+            // Determine if we should use dark theme
             val isDarkTheme = when (currentTheme) {
                 AppTheme.LIGHT -> false
                 AppTheme.DARK -> true
@@ -43,8 +48,15 @@ class MainActivity : ComponentActivity() {
                 AppTheme.SYSTEM -> isSystemInDarkTheme()
             }
 
-            // Determine if extra dark (OLED)
+            // Determine if we should use extra dark (OLED) theme
             val isExtraDark = currentTheme == AppTheme.EXTRA_DARK
+
+            // ✅ FIX STATUS BAR ICONS (light icons for dark themes, dark icons for light theme)
+            val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+            windowInsetsController.isAppearanceLightStatusBars = !isDarkTheme
+            // Explanation:
+            // - When isDarkTheme = true → isAppearanceLightStatusBars = false → WHITE icons
+            // - When isDarkTheme = false → isAppearanceLightStatusBars = true → DARK icons
 
             VoidNoteTheme(darkTheme = isDarkTheme, extraDark = isExtraDark) {
                 Surface(

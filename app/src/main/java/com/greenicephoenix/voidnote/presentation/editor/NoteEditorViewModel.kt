@@ -18,13 +18,12 @@ import javax.inject.Inject
 /**
  * ViewModel for Note Editor Screen
  *
- * NOW SUPPORTS FOLDERS!
- *
  * Features:
  * - Auto-save with debouncing (waits 500ms after typing stops)
  * - Load existing note or create new one
  * - Track folder assignment
  * - Real-time save status
+ * - Delete functionality (move to trash)
  */
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
@@ -50,6 +49,9 @@ class NoteEditorViewModel @Inject constructor(
     // Track which folder this note belongs to (if any)
     private var currentFolderId: String? = null
 
+    // ✅ NEW: Track if note is being deleted
+    private var isDeleting = false
+
     init {
         loadNote()
     }
@@ -73,10 +75,7 @@ class NoteEditorViewModel @Inject constructor(
                 val note = noteRepository.getNoteById(noteId)
                 if (note != null) {
                     currentNoteId = note.id
-                    currentFolderId = note.folderId // IMPORTANT: Store the folder ID
-
-                    // Add debug log
-                    android.util.Log.d("NoteEditor", "Loaded note ${note.id} with folderId: ${note.folderId}")
+                    currentFolderId = note.folderId
 
                     _uiState.value = _uiState.value.copy(
                         title = note.title,
@@ -152,8 +151,14 @@ class NoteEditorViewModel @Inject constructor(
     /**
      * Schedule auto-save with debouncing
      * Waits 500ms after user stops typing before saving
+     * ✅ FIXED: Don't schedule if deleting
      */
     private fun scheduleAutoSave() {
+        // ✅ Don't auto-save if we're deleting the note
+        if (isDeleting) {
+            return
+        }
+
         // Cancel previous save job
         autoSaveJob?.cancel()
 
@@ -166,7 +171,6 @@ class NoteEditorViewModel @Inject constructor(
 
     /**
      * Save note to database
-     * NOW INCLUDES FOLDER ID!
      */
     private suspend fun saveNote() {
         val state = _uiState.value
@@ -175,9 +179,6 @@ class NoteEditorViewModel @Inject constructor(
         if (state.title.isBlank() && state.content.isBlank()) {
             return
         }
-
-        // Add debug log
-        android.util.Log.d("NoteEditor", "Saving note $currentNoteId with folderId: $currentFolderId")
 
         val note = Note(
             id = currentNoteId,
@@ -189,21 +190,16 @@ class NoteEditorViewModel @Inject constructor(
             isArchived = state.isArchived,
             isTrashed = false,
             tags = state.tags,
-            folderId = currentFolderId // IMPORTANT: Include folder ID
+            folderId = currentFolderId
         )
 
-        // More debug
-        android.util.Log.d("NoteEditor", "Note object created with folderId: ${note.folderId}")
-
         if (state.isNewNote) {
-            // Insert new note WITH folder ID
+            // Insert new note
             noteRepository.insertNote(note, folderId = currentFolderId)
-            android.util.Log.d("NoteEditor", "Inserted new note")
             _uiState.value = _uiState.value.copy(isNewNote = false)
         } else {
-            // Update existing note WITH folder ID
+            // Update existing note
             noteRepository.updateNote(note, folderId = currentFolderId)
-            android.util.Log.d("NoteEditor", "Updated existing note")
         }
 
         // Update last saved time
@@ -215,8 +211,15 @@ class NoteEditorViewModel @Inject constructor(
 
     /**
      * Force save immediately (when user leaves screen)
+     * ✅ FIXED: Don't save if note is being deleted
      */
     fun forceSave() {
+        // ✅ Don't save if we're deleting the note
+        if (isDeleting) {
+            android.util.Log.d("NoteEditor", "Skipping forceSave - note is being deleted")
+            return
+        }
+
         autoSaveJob?.cancel()
         viewModelScope.launch {
             saveNote()
@@ -224,11 +227,31 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     /**
-     * Delete current note
+     * ✅ FIXED: Delete current note (move to trash)
+     * Cancels auto-save to prevent overwriting trash status
      */
     fun deleteNote() {
         viewModelScope.launch {
+            // ✅ Set deletion flag to prevent auto-save
+            isDeleting = true
+
+            // ✅ Cancel any pending auto-save
+            autoSaveJob?.cancel()
+
+            // First, make sure the note is saved before deleting (if it's a new note)
+            if (_uiState.value.isNewNote &&
+                (_uiState.value.title.isNotBlank() || _uiState.value.content.isNotBlank())) {
+                // Save the note first (without auto-save interference)
+                saveNote()
+            }
+
+            // Small delay to ensure save completes
+            kotlinx.coroutines.delay(100)
+
+            // Now move to trash
             noteRepository.moveToTrash(currentNoteId)
+
+            android.util.Log.d("NoteEditor", "Note $currentNoteId moved to trash")
         }
     }
 

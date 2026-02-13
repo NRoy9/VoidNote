@@ -13,6 +13,7 @@ import androidx.navigation.navArgument
 import com.greenicephoenix.voidnote.presentation.folders.FolderNotesScreen
 import com.greenicephoenix.voidnote.presentation.search.SearchScreen
 import com.greenicephoenix.voidnote.presentation.settings.SettingsScreen
+import com.greenicephoenix.voidnote.presentation.trash.TrashScreen
 
 /**
  * Navigation Graph - Defines all navigation routes and transitions
@@ -99,6 +100,9 @@ fun SetupNavGraph(
             SettingsScreen(
                 onNavigateBack = {
                     navController.popBackStack()
+                },
+                onNavigateToTrash = {  // ✅ ADD THIS
+                    navController.navigate(Screen.Trash.route)
                 }
             )
         }
@@ -137,9 +141,13 @@ fun SetupNavGraph(
             // TODO: TagsScreen()
         }
 
-        // Trash Screen (we'll implement this later)
+        // NEW: Trash Screen
         composable(route = Screen.Trash.route) {
-            // TODO: TrashScreen()
+            TrashScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
         }
     }
 }

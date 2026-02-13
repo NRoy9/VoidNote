@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.height
  * - Auto-save indicator
  * - Word/character count
  * - Minimal, distraction-free design
+ * - Delete functionality (move to trash)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +55,9 @@ fun NoteEditorScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
+
+    // State for delete confirmation dialog
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     // Force save when leaving screen
     DisposableEffect(Unit) {
@@ -68,6 +72,7 @@ fun NoteEditorScreen(
                 onBackClick = onNavigateBack,
                 isPinned = uiState.isPinned,
                 onPinClick = { viewModel.togglePin() },
+                onDeleteClick = { showDeleteDialog = true },  // ✅ NEW: Delete button
                 lastSaved = uiState.lastSaved
             )
         },
@@ -121,7 +126,7 @@ fun NoteEditorScreen(
 
             Spacer(modifier = Modifier.height(Spacing.small))
 
-            // Tags Section - ADD THIS ENTIRE BLOCK
+            // Tags Section
             TagsSection(
                 tags = uiState.tags,
                 onAddTag = { viewModel.addTag(it) },
@@ -161,11 +166,23 @@ fun NoteEditorScreen(
         }
     }
 
-
+    // ✅ NEW: Delete confirmation dialog
+    if (showDeleteDialog) {
+        DeleteNoteDialog(
+            noteTitle = uiState.title.ifBlank { "Untitled Note" },
+            onConfirm = {
+                viewModel.deleteNote()
+                showDeleteDialog = false
+                onNavigateBack() // Go back after delete
+            },
+            onDismiss = { showDeleteDialog = false }
+        )
+    }
 }
 
 /**
  * Top App Bar for Note Editor
+ * ✅ UPDATED: Added delete button in dropdown menu
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -173,8 +190,12 @@ private fun NoteEditorTopBar(
     onBackClick: () -> Unit,
     isPinned: Boolean,
     onPinClick: () -> Unit,
+    onDeleteClick: () -> Unit,  // ✅ NEW: Delete callback
     lastSaved: Long
 ) {
+    // State for dropdown menu
+    var showMenu by remember { mutableStateOf(false) }
+
     TopAppBar(
         title = {
             Column {
@@ -201,6 +222,7 @@ private fun NoteEditorTopBar(
             }
         },
         actions = {
+            // Pin button
             IconButton(onClick = onPinClick) {
                 Icon(
                     imageVector = if (isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
@@ -208,11 +230,46 @@ private fun NoteEditorTopBar(
                     tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
                 )
             }
-            IconButton(onClick = { /* TODO: More options */ }) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "More options"
-                )
+
+            // ✅ NEW: More options menu (three dots)
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "More options"
+                    )
+                }
+
+                // Dropdown menu
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    // Delete option
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.small),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Delete",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        },
+                        onClick = {
+                            showMenu = false
+                            onDeleteClick()
+                        }
+                    )
+                }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -484,6 +541,48 @@ private fun AddTagDialog(
                 enabled = tagName.isNotBlank()
             ) {
                 Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * ✅ NEW: Delete note confirmation dialog
+ */
+@Composable
+private fun DeleteNoteDialog(
+    noteTitle: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error
+            )
+        },
+        title = { Text("Delete Note?") },
+        text = {
+            Text(
+                "\"$noteTitle\" will be moved to trash. You can restore it later from the trash."
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text("Delete")
             }
         },
         dismissButton = {

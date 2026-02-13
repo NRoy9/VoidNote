@@ -6,30 +6,30 @@ import androidx.compose.ui.graphics.Color
  * Nothing-Inspired Color Palette for Void Note
  *
  * Design Philosophy:
- * - Monochromatic scheme (blacks, whites, grays)
+ * - THREE distinct themes: Light, Dark (lifted blacks), Extra Dark (pure OLED)
  * - High contrast for readability
- * - OLED-friendly pure blacks for battery efficiency
+ * - OLED-friendly pure blacks for battery efficiency (Extra Dark only)
  * - Minimal use of accent colors (Nothing's signature red)
  */
 
 // ============================================
-// DARK MODE COLORS (Default Theme)
+// DARK MODE COLORS (Default Theme - LIFTED)
 // ============================================
 
-/** Pure black - Primary background for OLED displays */
-val VoidBlack = Color(0xFF000000)
+/** Dark background - Lifted from pure black for better contrast */
+val VoidBlack = Color(0xFF121212)  // ✅ CHANGED: Was 0xFF000000, now lifted for visibility
 
 /** Dark gray - Card backgrounds and elevated surfaces */
-val VoidDarkGray = Color(0xFF0A0A0A)
+val VoidDarkGray = Color(0xFF1E1E1E)  // ✅ CHANGED: Was 0xFF0A0A0A, now lighter
 
 /** Medium dark gray - Secondary backgrounds */
-val VoidGray = Color(0xFF1A1A1A)
+val VoidGray = Color(0xFF2A2A2A)  // ✅ CHANGED: Was 0xFF1A1A1A, now lighter
 
 /** Light gray - Borders and dividers */
-val VoidLightGray = Color(0xFF2A2A2A)
+val VoidLightGray = Color(0xFF3A3A3A)  // ✅ CHANGED: More visible borders
 
 /** Very light gray - Subtle borders */
-val VoidBorderGray = Color(0xFF333333)
+val VoidBorderGray = Color(0xFF4A4A4A)  // ✅ CHANGED: More contrast
 
 /** Pure white - Primary text on dark backgrounds */
 val VoidWhite = Color(0xFFFFFFFF)
@@ -38,7 +38,7 @@ val VoidWhite = Color(0xFFFFFFFF)
 val VoidTextSecondary = Color(0xFFB0B0B0)
 
 /** Dim gray text - Tertiary text and timestamps */
-val VoidTextTertiary = Color(0xFF707070)
+val VoidTextTertiary = Color(0xFF808080)  // ✅ CHANGED: Slightly lighter for readability
 
 /** Nothing Red - Accent color (used sparingly) */
 val VoidAccent = Color(0xFFFF3B30)
@@ -56,11 +56,20 @@ val VoidWarning = Color(0xFFFFCC00)
 val VoidError = Color(0xFFFF3B30)
 
 // ============================================
-// EXTRA DARK MODE COLORS (Pure OLED)
+// EXTRA DARK MODE COLORS (Pure OLED Black)
 // ============================================
 
-/** Extra dark - Slightly lifted from pure black for contrast */
-val VoidExtraDarkGray = Color(0xFF050505)
+/** Pure OLED black - Maximum battery saving on AMOLED screens */
+val VoidExtraBlack = Color(0xFF000000)  // ✅ True black for OLED
+
+/** Extra dark surface - Barely lifted from pure black */
+val VoidExtraDarkSurface = Color(0xFF0A0A0A)  // ✅ Minimal lift for card visibility
+
+/** Extra dark secondary - Subtle elevation */
+val VoidExtraDarkSecondary = Color(0xFF151515)  // ✅ Subtle contrast for layering
+
+/** Extra dark borders - Very subtle dividers */
+val VoidExtraDarkBorder = Color(0xFF1F1F1F)  // ✅ Minimal borders, maximum darkness
 
 // ============================================
 // LIGHT MODE COLORS
