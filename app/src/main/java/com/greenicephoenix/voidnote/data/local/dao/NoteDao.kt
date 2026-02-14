@@ -95,6 +95,7 @@ interface NoteDao {
     """)
     fun searchNotes(query: String): Flow<List<NoteEntity>>
 
+
     /**
      * Insert or update a note
      * OnConflictStrategy.REPLACE = If note exists, replace it

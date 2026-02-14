@@ -6,52 +6,46 @@ import com.greenicephoenix.voidnote.domain.model.Note
 /**
  * Mapper functions to convert between Entity (database) and Domain models
  *
- * Why separate models?
- * - Database layer (Entity) = How data is stored
- * - Domain layer (Note) = How business logic uses data
- * - Keeps database changes isolated from business logic
+ * Keeps data layer and domain layer cleanly separated.
  */
 
 /**
- * Convert NoteEntity (database) to Note (domain model)
+ * Convert NoteEntity (database) → Note (domain)
  */
 fun NoteEntity.toDomainModel(): Note {
     return Note(
         id = this.id,
         title = this.title,
         content = this.content,
+        contentFormats = this.contentFormats,
         createdAt = this.createdAt,
         updatedAt = this.updatedAt,
         isPinned = this.isPinned,
         isArchived = this.isArchived,
         isTrashed = this.isTrashed,
-        color = this.color,
         tags = this.tags,
-        folderId = this.folderId // ✅ ADD THIS LINE - This was missing!
+        folderId = this.folderId
     )
 }
 
-/**
- * Convert Note (domain model) to NoteEntity (database)
- */
 fun Note.toEntity(folderId: String? = null): NoteEntity {
     return NoteEntity(
         id = this.id,
         title = this.title,
         content = this.content,
+        contentFormats = this.contentFormats,
         createdAt = this.createdAt,
         updatedAt = this.updatedAt,
         isPinned = this.isPinned,
         isArchived = this.isArchived,
         isTrashed = this.isTrashed,
-        color = this.color,
         tags = this.tags,
-        folderId = this.folderId ?: folderId // Prefer note's folderId, fallback to parameter
+        folderId = this.folderId ?: folderId
     )
 }
 
 /**
- * Convert list of NoteEntity to list of Note
+ * Convert list of NoteEntity → list of Note
  */
 fun List<NoteEntity>.toDomainModels(): List<Note> {
     return this.map { it.toDomainModel() }

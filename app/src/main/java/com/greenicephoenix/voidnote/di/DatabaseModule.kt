@@ -43,8 +43,14 @@ object DatabaseModule {
             VoidNoteDatabase::class.java,
             VoidNoteDatabase.DATABASE_NAME
         )
-            // TODO: Add encryption later (SQLCipher)
-            .fallbackToDestructiveMigration() // For development - removes this for production
+            // Register migration from version 1 → 2
+            .addMigrations(
+                VoidNoteDatabase.MIGRATION_1_2
+            )
+
+            // ⚠ Remove destructive migration (production-safe)
+            // .fallbackToDestructiveMigration()
+
             .build()
     }
 
@@ -73,7 +79,7 @@ object DatabaseModule {
     @Singleton
     fun providePreferencesManager(
         @ApplicationContext context: Context
-    ): com.greenicephoenix.voidnote.data.local.PreferencesManager {
-        return com.greenicephoenix.voidnote.data.local.PreferencesManager(context)
+    ): PreferencesManager {
+        return PreferencesManager(context)
     }
 }

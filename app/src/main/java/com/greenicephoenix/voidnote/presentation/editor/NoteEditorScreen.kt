@@ -1,92 +1,181 @@
 package com.greenicephoenix.voidnote.presentation.editor
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.*
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.greenicephoenix.voidnote.presentation.components.EditableTagChip
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.runtime.DisposableEffect
-import com.greenicephoenix.voidnote.presentation.components.EditableTagChip
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.horizontalScroll
+import com.greenicephoenix.voidnote.domain.model.FormatRange
+import com.greenicephoenix.voidnote.domain.model.FormatType
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 
 /**
- * Note Editor Screen - Create and edit notes
+ * Note Editor Screen
  *
- * Features:
- * - Full-screen writing experience
- * - Rich text formatting toolbar
- * - Auto-save indicator
- * - Word/character count
- * - Minimal, distraction-free design
- * - Delete functionality (move to trash)
+ * ✅ NATIVE text selection (double-tap, long-press work)
+ * ✅ Proper cursor positioning
+ * ✅ MS Word-style formatting toolbar
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NoteEditorScreen(
     onNavigateBack: () -> Unit,
     viewModel: NoteEditorViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val scrollState = rememberScrollState()
+    val context = LocalContext.current
 
-    // State for delete confirmation dialog
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showHeadingMenu by remember { mutableStateOf(false) }
 
-    // Force save when leaving screen
-    DisposableEffect(Unit) {
-        onDispose {
-            viewModel.forceSave()
+    // Text field states
+    var titleFieldValue by remember {
+        mutableStateOf(TextFieldValue(
+            text = uiState.title,
+            selection = TextRange(uiState.title.length)
+        ))
+    }
+
+    var contentFieldValue by remember {
+        mutableStateOf(TextFieldValue(
+            text = uiState.content,
+            selection = TextRange(uiState.content.length)
+        ))
+    }
+
+    // Update from ViewModel
+    LaunchedEffect(uiState.title) {
+        if (titleFieldValue.text != uiState.title) {
+            titleFieldValue = titleFieldValue.copy(text = uiState.title)
         }
     }
 
+    LaunchedEffect(uiState.content) {
+        if (contentFieldValue.text != uiState.content) {
+            contentFieldValue = contentFieldValue.copy(text = uiState.content)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { viewModel.forceSave() }
+    }
+
+    val hasSelection = contentFieldValue.selection.start != contentFieldValue.selection.end
+
     Scaffold(
         topBar = {
-            NoteEditorTopBar(
+            TopBar(
                 onBackClick = onNavigateBack,
                 isPinned = uiState.isPinned,
                 onPinClick = { viewModel.togglePin() },
-                onDeleteClick = { showDeleteDialog = true },  // ✅ NEW: Delete button
+                onDeleteClick = { showDeleteDialog = true },
+                onShareClick = {
+                    shareNote(
+                        context,
+                        uiState.title.ifBlank { "Untitled" },
+                        uiState.content,
+                        uiState.tags
+                    )
+                },
                 lastSaved = uiState.lastSaved
             )
         },
         bottomBar = {
-            FormattingToolbar(
-                isBoldActive = uiState.isBoldActive,
-                isItalicActive = uiState.isItalicActive,
-                isUnderlineActive = uiState.isUnderlineActive,
-                onBoldClick = { viewModel.toggleBold() },
-                onItalicClick = { viewModel.toggleItalic() },
-                onUnderlineClick = { viewModel.toggleUnderline() },
-                wordCount = uiState.content.split("\\s+".toRegex()).size,
-                charCount = uiState.content.length
-            )
+            Column(
+                modifier = Modifier
+                    .imePadding()  // ✅ Add this - pushes bar above keyboard
+                    .navigationBarsPadding()
+            ) {
+                // Tags ABOVE formatting bar
+                TagsSection(
+                    tags = uiState.tags,
+                    onAddTag = { viewModel.addTag(it) },
+                    onRemoveTag = { viewModel.removeTag(it) }
+                )
+
+                // Formatting toolbar
+                FormattingToolbar(
+                    isBoldActive = if (hasSelection) {
+                        hasFormat(uiState.contentFormats, contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.BOLD)
+                    } else {
+                        uiState.activeBold
+                    },
+                    isItalicActive = if (hasSelection) {
+                        hasFormat(uiState.contentFormats, contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.ITALIC)
+                    } else {
+                        uiState.activeItalic
+                    },
+                    isUnderlineActive = if (hasSelection) {
+                        hasFormat(uiState.contentFormats, contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.UNDERLINE)
+                    } else {
+                        uiState.activeUnderline
+                    },
+                    activeHeading = uiState.activeHeading,
+                    hasSelection = hasSelection,
+                    onBoldClick = {
+                        if (hasSelection) {
+                            viewModel.applyFormatting(
+                                contentFieldValue.selection.start,
+                                contentFieldValue.selection.end,
+                                FormatType.BOLD
+                            )
+                        } else {
+                            viewModel.toggleActiveBold()
+                        }
+                    },
+                    onItalicClick = {
+                        if (hasSelection) {
+                            viewModel.applyFormatting(
+                                contentFieldValue.selection.start,
+                                contentFieldValue.selection.end,
+                                FormatType.ITALIC
+                            )
+                        } else {
+                            viewModel.toggleActiveItalic()
+                        }
+                    },
+                    onUnderlineClick = {
+                        if (hasSelection) {
+                            viewModel.applyFormatting(
+                                contentFieldValue.selection.start,
+                                contentFieldValue.selection.end,
+                                FormatType.UNDERLINE
+                            )
+                        } else {
+                            viewModel.toggleActiveUnderline()
+                        }
+                    },
+                    onHeadingClick = { showHeadingMenu = true },
+                    onClearClick = { viewModel.clearAllFormatting() },
+                    wordCount = contentFieldValue.text.split("\\s+".toRegex())
+                        .filter { it.isNotBlank() }.size,
+                    charCount = contentFieldValue.text.length
+                )
+            }
         }
     ) { paddingValues ->
         Column(
@@ -94,106 +183,398 @@ fun NoteEditorScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = Spacing.medium)
-                .verticalScroll(scrollState)
         ) {
-            Spacer(modifier = Modifier.height(Spacing.small))
+            Spacer(Modifier.height(Spacing.small))
 
-            // Title field
-            BasicTextField(
-                value = uiState.title,
-                onValueChange = { viewModel.onTitleChange(it) },
-                textStyle = TextStyle(
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                decorationBox = { innerTextField ->
-                    Box {
-                        if (uiState.title.isEmpty()) {
-                            Text(
-                                text = "Title",
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                            )
-                        }
-                        innerTextField()
+            // Title
+            RichTextEditor(
+                value = titleFieldValue,
+                onValueChange = { newValue ->
+                    if (newValue.text.length <= 100) {
+                        titleFieldValue = newValue
+                        viewModel.onTitleChange(newValue.text)
                     }
                 },
+                placeholder = "Note title",
+                textStyle = TextStyle(
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 32.sp
+                ),
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(Spacing.small))
+            Spacer(Modifier.height(Spacing.medium))
 
-            // Tags Section
-            TagsSection(
-                tags = uiState.tags,
-                onAddTag = { viewModel.addTag(it) },
-                onRemoveTag = { viewModel.removeTag(it) }
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
             )
 
-            Spacer(modifier = Modifier.height(Spacing.medium))
+            Spacer(Modifier.height(Spacing.medium))
 
-            // Content field
-            BasicTextField(
-                value = uiState.content,
-                onValueChange = { viewModel.onContentChange(it) },
+            // Content with formatting
+            RichTextEditor(
+                value = contentFieldValue,
+                onValueChange = { newValue ->
+                    contentFieldValue = newValue
+                    viewModel.onContentChange(newValue.text)
+                },
+                placeholder = "Start writing...",
                 textStyle = TextStyle(
-                    color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 16.sp,
                     lineHeight = 24.sp
                 ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                decorationBox = { innerTextField ->
-                    Box {
-                        if (uiState.content.isEmpty()) {
-                            Text(
-                                text = "Start writing...",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                            )
-                        }
-                        innerTextField()
-                    }
-                },
+                formats = uiState.contentFormats,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 400.dp)
             )
+            /* Content with formatting + double-tap detection
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = { offset ->
+                                // Find word boundaries at tap position
+                                val text = contentFieldValue.text
+                                if (text.isEmpty()) return@detectTapGestures
 
-            Spacer(modifier = Modifier.height(100.dp)) // Space for toolbar
+                                // Convert offset to text position (approximate)
+                                val position = (offset.x / 10).toInt().coerceIn(0, text.length)
+
+                                // Find word start
+                                var start = position
+                                while (start > 0 && text[start - 1].isLetterOrDigit()) {
+                                    start--
+                                }
+
+                                // Find word end
+                                var end = position
+                                while (end < text.length && text[end].isLetterOrDigit()) {
+                                    end++
+                                }
+
+                                // Select the word
+                                if (start < end) {
+                                    contentFieldValue = contentFieldValue.copy(
+                                        selection = androidx.compose.ui.text.TextRange(start, end)
+                                    )
+                                }
+                            }
+                        )
+                    }
+            ) {
+                RichTextEditor(
+                    value = contentFieldValue,
+                    onValueChange = { newValue ->
+                        contentFieldValue = newValue
+                        viewModel.onContentChange(newValue.text)
+                    },
+                    placeholder = "Start writing...",
+                    textStyle = TextStyle(
+                        fontSize = 16.sp,
+                        lineHeight = 24.sp
+                    ),
+                    formats = uiState.contentFormats,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 400.dp)
+                )
+            }
+            */
+
+            Spacer(Modifier.height(200.dp))
+        }
+
+        // Heading size menu - positioned better
+        if (showHeadingMenu) {
+            // ✅ Use AlertDialog instead of DropdownMenu for better keyboard handling
+            AlertDialog(
+                onDismissRequest = { showHeadingMenu = false },
+                title = { Text("Text Size") },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Small
+                        Surface(
+                            onClick = {
+                                if (hasSelection) {
+                                    viewModel.applyFormatting(
+                                        contentFieldValue.selection.start,
+                                        contentFieldValue.selection.end,
+                                        FormatType.HEADING_SMALL
+                                    )
+                                } else {
+                                    viewModel.setActiveHeading(FormatType.HEADING_SMALL)
+                                }
+                                showHeadingMenu = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                "Small",
+                                fontSize = 16.sp,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+
+                        // Normal
+                        Surface(
+                            onClick = {
+                                if (hasSelection) {
+                                    viewModel.applyFormatting(
+                                        contentFieldValue.selection.start,
+                                        contentFieldValue.selection.end,
+                                        FormatType.HEADING_NORMAL
+                                    )
+                                } else {
+                                    viewModel.setActiveHeading(FormatType.HEADING_NORMAL)
+                                }
+                                showHeadingMenu = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                "Normal (Default)",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+
+                        // Large
+                        Surface(
+                            onClick = {
+                                if (hasSelection) {
+                                    viewModel.applyFormatting(
+                                        contentFieldValue.selection.start,
+                                        contentFieldValue.selection.end,
+                                        FormatType.HEADING_LARGE
+                                    )
+                                } else {
+                                    viewModel.setActiveHeading(FormatType.HEADING_LARGE)
+                                }
+                                showHeadingMenu = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                "Large",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { showHeadingMenu = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 
-    // ✅ NEW: Delete confirmation dialog
+    // Delete dialog
     if (showDeleteDialog) {
-        DeleteNoteDialog(
-            noteTitle = uiState.title.ifBlank { "Untitled Note" },
-            onConfirm = {
-                viewModel.deleteNote()
-                showDeleteDialog = false
-                onNavigateBack() // Go back after delete
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            icon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Delete Note?") },
+            text = { Text("\"${uiState.title.ifBlank { "Untitled" }}\" will be moved to trash.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteNote()
+                        showDeleteDialog = false
+                        onNavigateBack()
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Delete") }
             },
-            onDismiss = { showDeleteDialog = false }
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            }
         )
     }
 }
 
 /**
- * Top App Bar for Note Editor
- * ✅ UPDATED: Added delete button in dropdown menu
+ * ✅ Formatting Toolbar with heading sizes
+ */
+@Composable
+private fun FormattingToolbar(
+    isBoldActive: Boolean,
+    isItalicActive: Boolean,
+    isUnderlineActive: Boolean,
+    activeHeading: FormatType?,
+    hasSelection: Boolean,
+    onBoldClick: () -> Unit,
+    onItalicClick: () -> Unit,
+    onUnderlineClick: () -> Unit,
+    onHeadingClick: () -> Unit,
+    onClearClick: () -> Unit,
+    wordCount: Int = 0,      // ✅ ADD
+    charCount: Int = 0       // ✅ ADD
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,  // ✅ Better color
+        tonalElevation = 0.dp
+    ) {
+        Column {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.2f))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Spacing.small)
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // ... existing buttons (Bold, Italic, etc.) ...
+
+                    // Bold
+                    FilledTonalIconButton(
+                        onClick = onBoldClick,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = if (isBoldActive)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.FormatBold,
+                            "Bold",
+                            tint = if (isBoldActive)
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    // Italic
+                    FilledTonalIconButton(
+                        onClick = onItalicClick,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = if (isItalicActive)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.FormatItalic,
+                            "Italic",
+                            tint = if (isItalicActive)
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    // Underline
+                    FilledTonalIconButton(
+                        onClick = onUnderlineClick,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = if (isUnderlineActive)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.FormatUnderlined,
+                            "Underline",
+                            tint = if (isUnderlineActive)
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    VerticalDivider(
+                        modifier = Modifier.height(40.dp).padding(horizontal = 4.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(0.3f)
+                    )
+
+                    // Heading sizes
+                    FilledTonalIconButton(
+                        onClick = onHeadingClick,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = if (activeHeading != null)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.FormatSize,
+                            "Text size",
+                            tint = if (activeHeading != null)
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    // Clear formatting
+                    FilledTonalIconButton(
+                        onClick = onClearClick,
+                        enabled = hasSelection
+                    ) {
+                        Icon(Icons.Default.FormatClear, "Clear")
+                    }
+                }
+
+                // ✅ Word & character count
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.padding(start = Spacing.small)
+                ) {
+                    Text(
+                        text = "$wordCount words",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "$charCount chars",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Top App Bar
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NoteEditorTopBar(
+private fun TopBar(
     onBackClick: () -> Unit,
     isPinned: Boolean,
     onPinClick: () -> Unit,
-    onDeleteClick: () -> Unit,  // ✅ NEW: Delete callback
+    onDeleteClick: () -> Unit,
+    onShareClick: () -> Unit,
     lastSaved: Long
 ) {
-    // State for dropdown menu
     var showMenu by remember { mutableStateOf(false) }
 
     TopAppBar(
@@ -206,7 +587,7 @@ private fun NoteEditorTopBar(
                 )
                 if (lastSaved > 0) {
                     Text(
-                        text = formatLastSaved(lastSaved),
+                        text = formatTime(lastSaved),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                     )
@@ -215,37 +596,19 @@ private fun NoteEditorTopBar(
         },
         navigationIcon = {
             IconButton(onClick = onBackClick) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back"
-                )
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
             }
         },
         actions = {
-            // Pin button
-            IconButton(onClick = onPinClick) {
-                Icon(
-                    imageVector = if (isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                    contentDescription = if (isPinned) "Unpin" else "Pin",
-                    tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
-                )
-            }
-
-            // ✅ NEW: More options menu (three dots)
             Box {
                 IconButton(onClick = { showMenu = true }) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More options"
-                    )
+                    Icon(Icons.Default.MoreVert, "More")
                 }
 
-                // Dropdown menu
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false }
                 ) {
-                    // Delete option
                     DropdownMenuItem(
                         text = {
                             Row(
@@ -253,13 +616,57 @@ private fun NoteEditorTopBar(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Delete,
+                                    imageVector = if (isPinned) Icons.Filled.PushPin else Icons.Default.PushPin,
+                                    contentDescription = null,
+                                    tint = if (isPinned) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(if (isPinned) "Unpin" else "Pin to top")
+                            }
+                        },
+                        onClick = {
+                            showMenu = false
+                            onPinClick()
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.small),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Share,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text("Share")
+                            }
+                        },
+                        onClick = {
+                            showMenu = false
+                            onShareClick()
+                        }
+                    )
+
+                    HorizontalDivider()
+
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.small),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text(
-                                    text = "Delete",
+                                    "Delete",
                                     color = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -279,156 +686,7 @@ private fun NoteEditorTopBar(
 }
 
 /**
- * Formatting Toolbar - Bottom bar with text formatting options
- */
-@Composable
-private fun FormattingToolbar(
-    isBoldActive: Boolean,
-    isItalicActive: Boolean,
-    isUnderlineActive: Boolean,
-    onBoldClick: () -> Unit,
-    onItalicClick: () -> Unit,
-    onUnderlineClick: () -> Unit,
-    wordCount: Int,
-    charCount: Int
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp
-    ) {
-        Column {
-            HorizontalDivider(
-                Modifier,
-                DividerDefaults.Thickness,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.small, vertical = Spacing.small)
-                    // Add bottom padding for navigation bar
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Formatting buttons
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    FormattingButton(
-                        icon = Icons.Default.FormatBold,
-                        contentDescription = "Bold",
-                        isActive = isBoldActive,
-                        onClick = onBoldClick
-                    )
-                    FormattingButton(
-                        icon = Icons.Default.FormatItalic,
-                        contentDescription = "Italic",
-                        isActive = isItalicActive,
-                        onClick = onItalicClick
-                    )
-                    FormattingButton(
-                        icon = Icons.Default.FormatUnderlined,
-                        contentDescription = "Underline",
-                        isActive = isUnderlineActive,
-                        onClick = onUnderlineClick
-                    )
-
-                    // Divider
-                    VerticalDivider(
-                        modifier = Modifier
-                            .height(24.dp)
-                            .padding(horizontal = 4.dp),
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    )
-
-                    // Additional formatting (we'll implement these later)
-                    IconButton(onClick = { /* TODO: Heading */ }, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Title,
-                            contentDescription = "Heading",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    IconButton(onClick = { /* TODO: List */ }, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
-                            contentDescription = "List",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    IconButton(onClick = { /* TODO: Checkbox */ }, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.CheckBox,
-                            contentDescription = "Checkbox",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-
-                // Word and character count
-                Text(
-                    text = "$wordCount words • $charCount chars",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-        }
-    }
-}
-
-/**
- * Individual formatting button
- */
-@Composable
-private fun FormattingButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    isActive: Boolean,
-    onClick: () -> Unit
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier.size(40.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = if (isActive) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            },
-            modifier = Modifier.size(20.dp)
-        )
-    }
-}
-
-/**
- * Format last saved time
- */
-private fun formatLastSaved(timestamp: Long): String {
-    val now = System.currentTimeMillis()
-    val diff = now - timestamp
-
-    return when {
-        diff < 60_000 -> "Just now"
-        diff < 3600_000 -> "${diff / 60_000}m ago"
-        diff < 86400_000 -> {
-            val dateFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-            "at ${dateFormat.format(Date(timestamp))}"
-        }
-        else -> {
-            val dateFormat = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
-            dateFormat.format(Date(timestamp))
-        }
-    }
-}
-
-/**
- * Tags Section - Add and manage tags
+ * Tags Section (above formatting bar)
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -437,13 +695,22 @@ private fun TagsSection(
     onAddTag: (String) -> Unit,
     onRemoveTag: (String) -> Unit
 ) {
-    var showAddTagDialog by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Tags display
-        if (tags.isNotEmpty()) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 0.dp
+    ) {
+        Column {
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+            )
+
             FlowRow(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Spacing.medium),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.small),
                 verticalArrangement = Arrangement.spacedBy(Spacing.small)
             ) {
@@ -454,141 +721,119 @@ private fun TagsSection(
                     )
                 }
 
-                // Add tag button
-                AddTagButton(onClick = { showAddTagDialog = true })
+                if (tags.size < 5) {
+                    Surface(
+                        onClick = { showAddDialog = true },
+                        modifier = Modifier.height(32.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(
+                                horizontal = Spacing.medium,
+                                vertical = Spacing.extraSmall
+                            ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                            Text(
+                                "Add tag",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
             }
-        } else {
-            // No tags - show add button
-            AddTagButton(onClick = { showAddTagDialog = true })
         }
     }
 
-    // Add tag dialog
-    if (showAddTagDialog) {
-        AddTagDialog(
-            onDismiss = { showAddTagDialog = false },
-            onConfirm = { tag ->
-                onAddTag(tag)
-                showAddTagDialog = false
-            }
-        )
-    }
-}
+    if (showAddDialog) {
+        var tagName by remember { mutableStateOf("") }
 
-/**
- * Add tag button
- */
-@Composable
-private fun AddTagButton(onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.height(32.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(
-                horizontal = Spacing.medium,
-                vertical = Spacing.extraSmall
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.extraSmall)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Add tag",
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
-            Text(
-                text = "Add tag",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
-        }
-    }
-}
-
-/**
- * Add tag dialog
- */
-@Composable
-private fun AddTagDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var tagName by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add Tag") },
-        text = {
-            OutlinedTextField(
-                value = tagName,
-                onValueChange = { tagName = it },
-                label = { Text("Tag name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(tagName) },
-                enabled = tagName.isNotBlank()
-            ) {
-                Text("Add")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-/**
- * ✅ NEW: Delete note confirmation dialog
- */
-@Composable
-private fun DeleteNoteDialog(
-    noteTitle: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                imageVector = Icons.Default.Delete,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.error
-            )
-        },
-        title = { Text("Delete Note?") },
-        text = {
-            Text(
-                "\"$noteTitle\" will be moved to trash. You can restore it later from the trash."
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text("Add Tag") },
+            text = {
+                OutlinedTextField(
+                    value = tagName,
+                    onValueChange = {
+                        if (it.length <= 20 && it.all { c -> c.isLetterOrDigit() || c.isWhitespace() }) {
+                            tagName = it
+                        }
+                    },
+                    label = { Text("Tag name") },
+                    singleLine = true,
+                    supportingText = { Text("${tagName.length}/20") }
                 )
-            ) {
-                Text("Delete")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onAddTag(tagName.trim())
+                        showAddDialog = false
+                    },
+                    enabled = tagName.trim().isNotBlank()
+                ) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) {
+                    Text("Cancel")
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
+        )
+    }
+}
+
+/**
+ * Share note
+ */
+private fun shareNote(
+    context: android.content.Context,
+    title: String,
+    content: String,
+    tags: List<String>
+) {
+    val text = buildString {
+        appendLine(title)
+        appendLine()
+        if (tags.isNotEmpty()) {
+            appendLine("Tags: ${tags.joinToString(", ")}")
+            appendLine()
         }
-    )
+        append(content)
+    }
+
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+        putExtra(Intent.EXTRA_SUBJECT, title)
+    }
+
+    context.startActivity(Intent.createChooser(intent, "Share note"))
+}
+
+/**
+ * Format time
+ */
+private fun formatTime(timestamp: Long): String {
+    val diff = System.currentTimeMillis() - timestamp
+    return when {
+        diff < 60_000 -> "Just now"
+        diff < 3600_000 -> "${diff / 60_000}m ago"
+        diff < 86400_000 -> SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
+        else -> SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(timestamp))
+    }
 }

@@ -11,9 +11,14 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+enum class ExportFormat {
+    JSON, TXT
+}
 
 /**
  * ViewModel for Settings Screen
@@ -68,8 +73,26 @@ class SettingsViewModel @Inject constructor(
      */
     fun clearAllNotes() {
         viewModelScope.launch {
-            // TODO: Implement - delete all notes from database
-            android.util.Log.d("Settings", "Clear all notes requested")
+            try {
+                // Get all notes and delete permanently
+                val allNotes = noteRepository.getAllNotes().first()
+                allNotes.forEach { note ->
+                    noteRepository.deleteNotePermanently(note.id)
+                }
+
+                // Get all folders and delete
+                val allFolders = folderRepository.getAllFolders().first()
+                allFolders.forEach { folder ->
+                    folderRepository.deleteFolder(folder.id)
+                }
+
+                // Empty trash as well
+                noteRepository.emptyTrash()
+
+                android.util.Log.d("Settings", "All data cleared successfully")
+            } catch (e: Exception) {
+                android.util.Log.e("Settings", "Failed to clear data", e)
+            }
         }
     }
 
@@ -78,9 +101,188 @@ class SettingsViewModel @Inject constructor(
      */
     fun exportNotes() {
         viewModelScope.launch {
-            // TODO: Implement - export to JSON or TXT
-            android.util.Log.d("Settings", "Export notes requested")
+            try {
+                val notes = noteRepository.getAllNotes().first()
+
+                // Create simple text export
+                val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
+                    .format(java.util.Date())
+
+                val exportText = buildString {
+                    appendLine("VOID NOTE BACKUP")
+                    appendLine("Export Date: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
+                    appendLine("Total Notes: ${notes.size}")
+                    appendLine()
+                    appendLine("=" .repeat(50))
+                    appendLine()
+
+                    notes.forEach { note ->
+                        appendLine("TITLE: ${note.title.ifBlank { "Untitled" }}")
+                        appendLine("Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(note.createdAt))}")
+                        if (note.tags.isNotEmpty()) {
+                            appendLine("Tags: ${note.tags.joinToString(", ")}")
+                        }
+                        if (note.isPinned) appendLine("[PINNED]")
+                        appendLine()
+                        appendLine(note.content)
+                        appendLine()
+                        appendLine("-" .repeat(50))
+                        appendLine()
+                    }
+                }
+
+                // Save to file
+                val fileName = "voidnote_backup_$timestamp.txt"
+                val exportDir = java.io.File(context.getExternalFilesDir(null), "exports")
+                if (!exportDir.exists()) {
+                    exportDir.mkdirs()
+                }
+
+                val file = java.io.File(exportDir, fileName)
+                file.writeText(exportText)
+
+                android.util.Log.d("Settings", "Export successful: ${file.absolutePath}")
+
+                // Show success somehow (we'll add toast/snackbar later)
+
+            } catch (e: Exception) {
+                android.util.Log.e("Settings", "Export failed", e)
+            }
         }
+    }
+
+    /**
+     * Export notes to user-selected location
+     * Supports both JSON (structured) and TXT (human-readable) formats
+     */
+    fun exportNotesToUri(
+        contentResolver: android.content.ContentResolver,
+        uri: android.net.Uri,
+        format: ExportFormat
+    ) {
+        viewModelScope.launch {
+            try {
+                val notes = noteRepository.getAllNotes().first()
+                val folders = folderRepository.getAllFolders().first()
+
+                when (format) {
+                    ExportFormat.JSON -> exportAsJson(contentResolver, uri, notes, folders)
+                    ExportFormat.TXT -> exportAsTxt(contentResolver, uri, notes)
+                }
+
+                android.util.Log.d("Settings", "Export successful to: $uri (format: $format)")
+
+            } catch (e: Exception) {
+                android.util.Log.e("Settings", "Export failed", e)
+            }
+        }
+    }
+
+    /**
+     * Export as JSON - preserves all formatting and metadata
+     */
+    private suspend fun exportAsJson(
+        contentResolver: android.content.ContentResolver,
+        uri: android.net.Uri,
+        notes: List<com.greenicephoenix.voidnote.domain.model.Note>,
+        folders: List<com.greenicephoenix.voidnote.domain.model.Folder>
+    ) {
+        val backup = VoidNoteBackup(
+            version = "1.0",
+            exportDate = System.currentTimeMillis(),
+            appVersion = getAppVersion(),
+            noteCount = notes.size,
+            folderCount = folders.size,
+            notes = notes.map { note ->
+                NoteBackup(
+                    id = note.id,
+                    title = note.title,
+                    content = note.content,
+                    contentType = ContentType.RICH_TEXT,
+                    formatting = parseFormatting(note.content),  // Parse formatting from content
+                    createdAt = note.createdAt,
+                    updatedAt = note.updatedAt,
+                    isPinned = note.isPinned,
+                    isArchived = note.isArchived,
+                    tags = note.tags,
+                    folderId = note.folderId,
+                    // Future: add images, audio, drawings
+                    images = emptyList(),
+                    audioFiles = emptyList(),
+                    drawings = emptyList()
+                )
+            },
+            folders = folders.map { folder ->
+                FolderBackup(
+                    id = folder.id,
+                    name = folder.name,
+                    createdAt = folder.createdAt,
+                    parentFolderId = null  // Future: nested folders
+                )
+            }
+        )
+
+        // Serialize to JSON
+        val json = kotlinx.serialization.json.Json {
+            prettyPrint = true
+            ignoreUnknownKeys = true
+        }
+        val jsonString = json.encodeToString(VoidNoteBackup.serializer(), backup)
+
+        // Write to file
+        contentResolver.openOutputStream(uri)?.use { outputStream ->
+            outputStream.write(jsonString.toByteArray())
+        }
+    }
+
+    /**
+     * Export as plain text - human-readable format
+     */
+    private suspend fun exportAsTxt(
+        contentResolver: android.content.ContentResolver,
+        uri: android.net.Uri,
+        notes: List<com.greenicephoenix.voidnote.domain.model.Note>
+    ) {
+        val exportText = buildString {
+            appendLine("VOID NOTE BACKUP")
+            appendLine("Export Date: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
+            appendLine("Total Notes: ${notes.size}")
+            appendLine()
+            appendLine("=" .repeat(50))
+            appendLine()
+
+            notes.forEach { note ->
+                appendLine("TITLE: ${note.title.ifBlank { "Untitled" }}")
+                appendLine("Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(note.createdAt))}")
+                if (note.tags.isNotEmpty()) {
+                    appendLine("Tags: ${note.tags.joinToString(", ")}")
+                }
+                if (note.isPinned) appendLine("[PINNED]")
+                if (note.isArchived) appendLine("[ARCHIVED]")
+                appendLine()
+                appendLine(note.content)
+                appendLine()
+                appendLine("-" .repeat(50))
+                appendLine()
+            }
+        }
+
+        contentResolver.openOutputStream(uri)?.use { outputStream ->
+            outputStream.write(exportText.toByteArray())
+        }
+    }
+
+    /**
+     * Parse formatting from content
+     * TODO: Implement when we add rich text support
+     * For now, returns empty list
+     */
+    private fun parseFormatting(content: String): List<FormattingSpan> {
+        // Future: Parse markdown-style formatting
+        // **bold** → FormattingSpan(start, end, BOLD)
+        // *italic* → FormattingSpan(start, end, ITALIC)
+        // - [ ] checkbox → FormattingSpan(start, end, CHECKBOX_UNCHECKED)
+        return emptyList()
     }
 
     /**

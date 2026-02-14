@@ -1,6 +1,8 @@
 package com.greenicephoenix.voidnote.presentation.settings
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,6 +22,7 @@ import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.core.net.toUri
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.runtime.LaunchedEffect
 
 /**
  * Settings Screen - App configuration and preferences
@@ -41,8 +44,23 @@ fun SettingsScreen(
     val currentTheme by viewModel.currentTheme.collectAsState()
     val context = LocalContext.current
 
+    //ADD: Snackbar for export feedback
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showExportSuccess by remember { mutableStateOf(false) }
+
     var showThemeDialog by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
+
+    // ✅ ADD: Show snackbar when export succeeds
+    LaunchedEffect(showExportSuccess) {
+        if (showExportSuccess) {
+            snackbarHostState.showSnackbar(
+                message = "Notes exported successfully",
+                duration = SnackbarDuration.Short
+            )
+            showExportSuccess = false
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -114,12 +132,111 @@ fun SettingsScreen(
             }
 
             item {
+                var showFormatDialog by remember { mutableStateOf(false) }
+
+                // File pickers for different formats
+                val jsonExportLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("application/json")
+                ) { uri ->
+                    uri?.let {
+                        viewModel.exportNotesToUri(context.contentResolver, it, ExportFormat.JSON)
+                        showExportSuccess = true
+                    }
+                }
+
+                val txtExportLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("text/plain")
+                ) { uri ->
+                    uri?.let {
+                        viewModel.exportNotesToUri(context.contentResolver, it, ExportFormat.TXT)
+                        showExportSuccess = true
+                    }
+                }
+
                 SettingsItem(
                     icon = Icons.Default.Upload,
                     title = "Export Notes",
                     subtitle = "Save all notes to file",
-                    onClick = { viewModel.exportNotes() }
+                    onClick = { showFormatDialog = true }
                 )
+
+                // Format selection dialog
+                if (showFormatDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showFormatDialog = false },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Upload,
+                                contentDescription = null
+                            )
+                        },
+                        title = { Text("Choose Export Format") },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(Spacing.small)) {
+                                Text("Select format:")
+                                Spacer(modifier = Modifier.height(Spacing.small))
+
+                                // JSON option
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = {
+                                        showFormatDialog = false
+                                        val timestamp = java.text.SimpleDateFormat(
+                                            "yyyyMMdd_HHmmss",
+                                            java.util.Locale.getDefault()
+                                        ).format(java.util.Date())
+                                        jsonExportLauncher.launch("voidnote_backup_$timestamp.json")
+                                    }
+                                ) {
+                                    Column(modifier = Modifier.padding(Spacing.medium)) {
+                                        Text(
+                                            text = "JSON (Recommended)",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Preserves formatting, can be imported back",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+
+                                // TXT option
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = {
+                                        showFormatDialog = false
+                                        val timestamp = java.text.SimpleDateFormat(
+                                            "yyyyMMdd_HHmmss",
+                                            java.util.Locale.getDefault()
+                                        ).format(java.util.Date())
+                                        txtExportLauncher.launch("voidnote_backup_$timestamp.txt")
+                                    }
+                                ) {
+                                    Column(modifier = Modifier.padding(Spacing.medium)) {
+                                        Text(
+                                            text = "Plain Text",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Human-readable, easy to view anywhere",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showFormatDialog = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
             }
 
             item {
@@ -211,7 +328,21 @@ fun SettingsScreen(
             },
             title = { Text("Clear All Data?") },
             text = {
-                Text("This will permanently delete all notes and folders. This action cannot be undone.")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "This will permanently delete:",
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text("• All notes (including trash)")
+                    Text("• All folders")
+                    Text("• All tags")
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "This action cannot be undone!",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             },
             confirmButton = {
                 TextButton(
