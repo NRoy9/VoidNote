@@ -3,7 +3,6 @@ package com.greenicephoenix.voidnote.data.local.converter
 import androidx.room.TypeConverter
 import com.greenicephoenix.voidnote.domain.model.FormatRange
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
 /**

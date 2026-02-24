@@ -68,6 +68,7 @@ class NoteEditorViewModel @Inject constructor(
                 isNewNote = true,
                 isLoading = false
             )
+
         } else {
             // Load existing note
             viewModelScope.launch {
@@ -239,7 +240,7 @@ class NoteEditorViewModel @Inject constructor(
             id = currentNoteId,
             title = state.title,
             content = state.content,
-            contentFormats = state.contentFormats, // ✅ SAVE FORMATTING
+            contentFormats = state.contentFormats,
             createdAt = if (state.isNewNote) System.currentTimeMillis() else 0L,
             updatedAt = System.currentTimeMillis(),
             isPinned = state.isPinned,

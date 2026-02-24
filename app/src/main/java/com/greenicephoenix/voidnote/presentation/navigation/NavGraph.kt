@@ -66,8 +66,11 @@ fun SetupNavGraph(
 
         // Note Editor Screen
         composable(
-            route = Screen.NoteEditor.route
-        ) { backStackEntry ->
+            route = Screen.NoteEditor.route,
+            arguments = listOf(
+                navArgument("noteId") { type = NavType.StringType }
+            )
+        ) {
             NoteEditorScreen(
                 onNavigateBack = {
                     navController.popBackStack()

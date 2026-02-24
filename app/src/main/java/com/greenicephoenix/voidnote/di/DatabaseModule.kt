@@ -43,15 +43,9 @@ object DatabaseModule {
             VoidNoteDatabase::class.java,
             VoidNoteDatabase.DATABASE_NAME
         )
-            // Register migration from version 1 → 2
-            .addMigrations(
-                VoidNoteDatabase.MIGRATION_1_2
-            )
-
-            // ⚠ Remove destructive migration (production-safe)
-            // .fallbackToDestructiveMigration()
-
+            .fallbackToDestructiveMigration() // OK in alpha feature branch
             .build()
+
     }
 
     /**

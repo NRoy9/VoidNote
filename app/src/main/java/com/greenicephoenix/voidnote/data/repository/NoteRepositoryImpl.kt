@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
+
 /**
  * Implementation of NoteRepository
  *
@@ -142,4 +143,5 @@ class NoteRepositoryImpl @Inject constructor(
     override fun getNoteCount(): Flow<Int> {
         return noteDao.getNoteCount()
     }
+
 }

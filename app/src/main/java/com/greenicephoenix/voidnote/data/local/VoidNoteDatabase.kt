@@ -12,12 +12,20 @@ import com.greenicephoenix.voidnote.data.local.dao.NoteDao
 import com.greenicephoenix.voidnote.data.local.entity.FolderEntity
 import com.greenicephoenix.voidnote.data.local.entity.NoteEntity
 
+/**
+ * Room Database for Void Note
+ *
+ * Version 3:
+ * - Introduces BlockEntity
+ * - Introduces TodoItemEntity
+ * - Keeps legacy content architecture intact
+ */
 @Database(
     entities = [
         NoteEntity::class,
         FolderEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(
@@ -32,16 +40,5 @@ abstract class VoidNoteDatabase : RoomDatabase() {
     companion object {
 
         const val DATABASE_NAME = "void_note_database"
-
-        val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    """
-                    ALTER TABLE notes 
-                    ADD COLUMN contentFormats TEXT NOT NULL DEFAULT '[]'
-                    """.trimIndent()
-                )
-            }
-        }
     }
 }
