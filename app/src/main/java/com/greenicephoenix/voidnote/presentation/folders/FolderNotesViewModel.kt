@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -18,22 +17,20 @@ import javax.inject.Inject
 /**
  * FolderNotesViewModel — manages all state for the folder notes screen.
  *
- * SPRINT 3 FIX #1 — Live rename:
- * Previously loadFolder() called getFolderById() once (suspend, one-shot) and
- * then collected the notes flow. The folder name was captured once and frozen —
- * renaming wrote to the DB but the UI never saw it.
+ * SPRINT 3 FIXES:
  *
- * Fix: use observeFolder() (a Flow) and combine() it with the notes Flow.
- * combine() merges two flows into one: whenever EITHER the folder OR the notes
- * change, a new FolderNotesUiState is emitted. So a rename triggers a new
- * emission from the folder flow → combine() runs → folderName in UI updates
- * immediately, with no navigation required.
+ * Fix #1 — Live rename (from previous fix):
+ * Uses combine(observeFolder, getNotesByFolder) so the top bar title
+ * updates immediately when the user renames the folder.
  *
- * SPRINT 3 FIX #2 — Delete with choice:
- * confirmDelete() now takes a Boolean: deleteNotes.
- * - deleteNotes = false → move notes to root (folderId = null), delete folder
- * - deleteNotes = true  → permanently delete all notes, delete folder
- * The dialog drives this choice via a checkbox (see FolderNotesScreen).
+ * Fix #2 — Delete always goes to trash (this session):
+ * confirmDelete() now calls trashNotesByFolder() — notes go to the trash
+ * screen and can be recovered. The "permanently delete" option is removed.
+ * This matches Android conventions: nothing should vanish without going
+ * through trash first.
+ *
+ * The deleteNotes Boolean parameter is gone. The only question when deleting
+ * a folder is now "are you sure?" — not "what should happen to notes?".
  */
 @HiltViewModel
 class FolderNotesViewModel @Inject constructor(
@@ -41,87 +38,64 @@ class FolderNotesViewModel @Inject constructor(
     private val folderRepository: FolderRepository
 ) : ViewModel() {
 
-    // ── Primary UI state ──────────────────────────────────────────────────
     private val _uiState = MutableStateFlow(FolderNotesUiState())
     val uiState: StateFlow<FolderNotesUiState> = _uiState.asStateFlow()
 
-    // ── Rename dialog ─────────────────────────────────────────────────────
     private val _showRenameDialog = MutableStateFlow(false)
     val showRenameDialog: StateFlow<Boolean> = _showRenameDialog.asStateFlow()
 
     private val _renameText = MutableStateFlow("")
     val renameText: StateFlow<String> = _renameText.asStateFlow()
 
-    // ── Delete dialog ─────────────────────────────────────────────────────
     private val _showDeleteDialog = MutableStateFlow(false)
     val showDeleteDialog: StateFlow<Boolean> = _showDeleteDialog.asStateFlow()
 
-    // Tracks the current folder ID for rename/delete operations
     private var currentFolderId: String = ""
 
     // ─────────────────────────────────────────────────────────────────────────
-    // LOAD — combine folder + notes into a single reactive state
+    // LOAD
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Start observing the folder and its notes reactively.
-     *
-     * HOW combine() WORKS:
-     * combine(flowA, flowB) { a, b -> result } creates a new Flow that emits
-     * a result whenever EITHER flowA OR flowB emits. Both must have emitted
-     * at least once before combine() can produce its first value.
-     *
-     * Here:
-     *   flowA = observeFolder(folderId) — re-emits on rename or delete
-     *   flowB = getNotesByFolder(folderId) — re-emits when notes are added/removed
-     *
-     * Result: any change to the folder name OR the note list updates the UI
-     * instantly and automatically.
-     *
-     * HANDLING folder = null:
-     * If the folder is deleted while this screen is open, observeFolder()
-     * emits null. We don't crash — we just keep the last known name and let
-     * the delete flow (confirmDelete → onNavigateBack) handle the navigation.
+     * Observe folder details and its notes reactively using combine().
+     * When the folder is renamed, observeFolder() re-emits → combine() runs
+     * → folderName in uiState updates → top bar title updates live.
      */
     fun loadFolder(folderId: String) {
         currentFolderId = folderId
-
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-
             combine(
-                folderRepository.observeFolder(folderId),   // Flow<Folder?>
-                noteRepository.getNotesByFolder(folderId)   // Flow<List<Note>>
+                folderRepository.observeFolder(folderId),
+                noteRepository.getNotesByFolder(folderId)
             ) { folder, notes ->
-                // This lambda runs every time either flow emits.
-                // folder can be null if deleted — keep the last name in that case.
                 FolderNotesUiState(
                     folderName = folder?.name ?: _uiState.value.folderName,
                     notes = notes,
                     isLoading = false
                 )
-            }.collect { newState ->
-                _uiState.value = newState
-            }
+            }.collect { _uiState.value = it }
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // CREATE NOTE
+    // CREATE
     // ─────────────────────────────────────────────────────────────────────────
 
     fun createNoteInFolder(folderId: String, onNavigateToEditor: (String) -> Unit) {
         viewModelScope.launch {
             val noteId = UUID.randomUUID().toString()
-            val note = Note(
-                id = noteId,
-                title = "",
-                content = "",
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis(),
+            noteRepository.insertNote(
+                Note(
+                    id = noteId,
+                    title = "",
+                    content = "",
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                    folderId = folderId
+                ),
                 folderId = folderId
             )
-            noteRepository.insertNote(note, folderId = folderId)
             onNavigateToEditor(noteId)
         }
     }
@@ -144,27 +118,14 @@ class FolderNotesViewModel @Inject constructor(
         _renameText.value = ""
     }
 
-    /**
-     * Write the new name to the database.
-     *
-     * Because loadFolder() is now using observeFolder() via combine(), the
-     * updated name flows back automatically once Room commits the write.
-     * The top bar title updates without any manual state assignment here.
-     */
     fun confirmRename() {
         val newName = _renameText.value.trim()
         if (newName.isBlank()) return
-
         viewModelScope.launch {
             val folder = folderRepository.getFolderById(currentFolderId) ?: return@launch
             folderRepository.updateFolder(
-                folder.copy(
-                    name = newName,
-                    updatedAt = System.currentTimeMillis()
-                )
+                folder.copy(name = newName, updatedAt = System.currentTimeMillis())
             )
-            // No manual UI update needed — observeFolder() emits the new
-            // folder automatically, combine() picks it up, uiState updates.
         }
         dismissRenameDialog()
     }
@@ -173,67 +134,42 @@ class FolderNotesViewModel @Inject constructor(
     // DELETE
     // ─────────────────────────────────────────────────────────────────────────
 
-    fun openDeleteDialog() {
-        _showDeleteDialog.value = true
-    }
-
-    fun dismissDeleteDialog() {
-        _showDeleteDialog.value = false
-    }
+    fun openDeleteDialog() { _showDeleteDialog.value = true }
+    fun dismissDeleteDialog() { _showDeleteDialog.value = false }
 
     /**
-     * Delete the folder. The user chooses what happens to notes inside.
+     * Delete this folder. All notes inside go to trash (recoverable).
      *
-     * @param deleteNotes
-     *   true  = permanently delete all notes in the folder (user explicitly chose this)
-     *   false = move notes to root (folderId = null) — safe default, nothing lost
+     * WHAT HAPPENS:
+     * 1. trashNotesByFolder() sends every note in this folder to trash in a
+     *    single SQL UPDATE. Their folderId is cleared (null) so restoring
+     *    from trash puts them in the main list — no orphan risk.
+     * 2. The folder row is deleted.
+     * 3. The screen navigates back (the folder no longer exists).
      *
-     * @param onNavigateBack
-     *   Called after all DB operations complete. The screen navigates away
-     *   because the folder it was showing no longer exists.
+     * NOTES GO TO TRASH, NOT PERMANENT DELETE:
+     * This is intentional. The user deleted a folder, not necessarily the
+     * notes inside. They can go to TrashScreen and restore any note they
+     * want. Permanently deleting notes from a folder delete would be a
+     * data-loss disaster with no recovery path.
      *
-     * STEP BY STEP:
-     * 1. Fetch current notes in this folder (one snapshot via .first())
-     * 2a. If deleteNotes=true: permanently delete each note from the DB
-     * 2b. If deleteNotes=false: set folderId=null on each note (move to root)
-     * 3. Delete the folder row
-     * 4. Navigate back
-     *
-     * WHY .first() INSTEAD OF COLLECTING THE FLOW?
-     * We only need one snapshot to act on — not a live stream. .first()
-     * takes the current value and cancels the collection immediately.
-     * This is safe because we're about to delete the folder anyway.
+     * @param onNavigateBack Called after DB operations complete.
      */
-    fun confirmDelete(deleteNotes: Boolean, onNavigateBack: () -> Unit) {
+    fun confirmDelete(onNavigateBack: () -> Unit) {
         viewModelScope.launch {
-            // Step 1: snapshot of current notes
-            val notesInFolder = noteRepository.getNotesByFolder(currentFolderId).first()
+            // Step 1: trash all notes in this folder (clears their folderId)
+            noteRepository.trashNotesByFolder(currentFolderId)
 
-            if (deleteNotes) {
-                // Step 2a: permanently delete every note
-                notesInFolder.forEach { note ->
-                    noteRepository.deleteNotePermanently(note.id)
-                }
-            } else {
-                // Step 2b: move every note to root level (folderId = null)
-                notesInFolder.forEach { note ->
-                    noteRepository.moveNoteToFolder(note.id, null)
-                }
-            }
-
-            // Step 3: delete the folder
+            // Step 2: delete the folder itself
             folderRepository.deleteFolder(currentFolderId)
 
-            // Step 4: leave the screen
+            // Step 3: leave the screen
             onNavigateBack()
         }
         dismissDeleteDialog()
     }
 }
 
-/**
- * UI state for FolderNotesScreen.
- */
 data class FolderNotesUiState(
     val folderName: String = "",
     val notes: List<Note> = emptyList(),

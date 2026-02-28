@@ -1,7 +1,6 @@
 package com.greenicephoenix.voidnote.presentation.folders
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,20 +24,12 @@ import com.greenicephoenix.voidnote.presentation.theme.Spacing
 /**
  * FolderNotesScreen — shows all notes inside a specific folder.
  *
- * SPRINT 3 FIXES applied here:
+ * SPRINT 3 — all folder menu actions working:
+ * - Rename: live update of the top bar title (via observeFolder Flow)
+ * - Delete: notes go to trash (recoverable), folder is removed
  *
- * Fix #1 — Live rename:
- * The top bar title now updates instantly after rename because the ViewModel
- * uses combine(observeFolder, getNotesByFolder). No code change needed in this
- * screen for fix #1 — the ViewModel handles it. The title just reads
- * uiState.folderName which is now always current.
- *
- * Fix #2 — Delete with note choice:
- * DeleteFolderDialog now contains a checkbox "Also permanently delete all notes".
- * - Unchecked (default): notes moved to main list — nothing lost
- * - Checked: notes permanently deleted along with the folder
- * The checkbox state is local to the dialog (it resets each time the dialog opens).
- * confirmDelete(deleteNotes, onNavigateBack) passes the choice to the ViewModel.
+ * The delete dialog no longer has a checkbox. The behaviour is always:
+ * notes → trash. This is the only safe and correct default.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,7 +44,6 @@ fun FolderNotesScreen(
     val renameText by viewModel.renameText.collectAsState()
     val showDeleteDialog by viewModel.showDeleteDialog.collectAsState()
 
-    // Local UI-only state — controls the ⋮ dropdown visibility
     var menuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(folderId) {
@@ -65,7 +55,6 @@ fun FolderNotesScreen(
             TopAppBar(
                 title = {
                     Column {
-                        // uiState.folderName now updates live after rename
                         Text(
                             text = uiState.folderName,
                             style = MaterialTheme.typography.titleLarge.copy(
@@ -81,19 +70,13 @@ fun FolderNotesScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "Folder options"
-                            )
+                            Icon(Icons.Default.MoreVert, contentDescription = "Folder options")
                         }
                         DropdownMenu(
                             expanded = menuExpanded,
@@ -102,7 +85,7 @@ fun FolderNotesScreen(
                             DropdownMenuItem(
                                 text = { Text("Rename Folder") },
                                 leadingIcon = {
-                                    Icon(Icons.Default.DriveFileRenameOutline, contentDescription = null)
+                                    Icon(Icons.Default.DriveFileRenameOutline, null)
                                 },
                                 onClick = {
                                     menuExpanded = false
@@ -112,15 +95,12 @@ fun FolderNotesScreen(
                             HorizontalDivider()
                             DropdownMenuItem(
                                 text = {
-                                    Text(
-                                        "Delete Folder",
-                                        color = MaterialTheme.colorScheme.error
-                                    )
+                                    Text("Delete Folder", color = MaterialTheme.colorScheme.error)
                                 },
                                 leadingIcon = {
                                     Icon(
                                         Icons.Default.Delete,
-                                        contentDescription = null,
+                                        null,
                                         tint = MaterialTheme.colorScheme.error
                                     )
                                 },
@@ -172,7 +152,6 @@ fun FolderNotesScreen(
         }
     }
 
-    // ── Rename Dialog ─────────────────────────────────────────────────────
     if (showRenameDialog) {
         RenameFolderDialog(
             currentName = renameText,
@@ -182,17 +161,11 @@ fun FolderNotesScreen(
         )
     }
 
-    // ── Delete Dialog ─────────────────────────────────────────────────────
     if (showDeleteDialog) {
         DeleteFolderDialog(
             folderName = uiState.folderName,
             noteCount = uiState.notes.size,
-            onConfirm = { deleteNotes ->
-                viewModel.confirmDelete(
-                    deleteNotes = deleteNotes,
-                    onNavigateBack = onNavigateBack
-                )
-            },
+            onConfirm = { viewModel.confirmDelete(onNavigateBack) },
             onDismiss = { viewModel.dismissDeleteDialog() }
         )
     }
@@ -213,10 +186,7 @@ private fun FolderNotesContent(
         verticalArrangement = Arrangement.spacedBy(Spacing.medium)
     ) {
         items(notes, key = { it.id }) { note ->
-            NoteCard(
-                note = note,
-                onClick = { onNoteClick(note) }
-            )
+            NoteCard(note = note, onClick = { onNoteClick(note) })
         }
         item { Spacer(modifier = Modifier.height(80.dp)) }
     }
@@ -235,9 +205,7 @@ private fun RenameFolderDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = {
-            Icon(Icons.Default.DriveFileRenameOutline, contentDescription = null)
-        },
+        icon = { Icon(Icons.Default.DriveFileRenameOutline, null) },
         title = { Text("Rename Folder") },
         text = {
             OutlinedTextField(
@@ -249,10 +217,7 @@ private fun RenameFolderDialog(
             )
         },
         confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                enabled = currentName.isNotBlank()
-            ) {
+            TextButton(onClick = onConfirm, enabled = currentName.isNotBlank()) {
                 Text("Rename")
             }
         },
@@ -263,36 +228,41 @@ private fun RenameFolderDialog(
 }
 
 /**
- * DeleteFolderDialog — confirms folder deletion and lets the user choose
- * what happens to notes inside.
+ * DeleteFolderDialog — confirms folder deletion.
  *
- * DESIGN DECISION — checkbox vs two buttons:
- * A checkbox ("Also delete all notes") is clearer than two confirm buttons
- * ("Delete folder only" vs "Delete folder and notes"). With two buttons,
- * users often miss the distinction. A checkbox makes the default (safe)
- * behaviour obvious and the destructive option opt-in.
+ * BEHAVIOUR IS ALWAYS: notes go to trash.
+ * No checkbox. No choice about what happens to notes.
  *
- * The checkbox state is local to this composable — it resets to false every
- * time the dialog opens, which is the right default (safe > destructive).
+ * WHY NO CHOICE?
+ * "Permanently delete all N notes" as an option in a folder-delete dialog
+ * is a data-loss trap. Users mentally model "delete folder" as deleting
+ * the container, not the contents. Trash is the correct intermediate step —
+ * it gives users 30 days to realise they made a mistake. Permanent delete
+ * from here, with no recovery path, is an irreversible action that users
+ * would not expect.
  *
- * When noteCount is 0, the checkbox is hidden — there are no notes to
- * act on, so the choice is meaningless.
+ * If the user genuinely wants to permanently delete notes, the correct flow
+ * is: go to TrashScreen → delete from there. That extra step is intentional
+ * friction that prevents accidents.
  *
- * @param folderName  Name shown in the dialog title
- * @param noteCount   Number of notes currently in the folder
- * @param onConfirm   Called with deleteNotes=true or false based on checkbox
- * @param onDismiss   Called when user cancels
+ * The dialog message tells users exactly what will happen so there are no
+ * surprises. If the folder is empty, the message is simplified.
  */
 @Composable
 private fun DeleteFolderDialog(
     folderName: String,
     noteCount: Int,
-    onConfirm: (deleteNotes: Boolean) -> Unit,
+    onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    // Checkbox state — local because it resets every time the dialog opens.
-    // Defaults to false = safe behaviour (move notes, don't delete them).
-    var deleteNotesChecked by remember { mutableStateOf(false) }
+    val bodyText = when {
+        noteCount == 0 ->
+            "\"$folderName\" is empty and will be deleted."
+        noteCount == 1 ->
+            "\"$folderName\" will be deleted. The 1 note inside will be moved to Trash — you can restore it from there."
+        else ->
+            "\"$folderName\" will be deleted. The $noteCount notes inside will be moved to Trash — you can restore them from there."
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -303,74 +273,11 @@ private fun DeleteFolderDialog(
                 tint = MaterialTheme.colorScheme.error
             )
         },
-        title = { Text("Delete \"$folderName\"?") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.medium)) {
-
-                // Main explanation — always shown
-                if (noteCount > 0) {
-                    val noteWord = if (noteCount == 1) "note" else "notes"
-                    Text("This folder contains $noteCount $noteWord. Choose what to do with them:")
-                } else {
-                    Text("This folder is empty and will be deleted.")
-                }
-
-                // Checkbox — only shown when there are notes to act on
-                if (noteCount > 0) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.small),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Checkbox(
-                            checked = deleteNotesChecked,
-                            onCheckedChange = { deleteNotesChecked = it },
-                            // Red when checked — signals destructive action
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = MaterialTheme.colorScheme.error
-                            )
-                        )
-                        // Tapping the label also toggles the checkbox
-                        // (standard accessibility pattern)
-                        Text(
-                            text = "Also permanently delete all $noteCount ${if (noteCount == 1) "note" else "notes"}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (deleteNotesChecked)
-                                MaterialTheme.colorScheme.error
-                            else
-                                MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier
-                                .weight(1f)
-                                // Make the text tappable too
-                                .then(
-                                    Modifier.clickable(
-                                        indication = null,
-                                        interactionSource = remember {
-                                            androidx.compose.foundation.interaction.MutableInteractionSource()
-                                        }
-                                    ) { deleteNotesChecked = !deleteNotesChecked }
-                                )
-                        )
-                    }
-
-                    // Contextual explanation — updates based on checkbox state
-                    Text(
-                        text = if (deleteNotesChecked)
-                            "⚠ Notes will be permanently deleted. This cannot be undone."
-                        else
-                            "Notes will be moved to your main notes list — nothing will be lost.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (deleteNotesChecked)
-                            MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                        else
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                    )
-                }
-            }
-        },
+        title = { Text("Delete Folder?") },
+        text = { Text(bodyText) },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(deleteNotesChecked) },
+                onClick = onConfirm,
                 colors = ButtonDefaults.textButtonColors(
                     contentColor = MaterialTheme.colorScheme.error
                 )
