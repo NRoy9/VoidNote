@@ -14,7 +14,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.greenicephoenix.voidnote.security.BiometricLockManager
 import javax.inject.Inject
+import kotlinx.coroutines.flow.map
 
 enum class ExportFormat {
     JSON, TXT
@@ -30,8 +32,39 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val noteRepository: NoteRepository,
     private val folderRepository: FolderRepository,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val biometricLockManager: BiometricLockManager
 ) : ViewModel() {
+
+    // ── Biometric lock ────────────────────────────────────────────────────────
+
+    /**
+     * Whether this device supports biometric/device-credential authentication.
+     * Checked once at ViewModel creation — hardware doesn't change at runtime.
+     * The Settings screen uses this to show/hide the biometric toggle item.
+     */
+    val isBiometricAvailable: Boolean = biometricLockManager.isAvailable()
+
+    /**
+     * Reactive biometric lock preference from DataStore.
+     * Settings screen observes this to keep the Switch in sync.
+     */
+    val biometricLockEnabled: StateFlow<Boolean> = preferencesManager.biometricLockFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
+    /**
+     * Enable or disable the biometric lock.
+     * Called by the Switch onCheckedChange in SettingsScreen.
+     */
+    fun setBiometricLock(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setBiometricLock(enabled)
+        }
+    }
 
     // Current theme from DataStore
     val currentTheme: StateFlow<AppTheme> = preferencesManager.themeFlow

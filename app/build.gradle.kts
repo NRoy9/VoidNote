@@ -119,6 +119,9 @@ dependencies {
     // Accompanist
     implementation(libs.bundles.accompanist)
 
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.biometric:biometric:1.1.0")
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.core.net.toUri
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.alpha
 
 /**
  * Settings Screen - App configuration and preferences
@@ -38,6 +39,8 @@ import androidx.compose.runtime.LaunchedEffect
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToTrash: () -> Unit = {},
+    onNavigateToArchive: () -> Unit = {},
+    onNavigateToChangelog: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -50,6 +53,7 @@ fun SettingsScreen(
 
     var showThemeDialog by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
+    val isBiometricEnabled by viewModel.biometricLockEnabled.collectAsState()
 
     // ✅ ADD: Show snackbar when export succeeds
     LaunchedEffect(showExportSuccess) {
@@ -117,6 +121,33 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(Spacing.large)) }
 
+            // SECURITY SECTION
+            item {
+                SectionHeader(text = "SECURITY")
+            }
+
+            item {
+                // Biometric lock — always visible so users know the feature exists.
+                // When device has no screen lock set up, the toggle is shown but
+                // disabled at 50% alpha with an explanatory subtitle.
+                // isBiometricAvailable is read directly here as a plain Boolean —
+                // hardware availability never changes at runtime.
+                val biometricAvailable = viewModel.isBiometricAvailable
+                SettingsToggleItem(
+                    icon = Icons.Default.Lock,           // Lock icon — in default set, always available
+                    title = "Biometric Lock",
+                    subtitle = if (biometricAvailable)
+                        "Require fingerprint or PIN to open app"
+                    else
+                        "Set up a screen lock in Android Settings first",
+                    checked = isBiometricEnabled && biometricAvailable,
+                    enabled = biometricAvailable,        // greys out switch when unavailable
+                    onCheckedChange = { if (biometricAvailable) viewModel.setBiometricLock(it) }
+                )
+            }
+
+            item { Spacer(modifier = Modifier.height(Spacing.large)) }
+
             // DATA MANAGEMENT SECTION
             item {
                 SectionHeader(text = "DATA MANAGEMENT")
@@ -128,6 +159,15 @@ fun SettingsScreen(
                     title = "Trash",
                     subtitle = "View and manage deleted notes",
                     onClick = onNavigateToTrash
+                )
+            }
+
+            item {
+                SettingsItem(
+                    icon = Icons.Default.Archive,
+                    title = "Archive",
+                    subtitle = "Notes kept out of the main list",
+                    onClick = onNavigateToArchive
                 )
             }
 
@@ -254,6 +294,17 @@ fun SettingsScreen(
             // ABOUT SECTION
             item {
                 SectionHeader(text = "ABOUT")
+            }
+
+            item {
+                // "What's New" — taps through to full changelog screen
+                // Shows latest version as subtitle so users know what to expect
+                SettingsItem(
+                    icon = Icons.Default.StarOutline,
+                    title = "What's New",
+                    subtitle = "v${uiState.appVersion} release notes",
+                    onClick = onNavigateToChangelog
+                )
             }
 
             item {
@@ -443,6 +494,63 @@ private fun SettingsItem(
                     modifier = Modifier.size(20.dp)
                 )
             }
+        }
+    }
+}
+
+/**
+ * Settings item with a toggle switch instead of a chevron.
+ * Used for binary on/off preferences like Biometric Lock.
+ */
+@Composable
+private fun SettingsToggleItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    enabled: Boolean = true,        // when false: 50% alpha, switch disabled
+    onCheckedChange: (Boolean) -> Unit
+) {
+    // Alpha communicates "this exists but can't be used yet"
+    // better than hiding the item completely
+    val contentAlpha = if (enabled) 1f else 0.45f
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(contentAlpha)
+            .then(
+                if (enabled) Modifier.clickable { onCheckedChange(!checked) }
+                else Modifier          // no click when disabled
+            ),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.large, vertical = Spacing.medium),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.medium)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.size(24.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            Switch(
+                checked = checked,
+                enabled = enabled,
+                onCheckedChange = onCheckedChange
+            )
         }
     }
 }

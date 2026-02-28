@@ -5,42 +5,50 @@ import androidx.lifecycle.viewModelScope
 import com.greenicephoenix.voidnote.domain.model.Folder
 import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.domain.repository.FolderRepository
+import com.greenicephoenix.voidnote.domain.repository.InlineBlockRepository
 import com.greenicephoenix.voidnote.domain.repository.NoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel for Search Screen
+ * ViewModel for Search Screen.
  *
- * Features:
- * - Real-time search with debouncing
- * - Search notes and folders
- * - Recent searches
- * - Filter by folder
+ * WHAT IT SEARCHES:
+ * 1. Note title (plain text — always clean)
+ * 2. Note logical content (markers stripped via getContentPreview)
+ * 3. Note tags
+ * 4. Checklist item text stored in the inline_blocks table
+ *
+ * CHECKLIST SEARCH ARCHITECTURE:
+ * Checklist item text lives in the inline_blocks table, not in notes.content.
+ * We run two parallel searches and union the results:
+ *
+ *   Search A: notes table         → title / content / tags
+ *   Search B: inline_blocks table → payload JSON LIKE query (item text)
+ *
+ * combine() with three Flows merges all three sources reactively.
+ * If a note matches either A or B, it surfaces in results.
  */
 @OptIn(FlowPreview::class)
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val noteRepository: NoteRepository,
-    private val folderRepository: FolderRepository
+    private val folderRepository: FolderRepository,
+    private val inlineBlockRepository: InlineBlockRepository
 ) : ViewModel() {
 
-    // Search query
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    // Selected folder filter (null = all folders)
     private val _selectedFolderId = MutableStateFlow<String?>(null)
     val selectedFolderId: StateFlow<String?> = _selectedFolderId.asStateFlow()
 
-    // Recent searches (stored in memory for now)
+    // In-memory recent searches — survives config changes, clears on app restart.
     private val _recentSearches = MutableStateFlow<List<String>>(emptyList())
     val recentSearches: StateFlow<List<String>> = _recentSearches.asStateFlow()
 
-    // All folders for filter
     val folders: StateFlow<List<Folder>> = folderRepository.getAllFolders()
         .stateIn(
             scope = viewModelScope,
@@ -48,19 +56,14 @@ class SearchViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    // Search results with debouncing
+    // Search results — debounced 300ms, combined with folder filter
     val searchResults: StateFlow<SearchUiState> = _searchQuery
-        .debounce(300) // Wait 300ms after user stops typing
+        .debounce(300)
         .combine(_selectedFolderId) { query, folderId -> Pair(query, folderId) }
         .flatMapLatest { (query, folderId) ->
             if (query.isBlank()) {
-                // Empty query = show recent searches
-                flowOf(SearchUiState(
-                    isSearching = false,
-                    showRecentSearches = true
-                ))
+                flowOf(SearchUiState(isSearching = false, showRecentSearches = true))
             } else {
-                // Perform search
                 performSearch(query, folderId)
             }
         }
@@ -70,70 +73,51 @@ class SearchViewModel @Inject constructor(
             initialValue = SearchUiState(isSearching = false, showRecentSearches = true)
         )
 
-    /**
-     * Update search query
-     */
-    fun onSearchQueryChange(query: String) {
-        _searchQuery.value = query
-    }
+    fun onSearchQueryChange(query: String) { _searchQuery.value = query }
+    fun onRecentSearchClick(query: String) { _searchQuery.value = query }
+    fun clearSearch() { _searchQuery.value = "" }
+    fun clearRecentSearches() { _recentSearches.value = emptyList() }
+    fun selectFolder(folderId: String?) { _selectedFolderId.value = folderId }
 
     /**
-     * Select a recent search
-     */
-    fun onRecentSearchClick(query: String) {
-        _searchQuery.value = query
-    }
-
-    /**
-     * Clear search query
-     */
-    fun clearSearch() {
-        _searchQuery.value = ""
-    }
-
-    /**
-     * Clear recent searches
-     */
-    fun clearRecentSearches() {
-        _recentSearches.value = emptyList()
-    }
-
-    /**
-     * Select folder filter
-     */
-    fun selectFolder(folderId: String?) {
-        _selectedFolderId.value = folderId
-    }
-
-    /**
-     * Perform search and return results
+     * Three-source search — union of text match + checklist item match.
+     *
+     * Content uses getContentPreview(Int.MAX_VALUE) — full logical text,
+     * all block markers stripped — prevents false positives from UUID
+     * fragments or the literal string "TODO".
      */
     private fun performSearch(query: String, folderId: String?): Flow<SearchUiState> {
         return combine(
             noteRepository.getAllNotes(),
-            folderRepository.getAllFolders()
-        ) { notes, folders ->
+            folderRepository.getAllFolders(),
+            inlineBlockRepository.searchNoteIdsByBlockContent(query)
+        ) { notes, folders, blockMatchNoteIds ->
 
-            // Save to recent searches if not already there
+            // Save to recent searches (newest first, max 10, no duplicates)
             if (query.isNotBlank() && query !in _recentSearches.value) {
-                val updated = listOf(query) + _recentSearches.value.take(9) // Keep last 10
-                _recentSearches.value = updated
+                _recentSearches.value = (listOf(query) + _recentSearches.value).take(10)
             }
 
-            // Filter notes by query
+            // O(1) lookup — convert list to Set once before the filter loop
+            val blockMatchSet: Set<String> = blockMatchNoteIds.toHashSet()
+
             val matchingNotes = notes.filter { note ->
-                val matchesQuery = note.title.contains(query, ignoreCase = true) ||
-                        note.content.contains(query, ignoreCase = true) ||
-                        note.tags.any { it.contains(query, ignoreCase = true) }
+                if (note.isTrashed) return@filter false
 
                 val matchesFolder = folderId == null || note.folderId == folderId
+                if (!matchesFolder) return@filter false
 
-                val notTrashed = !note.isTrashed
+                // Search A: title / content / tags
+                val titleMatch   = note.title.contains(query, ignoreCase = true)
+                val contentMatch = note.getContentPreview(Int.MAX_VALUE).contains(query, ignoreCase = true)
+                val tagMatch     = note.tags.any { it.contains(query, ignoreCase = true) }
 
-                matchesQuery && matchesFolder && notTrashed
+                // Search B: checklist item text (from inline_blocks table)
+                val blockMatch   = note.id in blockMatchSet
+
+                titleMatch || contentMatch || tagMatch || blockMatch
             }
 
-            // Filter folders by query
             val matchingFolders = folders.filter { folder ->
                 folder.name.contains(query, ignoreCase = true)
             }
@@ -150,7 +134,7 @@ class SearchViewModel @Inject constructor(
 }
 
 /**
- * UI State for Search Screen
+ * UI state for Search Screen.
  */
 data class SearchUiState(
     val notes: List<Note> = emptyList(),
