@@ -18,11 +18,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.domain.model.Folder
-import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import com.greenicephoenix.voidnote.presentation.components.FoldersEmptyState
+import com.greenicephoenix.voidnote.presentation.theme.Spacing
 
 /**
- * Folders Screen - Manage note folders
+ * FoldersScreen — Lists all folders. Allows creating and deleting folders.
+ *
+ * SPRINT 3 CHANGE:
+ * Tapping the delete icon on a folder now opens a confirmation dialog
+ * (DeleteFolderConfirmDialog) before proceeding. The dialog tells the user:
+ * - Which folder will be deleted
+ * - That their notes will be moved to the main list (not lost)
+ *
+ * Previously the trash icon called deleteFolder() immediately with no
+ * confirmation and no note-rescue logic — notes inside became orphaned.
+ *
+ * HOW THE CONFIRMATION WORKS:
+ * - User taps trash icon → viewModel.requestDeleteFolder(folder) is called
+ * - This sets pendingDeleteFolder to that folder in the ViewModel
+ * - The screen observes pendingDeleteFolder — when non-null, shows the dialog
+ * - Confirm → viewModel.confirmDeleteFolder() (moves notes + deletes folder)
+ * - Cancel → viewModel.cancelDeleteFolder() (clears pendingDeleteFolder, dialog closes)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +50,10 @@ fun FoldersScreen(
     val uiState by viewModel.uiState.collectAsState()
     val showDialog by viewModel.showCreateDialog.collectAsState()
     val newFolderName by viewModel.newFolderName.collectAsState()
+
+    // pendingDeleteFolder: non-null means "show delete confirmation for this folder"
+    // null means no confirmation dialog is showing
+    val pendingDeleteFolder by viewModel.pendingDeleteFolder.collectAsState()
 
     Scaffold(
         topBar = {
@@ -75,6 +95,7 @@ fun FoldersScreen(
                 }
 
                 uiState.folders.isEmpty() -> {
+                    // Polished empty state from EmptyStateView.kt (Sprint 2)
                     FoldersEmptyState(
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -84,14 +105,15 @@ fun FoldersScreen(
                     FoldersListContent(
                         folders = uiState.folders,
                         onFolderClick = onFolderClick,
-                        onDeleteFolder = { viewModel.deleteFolder(it) }
+                        // SPRINT 3: request confirmation instead of deleting directly
+                        onDeleteFolder = { folder -> viewModel.requestDeleteFolder(folder) }
                     )
                 }
             }
         }
     }
 
-    // Create Folder Dialog
+    // ── Create Folder Dialog ──────────────────────────────────────────────
     if (showDialog) {
         CreateFolderDialog(
             folderName = newFolderName,
@@ -100,13 +122,27 @@ fun FoldersScreen(
             onCreate = { viewModel.createFolder() }
         )
     }
+
+    // ── Delete Confirmation Dialog ────────────────────────────────────────
+    // Only shown when pendingDeleteFolder is non-null (user tapped a trash icon)
+    pendingDeleteFolder?.let { folder ->
+        DeleteFolderConfirmDialog(
+            folder = folder,
+            onConfirm = { viewModel.confirmDeleteFolder() },
+            onDismiss = { viewModel.cancelDeleteFolder() }
+        )
+    }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FOLDER LIST
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun FoldersListContent(
     folders: List<Folder>,
     onFolderClick: (String) -> Unit,
-    onDeleteFolder: (String) -> Unit
+    onDeleteFolder: (Folder) -> Unit       // SPRINT 3: takes whole Folder, not just ID
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -114,17 +150,17 @@ private fun FoldersListContent(
         verticalArrangement = Arrangement.spacedBy(Spacing.medium)
     ) {
         items(folders, key = { it.id }) { folder ->
-            FolderCard(
+            FolderListItem(
                 folder = folder,
                 onClick = { onFolderClick(folder.id) },
-                onDelete = { onDeleteFolder(folder.id) }
+                onDelete = { onDeleteFolder(folder) }
             )
         }
     }
 }
 
 @Composable
-private fun FolderCard(
+private fun FolderListItem(
     folder: Folder,
     onClick: () -> Unit,
     onDelete: () -> Unit
@@ -157,7 +193,6 @@ private fun FolderCard(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(32.dp)
                 )
-
                 Text(
                     text = folder.name,
                     style = MaterialTheme.typography.titleMedium,
@@ -165,10 +200,11 @@ private fun FolderCard(
                 )
             }
 
+            // Trash icon — tapping opens confirmation dialog (not immediate delete)
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
+                    contentDescription = "Delete folder",
                     tint = MaterialTheme.colorScheme.error
                 )
             }
@@ -176,6 +212,59 @@ private fun FolderCard(
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DIALOGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * DeleteFolderConfirmDialog — shown before any folder deletion from the list.
+ *
+ * Tells the user:
+ * - The folder name
+ * - That notes will be moved (not deleted)
+ *
+ * This prevents accidental deletions and avoids panic about lost notes.
+ */
+@Composable
+private fun DeleteFolderConfirmDialog(
+    folder: Folder,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error
+            )
+        },
+        title = { Text("Delete \"${folder.name}\"?") },
+        text = {
+            Text("This folder will be deleted. Any notes inside will be moved to your main notes list — nothing will be lost.")
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * CreateFolderDialog — inline dialog for naming a new folder.
+ */
 @Composable
 private fun CreateFolderDialog(
     folderName: String,

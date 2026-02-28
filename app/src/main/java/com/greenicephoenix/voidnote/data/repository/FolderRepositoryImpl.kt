@@ -11,7 +11,18 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 /**
- * Implementation of FolderRepository
+ * FolderRepositoryImpl — Room-backed implementation of FolderRepository.
+ *
+ * SPRINT 3 FIX:
+ * Implements observeFolder() by delegating to FolderDao.observeFolderById()
+ * and mapping the nullable FolderEntity? to a nullable domain Folder?.
+ *
+ * WHY .map { it?.toDomainModel() }?
+ * The DAO returns Flow<FolderEntity?> — nullable because the folder might
+ * not exist. We can't call toDomainModel() on null, so we use the safe
+ * call operator (?.) inside the map transform.
+ * Result: if the entity is null, the domain model is also null.
+ * The ViewModel handles null by treating it as "folder deleted, navigate back".
  */
 class FolderRepositoryImpl @Inject constructor(
     private val folderDao: FolderDao
@@ -34,6 +45,18 @@ class FolderRepositoryImpl @Inject constructor(
 
     override suspend fun getFolderById(folderId: String): Folder? {
         return folderDao.getFolderById(folderId)?.toDomainModel()
+    }
+
+    /**
+     * SPRINT 3 FIX — Observe a single folder reactively.
+     *
+     * Delegates to FolderDao.observeFolderById() and maps each emission.
+     * The .map {} transform runs every time Room detects a change to that
+     * folder row — which happens immediately after updateFolder() is called.
+     */
+    override fun observeFolder(folderId: String): Flow<Folder?> {
+        return folderDao.observeFolderById(folderId)
+            .map { entity -> entity?.toDomainModel() }
     }
 
     override suspend fun createFolder(folder: Folder) {
