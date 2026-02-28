@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -28,6 +30,24 @@ android {
         resourceConfigurations += listOf("en", "xxhdpi")
     }
 
+    // ── Signing ──────────────────────────────────────────────────────────────────
+    // Only configure release signing when keystore.properties exists.
+    // This lets the project sync and build debug on any machine without the keystore.
+    // CI / Play Store builds must have keystore.properties present.
+    signingConfigs {
+        create("release") {
+            val keystorePropertiesFile = rootProject.file("keystore.properties")
+            if (keystorePropertiesFile.exists()) {
+                val keystoreProperties = Properties()   // ← no java.util. prefix needed
+                keystoreProperties.load(keystorePropertiesFile.inputStream())
+                storeFile     = file(keystoreProperties["storeFile"]     as String)
+                storePassword = keystoreProperties["storePassword"]      as String
+                keyAlias      = keystoreProperties["keyAlias"]           as String
+                keyPassword   = keystoreProperties["keyPassword"]        as String
+            }
+        }
+    }
+
     buildTypes {
         release {
             // Enable code shrinking, obfuscation, and optimization
@@ -40,7 +60,7 @@ android {
             )
 
             // Play Store signing - we'll configure this later
-            // signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName("release")
         }
 
         debug {
