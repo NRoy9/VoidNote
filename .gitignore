@@ -67,6 +67,10 @@ local.properties
 *.jks
 *.keystore
 
+# Debug APKs — don't commit binaries
+app/release/
+app/debug/
+
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild
 .cxx/

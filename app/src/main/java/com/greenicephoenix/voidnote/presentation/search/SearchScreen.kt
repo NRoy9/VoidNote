@@ -18,6 +18,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.presentation.components.FolderCard
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
@@ -535,14 +536,36 @@ private fun HighlightedNoteCard(
                     modifier = Modifier.weight(1f)
                 )
 
-                // Pin indicator
-                if (note.isPinned) {
-                    Icon(
-                        imageVector = Icons.Default.PushPin,
-                        contentDescription = "Pinned",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
+                // Badges: Archived label + Pin indicator
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // ARCHIVED badge — tells user why this isn't in the main list
+                    if (note.isArchived) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "ARCHIVED",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    letterSpacing = 0.8.sp,
+                                    fontSize = 8.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    if (note.isPinned) {
+                        Icon(
+                            imageVector = Icons.Default.PushPin,
+                            contentDescription = "Pinned",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
 

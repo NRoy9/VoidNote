@@ -2,25 +2,35 @@ package com.greenicephoenix.voidnote.presentation.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
+import com.greenicephoenix.voidnote.presentation.archive.ArchiveScreen
 import com.greenicephoenix.voidnote.presentation.editor.NoteEditorScreen
+import com.greenicephoenix.voidnote.presentation.folders.FolderNotesScreen
 import com.greenicephoenix.voidnote.presentation.folders.FoldersScreen
 import com.greenicephoenix.voidnote.presentation.notes.NotesListScreen
-import com.greenicephoenix.voidnote.presentation.splash.SplashScreen
-import androidx.navigation.NavType
-import androidx.navigation.navArgument
-import com.greenicephoenix.voidnote.presentation.folders.FolderNotesScreen
 import com.greenicephoenix.voidnote.presentation.search.SearchScreen
 import com.greenicephoenix.voidnote.presentation.settings.SettingsScreen
+import com.greenicephoenix.voidnote.presentation.splash.SplashScreen
+import com.greenicephoenix.voidnote.presentation.changelog.ChangelogScreen
 import com.greenicephoenix.voidnote.presentation.trash.TrashScreen
 
 /**
- * Navigation Graph - Defines all navigation routes and transitions
+ * Navigation Graph — the "map" connecting all screens.
  *
- * This is the "map" of our app - it connects all screens together
+ * Each composable() block registers a destination with:
+ * - A route string (from Screen sealed class — type safe)
+ * - Optional arguments (e.g. noteId, folderId)
+ * - The screen composable to render
+ * - Navigation callbacks so screens don't depend on NavController directly
  *
- * @param navController Controls navigation between screens
+ * WHY PASS LAMBDAS INSTEAD OF NAVCONTROLLER?
+ * If we passed NavController into each screen, the screens would be tightly
+ * coupled to navigation. By passing lambdas, each screen only knows "call
+ * this when you want to go somewhere" — it doesn't know about the router.
+ * This makes screens independently testable and reusable.
  */
 @Composable
 fun SetupNavGraph(
@@ -28,14 +38,13 @@ fun SetupNavGraph(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Splash.route // App starts at splash screen
+        startDestination = Screen.Splash.route
     ) {
 
-        // Splash Screen - Entry point
+        // ── Splash ────────────────────────────────────────────────────────
         composable(route = Screen.Splash.route) {
             SplashScreen(
                 onNavigateToNotes = {
-                    // Navigate to notes list and remove splash from back stack
                     navController.navigate(Screen.NotesList.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
@@ -43,7 +52,7 @@ fun SetupNavGraph(
             )
         }
 
-        // Notes List Screen - Main screen
+        // ── Notes List ────────────────────────────────────────────────────
         composable(route = Screen.NotesList.route) {
             NotesListScreen(
                 onNavigateToEditor = { noteId ->
@@ -64,58 +73,45 @@ fun SetupNavGraph(
             )
         }
 
-        // Note Editor Screen
+        // ── Note Editor ───────────────────────────────────────────────────
         composable(
             route = Screen.NoteEditor.route,
-            arguments = listOf(
-                navArgument("noteId") { type = NavType.StringType }
-            )
+            arguments = listOf(navArgument("noteId") { type = NavType.StringType })
         ) {
             NoteEditorScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        // Folder Notes Screen - View notes in a folder
+        // ── Folder Notes ──────────────────────────────────────────────────
         composable(
             route = Screen.FolderNotes.route,
-            arguments = listOf(
-                navArgument("folderId") { type = NavType.StringType }
-            )
+            arguments = listOf(navArgument("folderId") { type = NavType.StringType })
         ) { backStackEntry ->
             val folderId = backStackEntry.arguments?.getString("folderId") ?: return@composable
-
             FolderNotesScreen(
                 folderId = folderId,
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
+                onNavigateBack = { navController.popBackStack() },
                 onNavigateToEditor = { noteId ->
                     navController.navigate(Screen.NoteEditor.createRoute(noteId))
                 }
             )
         }
 
-        // Settings Screen
+        // ── Settings ──────────────────────────────────────────────────────
         composable(route = Screen.Settings.route) {
             SettingsScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
-                onNavigateToTrash = {  // ✅ ADD THIS
-                    navController.navigate(Screen.Trash.route)
-                }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToTrash = { navController.navigate(Screen.Trash.route) },
+                onNavigateToArchive = { navController.navigate(Screen.Archive.route) },
+                onNavigateToChangelog = { navController.navigate(Screen.Changelog.route) }
             )
         }
 
-        // Search Screen
+        // ── Search ────────────────────────────────────────────────────────
         composable(route = Screen.Search.route) {
             SearchScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
+                onNavigateBack = { navController.popBackStack() },
                 onNoteClick = { noteId ->
                     navController.navigate(Screen.NoteEditor.createRoute(noteId))
                 },
@@ -125,31 +121,46 @@ fun SetupNavGraph(
             )
         }
 
-        // Folders Screen
+        // ── Folders ───────────────────────────────────────────────────────
         composable(route = Screen.Folders.route) {
             FoldersScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
+                onNavigateBack = { navController.popBackStack() },
                 onFolderClick = { folderId ->
-                    // TODO: Navigate to folder notes view (we'll implement this next)
-                    // For now, just go back
-                    navController.popBackStack()
+                    navController.navigate(Screen.FolderNotes.createRoute(folderId))
                 }
             )
         }
 
-        // Tags Screen (we'll implement this later)
+        // ── Tags (placeholder) ────────────────────────────────────────────
         composable(route = Screen.Tags.route) {
-            // TODO: TagsScreen()
+            // TODO: TagsScreen — Sprint 3
         }
 
-        // NEW: Trash Screen
+        // ── Trash ─────────────────────────────────────────────────────────
         composable(route = Screen.Trash.route) {
             TrashScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Archive ───────────────────────────────────────────────────────
+        composable(route = Screen.Archive.route) {
+            ArchiveScreen(
+                onNavigateBack = { navController.popBackStack() },
+                // Tap a card → open it in the editor (fully readable and editable)
+                // The editor's ⋮ menu has Unarchive, so the user can restore from there too.
+                onNavigateToEditor = { noteId ->
+                    navController.navigate(Screen.NoteEditor.createRoute(noteId))
                 }
+            )
+        }
+
+        // ── Changelog ─────────────────────────────────────────────────────
+        // Full version history — all releases, newest first.
+        // Navigated to from Settings → About → "What's New"
+        composable(route = Screen.Changelog.route) {
+            ChangelogScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
     }
