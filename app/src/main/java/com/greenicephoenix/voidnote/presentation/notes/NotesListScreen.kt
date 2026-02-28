@@ -21,6 +21,7 @@ import com.greenicephoenix.voidnote.presentation.components.FolderCard
 import com.greenicephoenix.voidnote.presentation.components.NoteCard
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import com.greenicephoenix.voidnote.presentation.components.ExpandableFab
+import com.greenicephoenix.voidnote.presentation.components.NotesEmptyState
 
 /**
  * Notes List Screen - Main screen of the app
@@ -76,7 +77,7 @@ fun NotesListScreen(
                 }
 
                 uiState.notes.isEmpty() && uiState.folders.isEmpty() -> {
-                    EmptyState(
+                    NotesEmptyState(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
@@ -233,31 +234,6 @@ private fun SectionHeader(text: String) {
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
         modifier = Modifier.padding(start = Spacing.small, bottom = Spacing.extraSmall)
     )
-}
-
-/**
- * Empty state - shown when no notes or folders exist
- */
-@Composable
-private fun EmptyState(
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier.padding(Spacing.large),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.medium)
-    ) {
-        Text(
-            text = "Nothing here yet",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-        )
-        Text(
-            text = "Tap + to create a note\nTap 📁 to create a folder",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-        )
-    }
 }
 
 /**

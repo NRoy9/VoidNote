@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
+import com.greenicephoenix.voidnote.presentation.components.TrashEmptyState
 
 /**
  * Trash Screen - View and manage deleted notes
@@ -68,8 +69,7 @@ fun TrashScreen(
                 }
 
                 uiState.isEmpty -> {
-                    // Empty trash state
-                    EmptyTrashState(
+                    TrashEmptyState(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
@@ -291,35 +291,6 @@ private fun TrashNoteCard(
                 }
             }
         }
-    }
-}
-
-/**
- * Empty trash state
- */
-@Composable
-private fun EmptyTrashState(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(Spacing.large),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.medium)
-    ) {
-        Icon(
-            imageVector = Icons.Default.Delete,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)
-        )
-        Text(
-            text = "Trash is empty",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-        )
-        Text(
-            text = "Deleted notes will appear here",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-        )
     }
 }
 

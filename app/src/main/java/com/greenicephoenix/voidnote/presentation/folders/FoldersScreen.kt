@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.domain.model.Folder
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
+import com.greenicephoenix.voidnote.presentation.components.FoldersEmptyState
 
 /**
  * Folders Screen - Manage note folders
@@ -74,7 +75,7 @@ fun FoldersScreen(
                 }
 
                 uiState.folders.isEmpty() -> {
-                    EmptyFoldersState(
+                    FoldersEmptyState(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
@@ -172,26 +173,6 @@ private fun FolderCard(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun EmptyFoldersState(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(Spacing.large),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.medium)
-    ) {
-        Text(
-            text = "No folders yet",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-        )
-        Text(
-            text = "Tap + to create your first folder",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-        )
     }
 }
 

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
+import com.greenicephoenix.voidnote.presentation.components.ArchiveEmptyState
 
 /**
  * Archive Screen — View and manage archived notes.
@@ -72,7 +73,7 @@ fun ArchiveScreen(
                 }
 
                 uiState.isEmpty -> {
-                    EmptyArchiveState(modifier = Modifier.align(Alignment.Center))
+                    ArchiveEmptyState(modifier = Modifier.align(Alignment.Center))
                 }
 
                 else -> {
@@ -281,36 +282,6 @@ private fun ArchiveNoteCard(
                 }
             }
         }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// EMPTY STATE
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun EmptyArchiveState(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(Spacing.large),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.medium)
-    ) {
-        Icon(
-            imageVector = Icons.Default.Archive,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.25f)
-        )
-        Text(
-            text = "Archive is empty",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-        )
-        Text(
-            text = "Archive notes to keep them\nout of your main list",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-        )
     }
 }
 

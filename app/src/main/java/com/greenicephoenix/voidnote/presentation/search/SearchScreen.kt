@@ -34,6 +34,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import com.greenicephoenix.voidnote.domain.model.Note
+import com.greenicephoenix.voidnote.presentation.components.SearchEmptyState
+import com.greenicephoenix.voidnote.presentation.components.SearchIdleState
 
 /**
  * Search Screen - Powerful search functionality
@@ -112,7 +114,7 @@ fun SearchScreen(
                 }
 
                 !searchResults.hasResults && searchQuery.isNotBlank() -> {
-                    NoResultsState(query = searchQuery)
+                    SearchEmptyState(modifier = Modifier.fillMaxSize())
                 }
 
                 searchResults.hasResults -> {
@@ -124,7 +126,7 @@ fun SearchScreen(
                 }
 
                 else -> {
-                    EmptySearchState()
+                    SearchIdleState(modifier = Modifier.fillMaxSize())
                 }
             }
         }
@@ -427,70 +429,6 @@ private fun SearchResultsContent(
                 )
             }
         }
-    }
-}
-
-/**
- * No results state
- */
-@Composable
-private fun NoResultsState(query: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(Spacing.large),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.SearchOff,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)
-        )
-        Spacer(modifier = Modifier.height(Spacing.medium))
-        Text(
-            text = "No results for \"$query\"",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-        )
-        Text(
-            text = "Try a different search term",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-        )
-    }
-}
-
-/**
- * Empty search state (when search field is empty)
- */
-@Composable
-private fun EmptySearchState() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(Spacing.large),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.Search,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)
-        )
-        Spacer(modifier = Modifier.height(Spacing.medium))
-        Text(
-            text = "Search your notes",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-        )
-        Text(
-            text = "Find notes by title, content, or tags",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-        )
     }
 }
 
