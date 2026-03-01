@@ -17,8 +17,8 @@ android {
         applicationId = "com.greenicephoenix.voidnote"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.0.1-alpha"
+        versionCode = 5
+        versionName = "0.0.5-alpha"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -26,19 +26,14 @@ android {
             useSupportLibrary = true
         }
 
-        // Play Store compliance - Set proper resource configurations
         resourceConfigurations += listOf("en", "xxhdpi")
     }
 
-    // ── Signing ──────────────────────────────────────────────────────────────────
-    // Only configure release signing when keystore.properties exists.
-    // This lets the project sync and build debug on any machine without the keystore.
-    // CI / Play Store builds must have keystore.properties present.
     signingConfigs {
         create("release") {
             val keystorePropertiesFile = rootProject.file("keystore.properties")
             if (keystorePropertiesFile.exists()) {
-                val keystoreProperties = Properties()   // ← no java.util. prefix needed
+                val keystoreProperties = Properties()
                 keystoreProperties.load(keystorePropertiesFile.inputStream())
                 storeFile     = file(keystoreProperties["storeFile"]     as String)
                 storePassword = keystoreProperties["storePassword"]      as String
@@ -50,21 +45,15 @@ android {
 
     buildTypes {
         release {
-            // Enable code shrinking, obfuscation, and optimization
             isMinifyEnabled = true
             isShrinkResources = true
-
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-
-            // Play Store signing - we'll configure this later
             signingConfig = signingConfigs.getByName("release")
         }
-
         debug {
-            // Faster builds for development
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-DEBUG"
@@ -78,8 +67,6 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
-
-        // Enable Kotlin compiler optimizations
         freeCompilerArgs += listOf(
             "-opt-in=kotlin.RequiresOptIn",
             "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi"
@@ -97,7 +84,6 @@ android {
         }
     }
 
-    // Play Store compliance - Lint configuration
     lint {
         abortOnError = false
         checkReleaseBuilds = true
@@ -111,19 +97,19 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
 
-    // Compose - Using BOM for version management
+    // Compose BOM
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.bundles.compose)
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
 
-    // Hilt - Dependency Injection
+    // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
-    // Room Database
+    // Room
     implementation(libs.bundles.room)
     ksp(libs.androidx.room.compiler)
 
@@ -139,8 +125,14 @@ dependencies {
     // Accompanist
     implementation(libs.bundles.accompanist)
 
+    // AppCompat + Biometric
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.biometric:biometric:1.1.0")
+
+    // Coil — image loading for Compose
+    // AsyncImage composable: loads from file path, handles caching, loading + error states.
+    // Used to render IMAGE blocks embedded in notes.
+    implementation(libs.coil.compose)
 
     // Testing
     testImplementation(libs.junit)

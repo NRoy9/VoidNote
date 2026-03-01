@@ -1,21 +1,21 @@
 [versions]
-# SDK Versions - using variables for reference only
+# SDK Versions
 compileSdk = "35"
 minSdk = "26"
 targetSdk = "35"
 
-# Plugin Versions - Latest Stable as of Feb 2026
+# Plugin Versions
 agp = "8.7.3"
 kotlin = "2.1.0"
 ksp = "2.1.0-1.0.29"
 hilt = "2.54"
 
-# AndroidX Core - Latest Stable
+# AndroidX Core
 coreKtx = "1.15.0"
 lifecycleRuntimeKtx = "2.8.7"
 activityCompose = "1.9.3"
 
-# Compose - Latest Stable
+# Compose
 composeBom = "2024.12.01"
 composeCompiler = "1.5.15"
 
@@ -35,8 +35,13 @@ kotlinxSerialization = "1.6.3"
 # DataStore
 datastore = "1.1.1"
 
-# Accompanist - Latest Stable
+# Accompanist
 accompanist = "0.36.0"
+
+# Coil — image loading for Compose
+# coil-compose provides AsyncImage: handles disk loading, memory caching, and
+# error/loading states in one composable. Used to render IMAGE blocks in the editor.
+coil = "2.7.0"
 
 # Testing
 junit = "4.13.2"
@@ -49,7 +54,7 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 
-# Compose BOM (Bill of Materials)
+# Compose BOM
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
@@ -83,6 +88,9 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 accompanist-systemuicontroller = { group = "com.google.accompanist", name = "accompanist-systemuicontroller", version.ref = "accompanist" }
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanist" }
 
+# Coil — Compose image loading
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitExt" }
@@ -100,7 +108,6 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 
 [bundles]
-# Group related dependencies together
 compose = [
     "androidx-compose-ui",
     "androidx-compose-ui-graphics",
@@ -108,12 +115,10 @@ compose = [
     "androidx-compose-material3",
     "androidx-compose-material-icons-extended"
 ]
-
 room = [
     "androidx-room-runtime",
     "androidx-room-ktx"
 ]
-
 accompanist = [
     "accompanist-systemuicontroller",
     "accompanist-permissions"

@@ -22,6 +22,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 
 /**
  * ViewModel for Note Editor Screen
@@ -53,7 +58,8 @@ import javax.inject.Inject
 class NoteEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val noteRepository: NoteRepository,
-    private val inlineBlockRepository: InlineBlockRepository  // ← NEW INJECTION
+    private val inlineBlockRepository: InlineBlockRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     // Navigation argument — "new" means create a new note
@@ -224,6 +230,112 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     /**
+     * Insert a new IMAGE block into this note.
+     *
+     * FLOW:
+     * 1. Ensure the note row exists (FK guard — same as insertTodoBlock)
+     * 2. Copy the picked image URI to app-private storage
+     * 3. Read image dimensions without loading the full bitmap into memory
+     * 4. Insert the block into the database
+     * 5. Save the note to embed the marker token in raw content
+     *
+     * WHY COPY THE FILE?
+     * Content URIs from the photo picker are temporary — they expire when the
+     * user revokes access or the system clears the grant. We copy to
+     * filesDir/images/ (app-private storage) so the image is always accessible
+     * regardless of what happens to the original URI.
+     *
+     * WHY inJustDecodeBounds?
+     * BitmapFactory.Options.inJustDecodeBounds = true reads ONLY the header
+     * (dimensions, MIME type) without loading pixels into memory. This avoids
+     * an OOM on large photos (12MP+) just to get width/height.
+     *
+     * @param imageUri  The content URI returned by the photo picker.
+     */
+    fun insertImageBlock(imageUri: Uri) {
+        viewModelScope.launch {
+            // ── FK Guard ──────────────────────────────────────────────────────
+            // Same as insertTodoBlock — ensure the note row exists before inserting
+            // a block with a foreign key reference to it.
+            ensureNotePersisted()
+
+            val blockId = UUID.randomUUID().toString()
+
+            // ── Copy to app-private storage ───────────────────────────────────
+            // filesDir is internal storage — no permission needed, survives updates,
+            // deleted when the app is uninstalled.
+            val imagesDir = File(context.filesDir, "images").also { it.mkdirs() }
+            val destFile  = File(imagesDir, "image_$blockId.jpg")
+
+            try {
+                context.contentResolver.openInputStream(imageUri)?.use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            } catch (e: Exception) {
+                // Copy failed (permission revoked, storage full, etc.)
+                // Don't insert a block with a broken file path.
+                android.util.Log.e("NoteEditor", "Image copy failed: ${e.message}")
+                return@launch
+            }
+
+            // ── Read dimensions ───────────────────────────────────────────────
+            // inJustDecodeBounds = true: reads header only, no pixels decoded.
+            // Stored in the payload so the UI can reserve space before the image loads.
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(destFile.absolutePath, options)
+
+            // ── Build and insert the block ────────────────────────────────────
+            val newBlock = InlineBlock(
+                id        = blockId,
+                noteId    = currentNoteId,
+                type      = InlineBlockType.IMAGE,
+                payload   = InlineBlockPayload.Image(
+                    filePath = destFile.absolutePath,
+                    caption  = "",
+                    width    = options.outWidth.coerceAtLeast(0),
+                    height   = options.outHeight.coerceAtLeast(0)
+                ),
+                createdAt = System.currentTimeMillis()
+            )
+
+            inlineBlockRepository.insertBlock(newBlock)
+
+            // Brief delay lets the Flow emit the new block before saveNote()
+            // queries the repository — prevents a race where saveNote() runs
+            // before the new block appears in getBlocksForNote().
+            delay(50)
+            saveNote()
+        }
+    }
+
+    /**
+     * Update the caption text on an IMAGE block.
+     *
+     * Called on every keystroke in the caption field.
+     * The ViewModel's auto-save (500ms debounce) persists the note content.
+     * The block itself is updated immediately in the database.
+     *
+     * @param blockId    The UUID of the IMAGE block.
+     * @param newCaption The updated caption text.
+     */
+    fun updateImageCaption(blockId: String, newCaption: String) {
+        viewModelScope.launch {
+            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val payload = block.payload as? InlineBlockPayload.Image ?: return@launch
+
+            val updatedBlock = block.copy(
+                payload = payload.copy(caption = newCaption)
+            )
+
+            inlineBlockRepository.updateBlock(updatedBlock)
+            // Caption changes don't modify the note's raw content (markers are unchanged),
+            // so we don't need to call saveNote() here — the block table update is enough.
+        }
+    }
+
+    /**
      * Ensure the note row exists in the database before inserting any
      * dependent records (inline_blocks have a FOREIGN KEY on noteId).
      *
@@ -378,16 +490,29 @@ class NoteEditorViewModel @Inject constructor(
     /**
      * Delete an entire block from this note.
      *
-     * Removes the block from the database. The blocks Flow will emit
-     * the updated list (without this block), causing the UI to remove it.
-     * A save is scheduled to remove the marker from the note's raw content.
+     * For IMAGE blocks: also deletes the physical image file from app storage.
+     * For TODO blocks: no file to delete.
      *
-     * @param blockId  The UUID of the block to delete.
+     * The blocks Flow emits the updated list (without this block), causing
+     * the UI to remove the block composable automatically.
      */
     fun deleteBlock(blockId: String) {
         viewModelScope.launch {
+            // If it's an image block, delete the physical file first.
+            // We do this before deleting the DB row so we still have the filePath.
+            val block = _uiState.value.blocks[blockId]
+            if (block?.type == InlineBlockType.IMAGE) {
+                val payload = block.payload as? InlineBlockPayload.Image
+                payload?.filePath?.let { path ->
+                    try {
+                        File(path).delete()
+                    } catch (e: Exception) {
+                        // File may already be gone — ignore and continue with DB delete
+                    }
+                }
+            }
+
             inlineBlockRepository.deleteBlock(blockId)
-            // Save after a brief delay to let the Flow emit the removal first
             delay(50)
             saveNote()
         }

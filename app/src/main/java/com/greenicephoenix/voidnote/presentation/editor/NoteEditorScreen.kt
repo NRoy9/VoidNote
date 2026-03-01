@@ -45,6 +45,9 @@ import com.greenicephoenix.voidnote.domain.model.FormatType
 import com.greenicephoenix.voidnote.domain.model.InlineBlockType
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 
 /**
  * Note Editor Screen
@@ -62,6 +65,18 @@ fun NoteEditorScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+
+
+    // ── Photo picker launcher ────────────────────────────────────────────────
+    // PickVisualMedia is Android's built-in photo picker (API 11+ backport).
+    // It does NOT require READ_MEDIA_IMAGES or READ_EXTERNAL_STORAGE permission —
+    // the system grants temporary access to the selected image only.
+    // On result: copy the URI to app storage and insert the image block.
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let { viewModel.insertImageBlock(it) }
+    }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showHeadingMenu by remember { mutableStateOf(false) }
@@ -188,6 +203,13 @@ fun NoteEditorScreen(
                     onChecklistClick = {
                         showInsertSheet = false
                         viewModel.insertTodoBlock()
+                    },
+                    onImageClick = {
+                        showInsertSheet = false
+                        // Launch the system photo picker — no permission dialog needed
+                        imagePickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
                     }
                 )
             }
@@ -282,7 +304,17 @@ fun NoteEditorScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
-                        else -> { /* IMAGE, AUDIO — future sessions */ }
+                        InlineBlockType.IMAGE -> {
+                            ImageBlockComposable(
+                                block = block,
+                                onCaptionChange = { newCaption ->
+                                    viewModel.updateImageCaption(block.id, newCaption)
+                                },
+                                onDeleteBlock = { viewModel.deleteBlock(block.id) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        else -> { /* AUDIO — next session */ }
                     }
                 }
             }
@@ -423,7 +455,7 @@ private fun ChecklistsSectionDivider() {
  * button is cleaner and more discoverable:
  *
  *  ┌──────────────────────────────────────────────────────────┐
- *  │  [B][I][U][S̶] │ [Aa] [✕?] │ [+ ▾]         12w  45c    │
+ *  │  [B][I][U][S̶] │ Aa [✕?] │ [+ ▾]         12w  45c         │
  *  └──────────────────────────────────────────────────────────┘
  *         ↑ format      ↑ size     ↑ insert popup    ↑ count
  *
@@ -582,7 +614,8 @@ private fun FormattingToolbar(
 private fun InsertBlockSheet(
     visible: Boolean,
     onDismiss: () -> Unit,
-    onChecklistClick: () -> Unit
+    onChecklistClick: () -> Unit,
+    onImageClick: () -> Unit       // ← NEW parameter
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -648,8 +681,9 @@ private fun InsertBlockSheet(
                     )
                     InsertBlockButton(
                         icon = Icons.Default.Image,
-                        contentDescription = "Image (coming soon)",
-                        available = false
+                        contentDescription = "Image",
+                        available = true,
+                        onClick = onImageClick          // ← wire the callback
                     )
                     InsertBlockButton(
                         icon = Icons.Default.KeyboardVoice,
