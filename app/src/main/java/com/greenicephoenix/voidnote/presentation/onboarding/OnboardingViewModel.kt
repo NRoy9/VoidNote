@@ -2,29 +2,27 @@ package com.greenicephoenix.voidnote.presentation.onboarding
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.greenicephoenix.voidnote.data.changelog.ChangelogData
 import com.greenicephoenix.voidnote.data.local.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * OnboardingViewModel — Handles the single responsibility of the onboarding screen:
- * marking it as complete and navigating away.
+ * OnboardingViewModel — marks the onboarding flow as complete.
  *
- * WHY IS THIS A SEPARATE VIEWMODEL FROM SPLASHVIEWMODEL?
- * Single Responsibility Principle — each ViewModel manages one screen's logic.
- * SplashViewModel decides where to go. OnboardingViewModel handles what happens
- * when onboarding ends. They are independent lifecycles.
+ * Called when the user taps Skip or Continue on the final page.
  *
- * WHAT DOES THIS VIEWMODEL DO?
- * Exactly one thing: call PreferencesManager.setOnboardingCompleted() and then
- * trigger the navigation callback. The DataStore write is async so we use a
- * coroutine. The navigation happens after the write completes — we don't want
- * to navigate away and then have the write fail, causing onboarding to show
- * again on next launch.
+ * ALSO marks the current version as "seen" so the What's New dialog
+ * does NOT fire immediately after onboarding on a fresh install.
  *
- * @HiltViewModel: Hilt manages this ViewModel's lifecycle and injects PreferencesManager.
- * @Inject constructor: Hilt sees this and knows how to provide PreferencesManager.
+ * WHY MARK VERSION SEEN HERE?
+ * The What's New dialog checks: currentVersion != lastSeenVersion → show dialog.
+ * On a fresh install, lastSeenVersion is "" and currentVersion is e.g. "0.0.4-alpha",
+ * so the dialog fires on first launch — even though it's a brand new install
+ * with nothing "new" to announce. By marking the version as seen during
+ * onboarding, we ensure the dialog only appears on UPDATES (when the user
+ * already knows the app and is seeing a new version).
  */
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
@@ -32,32 +30,19 @@ class OnboardingViewModel @Inject constructor(
 ) : ViewModel() {
 
     /**
-     * Mark onboarding as complete and navigate away.
+     * Record that onboarding is done and navigate forward.
      *
-     * Called by OnboardingScreen when the user either:
-     * - Taps "Get Started" on the last page
-     * - Taps "Skip" on any page
+     * Sets two DataStore flags:
+     * 1. onboardingComplete = true — never show onboarding again
+     * 2. lastSeenVersion = currentVersion — suppress What's New on first open
      *
-     * FLOW:
-     * 1. Launch a coroutine in viewModelScope
-     * 2. Write onboardingCompleted=true to DataStore (suspend call — waits for disk write)
-     * 3. Call onComplete() — this is the NavGraph's navigation lambda
-     *
-     * WHY PASS onComplete AS A PARAMETER?
-     * ViewModel should never hold a reference to NavController or Composables.
-     * That would cause memory leaks (ViewModel outlives screens). Instead, the
-     * screen passes a callback lambda, and the ViewModel calls it when ready.
-     * The ViewModel doesn't know or care that it's triggering navigation.
-     *
-     * @param onComplete  Lambda to call after the DataStore write succeeds
+     * Then calls [onCompleted] which NavGraph uses to route to VaultSetup.
      */
-    fun completeOnboarding(onComplete: () -> Unit) {
+    fun markOnboardingComplete(onCompleted: () -> Unit) {
         viewModelScope.launch {
-            // Persist the completion flag — this survives app restarts.
-            preferencesManager.setOnboardingCompleted()
-            // Now it's safe to navigate — the flag is written, onboarding won't
-            // show again on the next cold start.
-            onComplete()
+            preferencesManager.setOnboardingComplete()
+            preferencesManager.markVersionSeen(ChangelogData.latestVersion)
+            onCompleted()
         }
     }
 }

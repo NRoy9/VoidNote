@@ -5,6 +5,7 @@ import com.greenicephoenix.voidnote.data.local.dao.NoteDao
 import com.greenicephoenix.voidnote.data.mapper.toDomainModel
 import com.greenicephoenix.voidnote.data.mapper.toDomainModels
 import com.greenicephoenix.voidnote.data.mapper.toEntity
+import com.greenicephoenix.voidnote.data.security.NoteEncryptionManager
 import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.domain.repository.NoteRepository
 import kotlinx.coroutines.flow.Flow
@@ -14,125 +15,142 @@ import javax.inject.Inject
 /**
  * NoteRepositoryImpl — Room-backed implementation of NoteRepository.
  *
- * SPRINT 3 FIXES IN THIS FILE:
+ * ENCRYPTION LAYER (Sprint 4):
  *
- * 1. FolderDao injected (previously only NoteDao was injected).
- *    No longer needed for archive logic (see fix 3 below), but kept for
- *    future use and consistency with the data layer pattern.
- *    Both DAOs are provided by DatabaseModule, Hilt injects both automatically.
+ * NoteEncryptionManager is injected and called at two boundaries:
  *
- * 2. moveToTrash() clears folderId.
- *    When a note is trashed it leaves the folder immediately. Trash is a
- *    global bin with no folder concept. Restoring from trash always → main list.
+ * ON WRITE: Note (plain text) → encrypt fields → NoteEntity (ciphertext) → Room
+ * ON READ:  Room → NoteEntity (ciphertext) → decrypt fields → Note (plain text)
  *
- * 3. toggleArchive() clears folderId on ARCHIVE (simplified).
- *    The previous version kept folderId on archive and then checked folder
- *    existence on unarchive. This created two problems:
- *      - Archived notes still appeared in folder view (folderId still set)
- *      - If the folder was deleted, trashNotesByFolder caught the archived
- *        note (folderId still matched) and trashed it — user lost an archived note
- *    New behaviour:
- *      ARCHIVE  → clear folderId immediately. Note leaves the folder.
- *                 It belongs in Archive now, not in any folder.
- *      UNARCHIVE → folderId is already null. Note goes to main list.
- *                  No folder-existence check needed. Simple and safe.
+ * NO OTHER CLASS KNOWS ENCRYPTION EXISTS.
+ * ViewModels, screens, the editor — all work with plain text Note objects.
+ * The encryption boundary is entirely inside this file. This is correct Clean
+ * Architecture: the data layer owns the storage format, encryption is a
+ * storage detail.
  *
- * 4. trashNotesByFolder() — new.
- *    Bulk SQL UPDATE that trashes all non-archived, non-trashed notes in a
- *    folder. Archived notes are naturally excluded because their folderId
- *    was cleared in step 3 above — they don't match the WHERE clause.
+ * ENCRYPTED FIELDS: title, content, tags (each tag individually)
+ * NOT ENCRYPTED: id, folderId, timestamps, flags (metadata, not sensitive)
+ *
+ * FLAG-ONLY UPDATES (togglePin, toggleArchive, moveToTrash, restoreFromTrash):
+ * These update only boolean flags and folderId — not content. They work
+ * directly on NoteEntity from the DAO, bypassing decrypt → re-encrypt.
+ * This is both more efficient and correct: the ciphertext in the DB is
+ * unchanged, flags are updated around it.
  */
 class NoteRepositoryImpl @Inject constructor(
     private val noteDao: NoteDao,
-    private val folderDao: FolderDao
+    private val folderDao: FolderDao,
+    private val encryption: NoteEncryptionManager
 ) : NoteRepository {
 
-    // ── Read ──────────────────────────────────────────────────────────────
+    // ─── Encryption helpers ───────────────────────────────────────────────────
+
+    /**
+     * Returns a copy of the Note with title, content, and tags encrypted.
+     * Used before any write to the database.
+     */
+    private fun Note.encrypted(): Note = copy(
+        title   = encryption.encrypt(title),
+        content = encryption.encrypt(content),
+        tags    = tags.map { encryption.encrypt(it) }
+    )
+
+    /**
+     * Returns a copy of the Note with title, content, and tags decrypted.
+     * Used after every read from the database.
+     * decrypt() handles plain-text values gracefully (migration safety).
+     */
+    private fun Note.decrypted(): Note = copy(
+        title   = encryption.decrypt(title),
+        content = encryption.decrypt(content),
+        tags    = tags.map { encryption.decrypt(it) }
+    )
+
+    // ─── Read ─────────────────────────────────────────────────────────────────
 
     override fun getAllNotes(): Flow<List<Note>> =
-        noteDao.getAllNotes().map { it.toDomainModels() }
+        noteDao.getAllNotes()
+            .map { entities -> entities.toDomainModels().map { it.decrypted() } }
 
     override fun getNotesByFolder(folderId: String): Flow<List<Note>> =
-        noteDao.getNotesByFolder(folderId).map { it.toDomainModels() }
+        noteDao.getNotesByFolder(folderId)
+            .map { entities -> entities.toDomainModels().map { it.decrypted() } }
 
     override fun getNotesWithoutFolder(): Flow<List<Note>> =
-        noteDao.getNotesWithoutFolder().map { it.toDomainModels() }
+        noteDao.getNotesWithoutFolder()
+            .map { entities -> entities.toDomainModels().map { it.decrypted() } }
 
     override suspend fun getNoteById(noteId: String): Note? =
-        noteDao.getNoteById(noteId)?.toDomainModel()
+        noteDao.getNoteById(noteId)?.toDomainModel()?.decrypted()
 
     override fun getPinnedNotes(): Flow<List<Note>> =
-        noteDao.getPinnedNotes().map { it.toDomainModels() }
+        noteDao.getPinnedNotes()
+            .map { entities -> entities.toDomainModels().map { it.decrypted() } }
 
     override fun getArchivedNotes(): Flow<List<Note>> =
-        noteDao.getArchivedNotes().map { it.toDomainModels() }
+        noteDao.getArchivedNotes()
+            .map { entities -> entities.toDomainModels().map { it.decrypted() } }
 
     override fun getTrashedNotes(): Flow<List<Note>> =
-        noteDao.getTrashedNotes().map { it.toDomainModels() }
+        noteDao.getTrashedNotes()
+            .map { entities -> entities.toDomainModels().map { it.decrypted() } }
 
+    /**
+     * Search — IMPORTANT LIMITATION.
+     *
+     * SQL LIKE '%query%' runs against the ciphertext in the database.
+     * Ciphertext is random-looking bytes — it will never match a plain-text query.
+     * Search effectively returns no results for encrypted notes.
+     *
+     * FIX (Sprint 4 — search improvements):
+     * Load all notes into memory (decrypted via Flow), filter in Kotlin.
+     * This is how Standard Notes and other encrypted note apps handle search.
+     * The trade-off: slightly more memory usage, vs. correct search results.
+     * We'll implement this in SearchViewModel.
+     */
     override fun searchNotes(query: String): Flow<List<Note>> =
-        noteDao.searchNotes(query).map { it.toDomainModels() }
+        noteDao.searchNotes(query)
+            .map { entities -> entities.toDomainModels().map { it.decrypted() } }
 
     override fun getNoteCount(): Flow<Int> =
         noteDao.getNoteCount()
 
-    // ── Write ─────────────────────────────────────────────────────────────
+    // ─── Write ────────────────────────────────────────────────────────────────
 
     override suspend fun insertNote(note: Note, folderId: String?) {
-        noteDao.insertNote(note.toEntity(folderId))
+        noteDao.insertNote(note.encrypted().toEntity(folderId))
     }
 
     override suspend fun updateNote(note: Note, folderId: String?) {
-        noteDao.updateNote(note.toEntity(folderId))
+        noteDao.updateNote(note.encrypted().toEntity(folderId))
     }
 
     override suspend fun moveNoteToFolder(noteId: String, folderId: String?) {
+        // Flag/metadata update only — no content decrypt/re-encrypt needed
         val note = noteDao.getNoteById(noteId) ?: return
         noteDao.updateNote(
             note.copy(folderId = folderId, updatedAt = System.currentTimeMillis())
         )
     }
 
-    // ── Trash ─────────────────────────────────────────────────────────────
+    // ─── Trash ────────────────────────────────────────────────────────────────
 
-    /**
-     * Move a single note to trash.
-     *
-     * SPRINT 3 FIX: folderId cleared on trash.
-     *
-     * Trash has no folder concept. Clearing folderId here means:
-     *   - The note immediately disappears from the folder view
-     *   - Restoring from trash always puts the note in the main list
-     *   - No orphan possible regardless of what happens to the folder later
-     *
-     * isArchived is also set to false — a note can't be both trashed
-     * and archived at the same time.
-     */
     override suspend fun moveToTrash(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
         noteDao.updateNote(
             note.copy(
-                isTrashed = true,
-                folderId = null,
+                isTrashed  = true,
+                folderId   = null,
                 isArchived = false,
-                updatedAt = System.currentTimeMillis()
+                updatedAt  = System.currentTimeMillis()
             )
         )
     }
 
-    /**
-     * Restore a note from trash to the main list.
-     *
-     * folderId was cleared when the note was trashed, so it is null here.
-     * The note always returns to the main list. Simple, no edge cases.
-     */
     override suspend fun restoreFromTrash(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
         noteDao.updateNote(
-            note.copy(
-                isTrashed = false,
-                updatedAt = System.currentTimeMillis()
-            )
+            note.copy(isTrashed = false, updatedAt = System.currentTimeMillis())
         )
     }
 
@@ -145,21 +163,14 @@ class NoteRepositoryImpl @Inject constructor(
         noteDao.deleteAllTrashedNotes()
     }
 
-    /**
-     * SPRINT 3 — Bulk-trash all active notes in a folder.
-     *
-     * Delegates to a single SQL UPDATE in NoteDao.
-     * Archived notes are not affected — their folderId was already cleared
-     * when they were archived, so they don't match the SQL WHERE clause.
-     */
     override suspend fun trashNotesByFolder(folderId: String) {
         noteDao.trashNotesByFolder(
-            folderId = folderId,
+            folderId  = folderId,
             timestamp = System.currentTimeMillis()
         )
     }
 
-    // ── Pin / Archive ─────────────────────────────────────────────────────
+    // ─── Pin / Archive ────────────────────────────────────────────────────────
 
     override suspend fun togglePin(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
@@ -169,62 +180,22 @@ class NoteRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Toggle the archived state of a note.
-     *
-     * SPRINT 3 FIX — simplified. folderId is cleared on ARCHIVE.
-     *
-     * ARCHIVING (isArchived false → true):
-     *   - isArchived = true
-     *   - folderId = null  ← KEY CHANGE
-     *   - isTrashed = false (safety, shouldn't be trashed when archiving)
-     *
-     *   WHY CLEAR folderId ON ARCHIVE?
-     *   Three problems are solved at once:
-     *   (a) The note immediately disappears from the folder view and count.
-     *       Previously it stayed visible in the folder even after archiving.
-     *   (b) If the folder is later deleted, trashNotesByFolder() won't touch
-     *       this archived note — its folderId is null, doesn't match the query.
-     *       Previously the archived note would be unintentionally trashed.
-     *   (c) Unarchive logic becomes trivial (see below) — no folder-existence
-     *       check needed, no complexity, no edge cases.
-     *
-     * UNARCHIVING (isArchived true → false):
-     *   - isArchived = false
-     *   - folderId is already null (was cleared on archive)
-     *   - Note appears in the main list
-     *
-     *   WHY ALWAYS MAIN LIST ON UNARCHIVE?
-     *   The original folder may or may not still exist. Checking adds complexity
-     *   and the user explicitly chose to archive this note — their mental model
-     *   of "where it belongs" may have changed since then. Main list is the
-     *   universally correct fallback: always visible, never lost, user can
-     *   drag it into a folder themselves if they want.
-     *
-     * NO FOLDER-EXISTENCE CHECK NEEDED ANYWHERE IN THIS METHOD.
-     * The previous implementation had a folderDao.getFolderById() check here.
-     * It is completely removed. The logic is now straightforward:
-     *   archive → clear folderId, set isArchived = true
-     *   unarchive → set isArchived = false (folderId already null)
+     * ARCHIVE: clear folderId, set isArchived = true.
+     * UNARCHIVE: set isArchived = false. folderId already null → main list.
+     * (See NoteDao / Sprint 3 fix3 for full rationale.)
      */
     override suspend fun toggleArchive(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
-
         if (note.isArchived) {
-            // UNARCHIVING — simply flip the flag, note goes to main list
             noteDao.updateNote(
-                note.copy(
-                    isArchived = false,
-                    // folderId is already null (was cleared on archive)
-                    updatedAt = System.currentTimeMillis()
-                )
+                note.copy(isArchived = false, updatedAt = System.currentTimeMillis())
             )
         } else {
-            // ARCHIVING — flip the flag AND clear folder reference
             noteDao.updateNote(
                 note.copy(
                     isArchived = true,
-                    folderId = null,     // leave the folder immediately
-                    updatedAt = System.currentTimeMillis()
+                    folderId   = null,
+                    updatedAt  = System.currentTimeMillis()
                 )
             )
         }

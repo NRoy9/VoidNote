@@ -17,196 +17,190 @@ import com.greenicephoenix.voidnote.presentation.search.SearchScreen
 import com.greenicephoenix.voidnote.presentation.settings.SettingsScreen
 import com.greenicephoenix.voidnote.presentation.splash.SplashScreen
 import com.greenicephoenix.voidnote.presentation.trash.TrashScreen
+import com.greenicephoenix.voidnote.presentation.vault.VaultSetupScreen
+import com.greenicephoenix.voidnote.presentation.vault.VaultUnlockScreen
 
 /**
- * SetupNavGraph — The routing table for the entire application.
+ * SetupNavGraph — complete navigation map for Void Note.
  *
- * WHAT IS A NAV GRAPH?
- * Think of it like a map. Each `composable()` block is a "room" on that map,
- * identified by its route string. NavController is the GPS — you tell it where
- * to go and it handles the journey (back stack, animations, arguments).
+ * FIRST INSTALL FLOW:
+ *   Splash → Onboarding → VaultSetup → NotesList
  *
- * WHY LAMBDAS INSTEAD OF PASSING NAVCONTROLLER?
- * If we passed NavController directly into each screen, the screens would be
- * tightly coupled to navigation. A screen shouldn't need to know the entire
- * app map to navigate. Instead:
- * - NavGraph knows all routes and wires them up here
- * - Each screen gets simple lambdas: "call this when you want to go somewhere"
- * - Screens are independently testable — no NavController dependency needed
+ * NORMAL LAUNCH FLOW:
+ *   Splash → NotesList   (Keystore unwraps key silently, no screens shown)
  *
- * SPRINT 3 CHANGES:
- * 1. SplashScreen now has two navigation callbacks (onboarding vs notes list)
- * 2. OnboardingScreen destination added — navigates to NotesList on complete
- * 3. Both splash and onboarding use popUpTo to clear themselves from back stack
+ * REINSTALL / FACTORY RESET FLOW:
+ *   Splash → VaultUnlock → NotesList
  *
- * BACK STACK MANAGEMENT (popUpTo):
- * When navigating from splash → notes, we remove splash from the back stack.
- * Without this, pressing Back from NotesList would return to the splash screen.
- * Same for onboarding → notes.
- *
- * inclusive = true: also removes the destination we're popping to (splash/onboarding)
- * inclusive = false: keeps the destination we're popping to (used when we want
- *                    to go back to a hub screen like NotesList)
+ * ALL gateway screens (Splash, Onboarding, VaultSetup, VaultUnlock) clear
+ * the back stack when navigating forward. The user cannot press Back into them.
+ * NotesList is always the permanent root once reached.
  */
 @Composable
-fun SetupNavGraph(
-    navController: NavHostController
-) {
+fun SetupNavGraph(navController: NavHostController) {
+
     NavHost(
-        navController = navController,
+        navController    = navController,
         startDestination = Screen.Splash.route
     ) {
 
-        // ── Splash ────────────────────────────────────────────────────────
-        // Start destination. Animates for 2.5s, then SplashViewModel decides:
-        // first launch → Onboarding, returning user → NotesList.
-        composable(route = Screen.Splash.route) {
+        // ── Splash ────────────────────────────────────────────────────────────
+        // Reads DataStore + Keystore, decides destination.
+        // Animation plays for minimum 2 seconds while decision is made.
+        composable(Screen.Splash.route) {
             SplashScreen(
                 onNavigateToNotes = {
                     navController.navigate(Screen.NotesList.route) {
-                        // Remove splash from back stack so Back doesn't return here
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 },
                 onNavigateToOnboarding = {
                     navController.navigate(Screen.Onboarding.route) {
-                        // Remove splash from back stack — onboarding is the new root
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                },
+                onNavigateToVaultUnlock = {
+                    navController.navigate(Screen.VaultUnlock.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 }
             )
         }
 
-        // ── Onboarding ────────────────────────────────────────────────────
-        // SPRINT 3 — new. Shown once, on first launch only.
-        // After "Get Started" or "Skip", navigates to NotesList and removes
-        // itself from the back stack (user can't go back to onboarding).
-        composable(route = Screen.Onboarding.route) {
+        // ── Onboarding ────────────────────────────────────────────────────────
+        // 3-page introduction. Skip or Continue on final page → VaultSetup.
+        // OnboardingViewModel marks onboardingComplete and lastSeenVersion here,
+        // so What's New dialog doesn't fire immediately after onboarding.
+        composable(Screen.Onboarding.route) {
             OnboardingScreen(
-                onOnboardingComplete = {
-                    navController.navigate(Screen.NotesList.route) {
-                        // Remove onboarding from back stack.
-                        // After completing onboarding, pressing Back exits the app,
-                        // not returning to the onboarding flow.
+                onCompleted = {
+                    navController.navigate(Screen.VaultSetup.route) {
                         popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 }
             )
         }
 
-        // ── Notes List ────────────────────────────────────────────────────
-        // Home screen. Hub of the app. All primary navigation radiates from here.
-        composable(route = Screen.NotesList.route) {
+        // ── Vault Setup ───────────────────────────────────────────────────────
+        // Cannot be skipped. Creates the vault password.
+        // After creation, routes to NotesList — clears entire back stack.
+        composable(Screen.VaultSetup.route) {
+            VaultSetupScreen(
+                onVaultCreated = {
+                    navController.navigate(Screen.NotesList.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // ── Vault Unlock ──────────────────────────────────────────────────────
+        // Shown only when Keystore key is gone (reinstall/factory reset).
+        // User enters vault password → key re-derived → NotesList.
+        composable(Screen.VaultUnlock.route) {
+            VaultUnlockScreen(
+                onUnlocked = {
+                    navController.navigate(Screen.NotesList.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // ── Notes List ────────────────────────────────────────────────────────
+        composable(Screen.NotesList.route) {
             NotesListScreen(
                 onNavigateToEditor = { noteId ->
                     navController.navigate(Screen.NoteEditor.createRoute(noteId))
                 },
-                onNavigateToSearch = {
-                    navController.navigate(Screen.Search.route)
-                },
-                onNavigateToSettings = {
-                    navController.navigate(Screen.Settings.route)
-                },
-                onNavigateToFolders = {
-                    navController.navigate(Screen.Folders.route)
-                },
+                onNavigateToSearch    = { navController.navigate(Screen.Search.route) },
+                onNavigateToSettings  = { navController.navigate(Screen.Settings.route) },
+                onNavigateToFolders   = { navController.navigate(Screen.Folders.route) },
                 onNavigateToFolderNotes = { folderId ->
                     navController.navigate(Screen.FolderNotes.createRoute(folderId))
                 }
             )
         }
 
-        // ── Note Editor ───────────────────────────────────────────────────
-        // noteId argument: "new" = create new note, UUID = open existing note.
-        // The ViewModel reads noteId from SavedStateHandle to load the note.
+        // ── Note Editor ───────────────────────────────────────────────────────
         composable(
-            route = Screen.NoteEditor.route,
+            route     = Screen.NoteEditor.route,
             arguments = listOf(navArgument("noteId") { type = NavType.StringType })
         ) {
-            NoteEditorScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+            NoteEditorScreen(onNavigateBack = { navController.popBackStack() })
         }
 
-        // ── Folder Notes ──────────────────────────────────────────────────
-        // Shows all notes belonging to a specific folder.
-        // folderId is read by FolderNotesViewModel via SavedStateHandle.
+        // ── Folder Notes ──────────────────────────────────────────────────────
         composable(
-            route = Screen.FolderNotes.route,
+            route     = Screen.FolderNotes.route,
             arguments = listOf(navArgument("folderId") { type = NavType.StringType })
         ) { backStackEntry ->
             val folderId = backStackEntry.arguments?.getString("folderId") ?: return@composable
             FolderNotesScreen(
-                folderId = folderId,
-                onNavigateBack = { navController.popBackStack() },
+                folderId        = folderId,
+                onNavigateBack  = { navController.popBackStack() },
                 onNavigateToEditor = { noteId ->
                     navController.navigate(Screen.NoteEditor.createRoute(noteId))
                 }
             )
         }
 
-        // ── Settings ──────────────────────────────────────────────────────
-        composable(route = Screen.Settings.route) {
+        // ── Settings ──────────────────────────────────────────────────────────
+        composable(Screen.Settings.route) {
             SettingsScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToTrash = { navController.navigate(Screen.Trash.route) },
+                onNavigateBack      = { navController.popBackStack() },
+                onNavigateToTrash   = { navController.navigate(Screen.Trash.route) },
                 onNavigateToArchive = { navController.navigate(Screen.Archive.route) },
                 onNavigateToChangelog = { navController.navigate(Screen.Changelog.route) }
             )
         }
 
-        // ── Search ────────────────────────────────────────────────────────
-        composable(route = Screen.Search.route) {
+        // ── Search ────────────────────────────────────────────────────────────
+        composable(Screen.Search.route) {
             SearchScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNoteClick = { noteId ->
+                onNoteClick    = { noteId ->
                     navController.navigate(Screen.NoteEditor.createRoute(noteId))
                 },
-                onFolderClick = { folderId ->
+                onFolderClick  = { folderId ->
                     navController.navigate(Screen.FolderNotes.createRoute(folderId))
                 }
             )
         }
 
-        // ── Folders ───────────────────────────────────────────────────────
-        composable(route = Screen.Folders.route) {
+        // ── Folders ───────────────────────────────────────────────────────────
+        composable(Screen.Folders.route) {
             FoldersScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onFolderClick = { folderId ->
+                onFolderClick  = { folderId ->
                     navController.navigate(Screen.FolderNotes.createRoute(folderId))
                 }
             )
         }
 
-        // ── Tags (placeholder) ────────────────────────────────────────────
-        // Sprint 4 — tagging UI will be added here
-        composable(route = Screen.Tags.route) {
-            // TODO: TagsScreen — Sprint 4
+        // ── Tags ──────────────────────────────────────────────────────────────
+        composable(Screen.Tags.route) {
+            // TODO: TagsScreen — Sprint 5
         }
 
-        // ── Trash ─────────────────────────────────────────────────────────
-        composable(route = Screen.Trash.route) {
-            TrashScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+        // ── Trash ─────────────────────────────────────────────────────────────
+        composable(Screen.Trash.route) {
+            TrashScreen(onNavigateBack = { navController.popBackStack() })
         }
 
-        // ── Archive ───────────────────────────────────────────────────────
-        composable(route = Screen.Archive.route) {
+        // ── Archive ───────────────────────────────────────────────────────────
+        composable(Screen.Archive.route) {
             ArchiveScreen(
-                onNavigateBack = { navController.popBackStack() },
+                onNavigateBack     = { navController.popBackStack() },
                 onNavigateToEditor = { noteId ->
                     navController.navigate(Screen.NoteEditor.createRoute(noteId))
                 }
             )
         }
 
-        // ── Changelog ─────────────────────────────────────────────────────
-        // Full version history. Accessed from Settings → About → "What's New"
-        composable(route = Screen.Changelog.route) {
-            ChangelogScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+        // ── Changelog ─────────────────────────────────────────────────────────
+        composable(Screen.Changelog.route) {
+            ChangelogScreen(onNavigateBack = { navController.popBackStack() })
         }
     }
 }

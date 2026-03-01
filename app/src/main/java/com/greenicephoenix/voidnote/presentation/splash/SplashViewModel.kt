@@ -3,115 +3,98 @@ package com.greenicephoenix.voidnote.presentation.splash
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.greenicephoenix.voidnote.data.local.PreferencesManager
+import com.greenicephoenix.voidnote.data.security.NoteEncryptionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * SplashViewModel — Decides where to navigate after the splash animation.
+ * SplashViewModel — determines where to navigate after the splash animation.
  *
- * WHAT IS A VIEWMODEL?
- * A ViewModel is a special class that holds UI state and survives screen
- * rotations. When the user rotates the phone, the Composable is destroyed and
- * recreated — but the ViewModel lives on. This prevents us from re-fetching
- * data or re-running logic on every rotation.
+ * DECISION TREE (evaluated once at app start):
  *
- * WHY DOES SPLASH NEED A VIEWMODEL?
- * The splash screen needs to make a decision: "Has the user completed
- * onboarding?" This requires reading from DataStore, which is async (suspend).
- * We can't call suspend functions directly in a Composable — that would break
- * the rules of Compose. A ViewModel provides a coroutine scope (viewModelScope)
- * that is safe to use for this purpose.
+ *   Onboarding complete?
+ *   ├─ NO  → Navigate to Onboarding
+ *   └─ YES
+ *       Vault set up?
+ *       ├─ NO  → Navigate to Onboarding (so user reaches VaultSetup at the end)
+ *       └─ YES
+ *           Try to load session key from wrapped key in DataStore
+ *           ├─ SUCCESS → key is in memory, navigate to NotesList
+ *           └─ FAIL (Keystore key gone — reinstall / factory reset)
+ *               Navigate to VaultUnlock (ask for vault password to re-derive)
  *
- * NAVIGATION DECISION LOGIC:
- * ┌──────────────────────────────────────────────────────────┐
- * │ onboardingCompleted = false → navigate to ONBOARDING     │
- * │ onboardingCompleted = true  → navigate to NOTES_LIST     │
- * └──────────────────────────────────────────────────────────┘
+ * WHY ROUTE TO ONBOARDING IF VAULT NOT SET UP (EVEN IF ONBOARDING WAS DONE)?
+ * This handles the edge case where:
+ * - User completed onboarding on an old build that didn't have vault setup
+ * - App updated and now requires vault
+ * - We can't just drop them into vault setup cold — show onboarding again
+ *   so the vault setup screen follows naturally at the end.
+ * It also handles a crash mid-setup: if onboarding is done but vault is not,
+ * something went wrong — re-doing onboarding is safer than a blank unlock screen.
  *
- * @HiltViewModel tells Hilt to manage this ViewModel's lifecycle and inject
- * its dependencies (@Inject constructor). The ViewModel is tied to the
- * SplashScreen composable's lifecycle.
+ * WHAT ABOUT BIOMETRIC LOCK?
+ * Biometric lock (the gate in MainActivity) is separate from vault unlock.
+ * SplashViewModel only deals with getting the encryption key into memory.
+ * MainActivity's biometric gate decides if the user can SEE the app after that.
+ * These are two independent concerns:
+ * - Vault key   → is the encryption/decryption machinery ready?
+ * - Biometric   → is this person allowed to open the app right now?
  */
 @HiltViewModel
 class SplashViewModel @Inject constructor(
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val encryption: NoteEncryptionManager
 ) : ViewModel() {
 
-    /**
-     * Navigation destination that SplashScreen should go to after animation.
-     *
-     * WHY SEALED CLASS INSTEAD OF A BOOLEAN?
-     * Using a sealed class makes the intent explicit and scalable. If we ever
-     * need a third destination from splash (e.g., force-update screen), we just
-     * add a new subclass. A boolean would force us to refactor everywhere.
-     *
-     * Sealed classes: only the cases defined here can ever exist.
-     *
-     * null = not yet decided (DataStore read in progress — splash is animating)
-     * ShowOnboarding = first launch, show the 3-page onboarding
-     * ShowNotesList = returning user, go straight to the notes list
-     */
-    sealed class SplashDestination {
-        /** First launch — show the onboarding flow. */
-        data object ShowOnboarding : SplashDestination()
-
-        /** Returning user — skip straight to the main notes list. */
-        data object ShowNotesList : SplashDestination()
+    sealed class Destination {
+        object Loading     : Destination()      // Still checking, don't navigate yet
+        object Onboarding  : Destination()      // Show onboarding (+ vault setup at end)
+        object VaultUnlock : Destination()      // Keystore key gone, need password
+        object NotesList   : Destination()      // Everything ready, show the app
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // STATE
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * MutableStateFlow vs StateFlow:
-     * - MutableStateFlow: can emit new values (used internally in ViewModel)
-     * - StateFlow: read-only, exposed to the UI — UI can observe but not change
-     *
-     * This pattern (private mutable, public read-only) prevents the UI from
-     * accidentally mutating the state directly. The ViewModel is the single
-     * source of truth.
-     *
-     * Initial value = null, meaning "not ready yet". SplashScreen checks for
-     * null before navigating (it waits for the animation to finish anyway).
-     */
-    private val _destination = MutableStateFlow<SplashDestination?>(null)
-    val destination: StateFlow<SplashDestination?> = _destination
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // LOGIC
-    // ─────────────────────────────────────────────────────────────────────────
+    private val _destination = MutableStateFlow<Destination>(Destination.Loading)
+    val destination: StateFlow<Destination> = _destination.asStateFlow()
 
     init {
-        // 'init' runs as soon as the ViewModel is created.
-        // We immediately check the onboarding status so the decision is ready
-        // by the time the splash animation finishes (≈2.5 seconds).
-        checkOnboardingStatus()
+        checkStartDestination()
     }
 
-    /**
-     * Read the onboarding completion flag from DataStore.
-     *
-     * viewModelScope.launch: starts a coroutine tied to this ViewModel's
-     * lifecycle. When the ViewModel is cleared (screen exits), any running
-     * coroutines are automatically cancelled — no memory leaks.
-     *
-     * .first(): DataStore returns a Flow, but we only need one value here.
-     * .first() takes the first emitted value and cancels the collection.
-     * This is safe because DataStore always emits at least one value
-     * immediately (the stored value or the default).
-     */
-    private fun checkOnboardingStatus() {
+    private fun checkStartDestination() {
         viewModelScope.launch {
-            val onboardingCompleted = preferencesManager.onboardingCompletedFlow.first()
-            _destination.value = if (onboardingCompleted) {
-                SplashDestination.ShowNotesList
-            } else {
-                SplashDestination.ShowOnboarding
+            val onboardingDone = preferencesManager.onboardingCompleteFlow.first()
+            val vaultDone      = preferencesManager.vaultSetupCompleteFlow.first()
+
+            when {
+                // Case 1: Onboarding not complete, or vault not set up yet
+                // Route through onboarding → VaultSetup is at the end of that flow
+                !onboardingDone || !vaultDone -> {
+                    _destination.value = Destination.Onboarding
+                }
+
+                // Case 2: Both complete — try to load key from Keystore-wrapped value
+                else -> {
+                    val wrappedKey = preferencesManager.vaultWrappedKeyFlow.first()
+                    val loaded = if (wrappedKey.isNotEmpty()) {
+                        encryption.tryLoadFromWrapped(wrappedKey)
+                    } else {
+                        false
+                    }
+
+                    _destination.value = if (loaded) {
+                        // Key loaded into memory — encryption ready, open the app
+                        Destination.NotesList
+                    } else {
+                        // Keystore key gone (reinstall / factory reset)
+                        // User must enter vault password to re-derive the key
+                        Destination.VaultUnlock
+                    }
+                }
             }
         }
     }

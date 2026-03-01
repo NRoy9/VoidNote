@@ -9,14 +9,18 @@ import com.greenicephoenix.voidnote.data.local.PreferencesManager
 import com.greenicephoenix.voidnote.presentation.settings.AppTheme
 
 /**
- * Theme Manager - Provides current theme to the app
+ * Provides the current theme preference as a plain value (not State).
  *
- * This allows the entire app to react to theme changes
+ * Used in places that need a direct AppTheme value rather than a State<AppTheme>.
+ *
+ * Initial value changed to AppTheme.SYSTEM to match rememberThemeState()
+ * and PreferencesManager — all three must agree on the default to avoid
+ * inconsistency during the async DataStore load window.
  */
 @Composable
 fun rememberThemePreference(): AppTheme {
     val context = LocalContext.current
     val preferencesManager = remember { PreferencesManager(context) }
-    val theme by preferencesManager.themeFlow.collectAsState(initial = AppTheme.DARK)
+    val theme by preferencesManager.themeFlow.collectAsState(initial = AppTheme.SYSTEM) // ← was DARK
     return theme
 }
