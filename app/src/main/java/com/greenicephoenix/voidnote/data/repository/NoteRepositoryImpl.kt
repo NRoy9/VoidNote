@@ -15,7 +15,7 @@ import javax.inject.Inject
 /**
  * NoteRepositoryImpl — Room-backed implementation of NoteRepository.
  *
- * ENCRYPTION LAYER (Sprint 4):
+ * ─── ENCRYPTION LAYER ────────────────────────────────────────────────────────
  *
  * NoteEncryptionManager is injected and called at two boundaries:
  *
@@ -24,18 +24,31 @@ import javax.inject.Inject
  *
  * NO OTHER CLASS KNOWS ENCRYPTION EXISTS.
  * ViewModels, screens, the editor — all work with plain text Note objects.
- * The encryption boundary is entirely inside this file. This is correct Clean
- * Architecture: the data layer owns the storage format, encryption is a
- * storage detail.
  *
  * ENCRYPTED FIELDS: title, content, tags (each tag individually)
- * NOT ENCRYPTED: id, folderId, timestamps, flags (metadata, not sensitive)
+ * NOT ENCRYPTED: id, folderId, timestamps, flags — metadata, not sensitive
  *
- * FLAG-ONLY UPDATES (togglePin, toggleArchive, moveToTrash, restoreFromTrash):
- * These update only boolean flags and folderId — not content. They work
- * directly on NoteEntity from the DAO, bypassing decrypt → re-encrypt.
- * This is both more efficient and correct: the ciphertext in the DB is
- * unchanged, flags are updated around it.
+ * ─── SEARCH STRATEGY ─────────────────────────────────────────────────────────
+ *
+ * searchNotes() below does SQL LIKE on DB content — but because content is
+ * encrypted, the SQL LIKE matches nothing meaningful. It is therefore
+ * NOT used by SearchViewModel.
+ *
+ * SearchViewModel correctly calls getAllNotes() instead, which returns fully
+ * decrypted notes, and then filters them in-memory with Kotlin's .contains().
+ * This is the correct pattern for any encrypted notes app — Standard Notes,
+ * Bitwarden, and others all use the same approach.
+ *
+ * searchNotes() is kept in the interface and implemented here (with decryption)
+ * so it is correct if anything calls it in future, but it is not the primary
+ * search path.
+ *
+ * ─── FLAG-ONLY UPDATES ───────────────────────────────────────────────────────
+ *
+ * togglePin, toggleArchive, moveToTrash, restoreFromTrash, moveNoteToFolder
+ * all update only boolean flags or folderId — not content. They work directly
+ * on NoteEntity from the DAO, bypassing decrypt → re-encrypt. This is both
+ * faster and correct — the ciphertext in the DB is untouched.
  */
 class NoteRepositoryImpl @Inject constructor(
     private val noteDao: NoteDao,
@@ -47,7 +60,7 @@ class NoteRepositoryImpl @Inject constructor(
 
     /**
      * Returns a copy of the Note with title, content, and tags encrypted.
-     * Used before any write to the database.
+     * Called before every write to the database.
      */
     private fun Note.encrypted(): Note = copy(
         title   = encryption.encrypt(title),
@@ -57,8 +70,8 @@ class NoteRepositoryImpl @Inject constructor(
 
     /**
      * Returns a copy of the Note with title, content, and tags decrypted.
-     * Used after every read from the database.
-     * decrypt() handles plain-text values gracefully (migration safety).
+     * Called after every read from the database.
+     * decrypt() handles plain-text values gracefully for migration safety.
      */
     private fun Note.decrypted(): Note = copy(
         title   = encryption.decrypt(title),
@@ -96,17 +109,13 @@ class NoteRepositoryImpl @Inject constructor(
             .map { entities -> entities.toDomainModels().map { it.decrypted() } }
 
     /**
-     * Search — IMPORTANT LIMITATION.
+     * SQL-based search — exists for interface completeness but is NOT the primary
+     * search path. SearchViewModel uses getAllNotes() + in-memory Kotlin filter
+     * instead, because SQL LIKE cannot match against encrypted ciphertext.
      *
-     * SQL LIKE '%query%' runs against the ciphertext in the database.
-     * Ciphertext is random-looking bytes — it will never match a plain-text query.
-     * Search effectively returns no results for encrypted notes.
-     *
-     * FIX (Sprint 4 — search improvements):
-     * Load all notes into memory (decrypted via Flow), filter in Kotlin.
-     * This is how Standard Notes and other encrypted note apps handle search.
-     * The trade-off: slightly more memory usage, vs. correct search results.
-     * We'll implement this in SearchViewModel.
+     * This implementation decrypts results so it behaves correctly if called,
+     * but results will be empty because the SQL WHERE clause matches nothing
+     * in an encrypted database.
      */
     override fun searchNotes(query: String): Flow<List<Note>> =
         noteDao.searchNotes(query)
@@ -126,7 +135,6 @@ class NoteRepositoryImpl @Inject constructor(
     }
 
     override suspend fun moveNoteToFolder(noteId: String, folderId: String?) {
-        // Flag/metadata update only — no content decrypt/re-encrypt needed
         val note = noteDao.getNoteById(noteId) ?: return
         noteDao.updateNote(
             note.copy(folderId = folderId, updatedAt = System.currentTimeMillis())
@@ -180,9 +188,9 @@ class NoteRepositoryImpl @Inject constructor(
     }
 
     /**
-     * ARCHIVE: clear folderId, set isArchived = true.
-     * UNARCHIVE: set isArchived = false. folderId already null → main list.
-     * (See NoteDao / Sprint 3 fix3 for full rationale.)
+     * ARCHIVE: clear folderId, set isArchived = true → note leaves folder instantly.
+     * UNARCHIVE: set isArchived = false → note goes to main list (folderId already null).
+     * See Sprint 3 fix3 for full rationale on why folderId is cleared on archive.
      */
     override suspend fun toggleArchive(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
