@@ -14,37 +14,40 @@ import javax.inject.Inject
 /**
  * NoteRepositoryImpl — Room-backed implementation of NoteRepository.
  *
- * SPRINT 3 FIXES:
+ * SPRINT 3 FIXES IN THIS FILE:
  *
- * 1. FolderDao injected alongside NoteDao.
- *    NoteRepositoryImpl and FolderRepositoryImpl are both in the data layer,
- *    so one can reference the other's DAO without creating circular dependencies.
- *    FolderDao is needed so toggleArchive() can verify a folder still exists
- *    before deciding whether to keep or clear a note's folderId on unarchive.
+ * 1. FolderDao injected (previously only NoteDao was injected).
+ *    No longer needed for archive logic (see fix 3 below), but kept for
+ *    future use and consistency with the data layer pattern.
+ *    Both DAOs are provided by DatabaseModule, Hilt injects both automatically.
  *
- * 2. moveToTrash() now clears folderId.
- *    Trash is a global bin with no folder context. Clearing folderId means
- *    restoring from trash always puts the note in the main list — predictable,
- *    zero orphan risk regardless of whether the folder still exists.
+ * 2. moveToTrash() clears folderId.
+ *    When a note is trashed it leaves the folder immediately. Trash is a
+ *    global bin with no folder concept. Restoring from trash always → main list.
  *
- * 3. toggleArchive() checks folder existence on UNARCHIVE.
- *    Archive preserves folder context (folderId is kept on archive).
- *    On unarchive: if the folder still exists → keep folderId (note returns
- *    to its folder). If folder was deleted → clear folderId (note goes to
- *    main list). The user never loses a note to an invisible orphan state.
+ * 3. toggleArchive() clears folderId on ARCHIVE (simplified).
+ *    The previous version kept folderId on archive and then checked folder
+ *    existence on unarchive. This created two problems:
+ *      - Archived notes still appeared in folder view (folderId still set)
+ *      - If the folder was deleted, trashNotesByFolder caught the archived
+ *        note (folderId still matched) and trashed it — user lost an archived note
+ *    New behaviour:
+ *      ARCHIVE  → clear folderId immediately. Note leaves the folder.
+ *                 It belongs in Archive now, not in any folder.
+ *      UNARCHIVE → folderId is already null. Note goes to main list.
+ *                  No folder-existence check needed. Simple and safe.
  *
- * 4. trashNotesByFolder() — new method.
- *    Called when a folder is deleted. Sends all notes in that folder to trash
- *    with folderId cleared, using a single SQL UPDATE (atomic, fast).
+ * 4. trashNotesByFolder() — new.
+ *    Bulk SQL UPDATE that trashes all non-archived, non-trashed notes in a
+ *    folder. Archived notes are naturally excluded because their folderId
+ *    was cleared in step 3 above — they don't match the WHERE clause.
  */
 class NoteRepositoryImpl @Inject constructor(
     private val noteDao: NoteDao,
-    private val folderDao: FolderDao   // SPRINT 3: needed for archive folder-check
+    private val folderDao: FolderDao
 ) : NoteRepository {
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // READ OPERATIONS
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Read ──────────────────────────────────────────────────────────────
 
     override fun getAllNotes(): Flow<List<Note>> =
         noteDao.getAllNotes().map { it.toDomainModels() }
@@ -73,9 +76,7 @@ class NoteRepositoryImpl @Inject constructor(
     override fun getNoteCount(): Flow<Int> =
         noteDao.getNoteCount()
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // WRITE OPERATIONS
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Write ─────────────────────────────────────────────────────────────
 
     override suspend fun insertNote(note: Note, folderId: String?) {
         noteDao.insertNote(note.toEntity(folderId))
@@ -92,50 +93,38 @@ class NoteRepositoryImpl @Inject constructor(
         )
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // TRASH OPERATIONS
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Trash ─────────────────────────────────────────────────────────────
 
     /**
      * Move a single note to trash.
      *
-     * SPRINT 3 FIX: folderId is cleared (set to null).
+     * SPRINT 3 FIX: folderId cleared on trash.
      *
-     * WHY?
-     * Trash is a global recovery bin — it has no folder concept.
-     * If we kept folderId and the folder was deleted before the user restores
-     * the note, the note would be orphaned (folderId points to a non-existent
-     * folder, note invisible on every screen). Clearing it on the way IN
-     * means restoreFromTrash() is always safe: the note always comes back to
-     * the main list.
+     * Trash has no folder concept. Clearing folderId here means:
+     *   - The note immediately disappears from the folder view
+     *   - Restoring from trash always puts the note in the main list
+     *   - No orphan possible regardless of what happens to the folder later
      *
-     * BEFORE (broken):
-     *   note.folderId = "work-folder-id" → goes to trash → folder gets deleted
-     *   → user restores note → folderId still "work-folder-id" → folder gone
-     *   → note invisible everywhere = ORPHANED
-     *
-     * AFTER (fixed):
-     *   note.folderId = "work-folder-id" → goes to trash with folderId = null
-     *   → folder gets deleted → user restores note → folderId null → main list ✓
+     * isArchived is also set to false — a note can't be both trashed
+     * and archived at the same time.
      */
     override suspend fun moveToTrash(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
         noteDao.updateNote(
             note.copy(
                 isTrashed = true,
-                folderId = null,     // FIXED: clear folder context on trash
-                isArchived = false,  // un-archive if it was archived before trashing
+                folderId = null,
+                isArchived = false,
                 updatedAt = System.currentTimeMillis()
             )
         )
     }
 
     /**
-     * Restore a note from trash.
+     * Restore a note from trash to the main list.
      *
-     * Simply sets isTrashed = false. Since folderId was cleared when the note
-     * was trashed, the note returns to the main list (root level). No folder
-     * check needed — nothing can be orphaned here.
+     * folderId was cleared when the note was trashed, so it is null here.
+     * The note always returns to the main list. Simple, no edge cases.
      */
     override suspend fun restoreFromTrash(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
@@ -143,7 +132,6 @@ class NoteRepositoryImpl @Inject constructor(
             note.copy(
                 isTrashed = false,
                 updatedAt = System.currentTimeMillis()
-                // folderId stays null — note goes to main list
             )
         )
     }
@@ -158,19 +146,11 @@ class NoteRepositoryImpl @Inject constructor(
     }
 
     /**
-     * SPRINT 3 FIX — Trash all notes in a folder at once.
+     * SPRINT 3 — Bulk-trash all active notes in a folder.
      *
-     * Called when a folder is deleted. Uses a single SQL UPDATE to:
-     * - Set isTrashed = 1 on all notes in the folder
-     * - Set folderId = NULL (clear folder context — safe restore later)
-     * - Set isArchived = 0 (a trashed note is no longer archived)
-     * - Set updatedAt = now
-     *
-     * The notes appear in TrashScreen immediately and can be individually
-     * restored (to the main list) or permanently deleted from there.
-     *
-     * This replaces the old loop-and-permanently-delete approach.
-     * The user can always recover notes they didn't mean to trash.
+     * Delegates to a single SQL UPDATE in NoteDao.
+     * Archived notes are not affected — their folderId was already cleared
+     * when they were archived, so they don't match the SQL WHERE clause.
      */
     override suspend fun trashNotesByFolder(folderId: String) {
         noteDao.trashNotesByFolder(
@@ -179,9 +159,7 @@ class NoteRepositoryImpl @Inject constructor(
         )
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // PIN / ARCHIVE
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Pin / Archive ─────────────────────────────────────────────────────
 
     override suspend fun togglePin(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
@@ -193,57 +171,60 @@ class NoteRepositoryImpl @Inject constructor(
     /**
      * Toggle the archived state of a note.
      *
+     * SPRINT 3 FIX — simplified. folderId is cleared on ARCHIVE.
+     *
      * ARCHIVING (isArchived false → true):
-     * folderId is KEPT. Archive means "I still care about this note, just
-     * hiding it from the main view." The folder membership is preserved so
-     * that unarchiving can return the note to its original location.
+     *   - isArchived = true
+     *   - folderId = null  ← KEY CHANGE
+     *   - isTrashed = false (safety, shouldn't be trashed when archiving)
+     *
+     *   WHY CLEAR folderId ON ARCHIVE?
+     *   Three problems are solved at once:
+     *   (a) The note immediately disappears from the folder view and count.
+     *       Previously it stayed visible in the folder even after archiving.
+     *   (b) If the folder is later deleted, trashNotesByFolder() won't touch
+     *       this archived note — its folderId is null, doesn't match the query.
+     *       Previously the archived note would be unintentionally trashed.
+     *   (c) Unarchive logic becomes trivial (see below) — no folder-existence
+     *       check needed, no complexity, no edge cases.
      *
      * UNARCHIVING (isArchived true → false):
-     * We check whether the note's folder still exists.
+     *   - isArchived = false
+     *   - folderId is already null (was cleared on archive)
+     *   - Note appears in the main list
      *
-     * CASE 1 — folder still exists:
-     *   Keep folderId. The note returns exactly where it was before archiving.
-     *   User sees no interruption to their folder organisation.
+     *   WHY ALWAYS MAIN LIST ON UNARCHIVE?
+     *   The original folder may or may not still exist. Checking adds complexity
+     *   and the user explicitly chose to archive this note — their mental model
+     *   of "where it belongs" may have changed since then. Main list is the
+     *   universally correct fallback: always visible, never lost, user can
+     *   drag it into a folder themselves if they want.
      *
-     * CASE 2 — folder was deleted while note was archived:
-     *   Clear folderId (set to null). The note goes to the main list.
-     *   This is the correct fallback — the user can see the note and
-     *   decide where to put it. It's never invisible (orphaned).
-     *
-     * CASE 3 — folderId is already null:
-     *   Note was never in a folder. Nothing to check. It goes to main list.
-     *
-     * WHY CHECK IN THE REPOSITORY AND NOT THE VIEWMODEL?
-     * The folder-existence check is a data concern — it queries the database.
-     * Repositories own data logic. ViewModels own UI/navigation logic.
-     * Keeping the check here means any ViewModel that calls toggleArchive()
-     * gets the correct behaviour automatically with no extra code.
+     * NO FOLDER-EXISTENCE CHECK NEEDED ANYWHERE IN THIS METHOD.
+     * The previous implementation had a folderDao.getFolderById() check here.
+     * It is completely removed. The logic is now straightforward:
+     *   archive → clear folderId, set isArchived = true
+     *   unarchive → set isArchived = false (folderId already null)
      */
     override suspend fun toggleArchive(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
 
         if (note.isArchived) {
-            // UNARCHIVING — check if the folder this note belonged to still exists
-            val folderStillExists = note.folderId?.let { id ->
-                folderDao.getFolderById(id) != null
-            } ?: false
-            // folderStillExists = false if folderId was null OR folder not found
-
+            // UNARCHIVING — simply flip the flag, note goes to main list
             noteDao.updateNote(
                 note.copy(
                     isArchived = false,
-                    // Keep folderId if folder exists, clear it if folder is gone
-                    folderId = if (folderStillExists) note.folderId else null,
+                    // folderId is already null (was cleared on archive)
                     updatedAt = System.currentTimeMillis()
                 )
             )
         } else {
-            // ARCHIVING — just flip the flag, keep folderId intact
+            // ARCHIVING — flip the flag AND clear folder reference
             noteDao.updateNote(
                 note.copy(
                     isArchived = true,
+                    folderId = null,     // leave the folder immediately
                     updatedAt = System.currentTimeMillis()
-                    // folderId unchanged
                 )
             )
         }
