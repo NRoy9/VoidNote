@@ -8,6 +8,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,30 +31,43 @@ import com.greenicephoenix.voidnote.presentation.theme.Spacing
 /**
  * ImageBlockComposable — renders a single encrypted IMAGE inline block.
  *
- * KEY CHANGE FROM SPRINT 5 INITIAL VERSION:
- * Previously used `model = File(path)` — Coil's default file fetcher which
- * reads raw bytes and tries to decode them as JPEG. This broke with encryption
- * because the file contains AES-256-GCM ciphertext, not a JPEG.
+ * ─── CURSOR FIX ───────────────────────────────────────────────────────────────
  *
- * Now uses `model = EncryptedFile(path)` with `imageLoader = voidNoteImageLoader.loader`.
- * EncryptedFileFetcher intercepts the load, decrypts the bytes in memory, and
- * returns plain image bytes to Coil's BitmapDecoder for rendering.
+ * PROBLEM (same root cause as TodoItem cursor bug):
+ * Using BasicTextField(value = payload.caption, ...) drives the text field with
+ * a plain String from the ViewModel. On each keystroke:
+ *   1. User types → onValueChange fires → ViewModel.updateImageCaption() called
+ *   2. DB write → Room Flow emits → ViewModel state updates
+ *   3. Recomposition: new payload.caption String passed to BasicTextField
+ *   4. BasicTextField resets its internal cursor to the END of the string
+ *      (Compose doesn't know where the cursor was — it only got a String)
  *
- * The decrypted bytes exist only in RAM during rendering — never written to disk.
+ * Result: typing "laptop" quickly scrambles to "laopt" as characters land
+ * at the end rather than at the cursor position.
  *
- * VISUAL STRUCTURE:
- * ┌────────────────────────────────┐
- * │                          [✕]  │  ← delete button
- * │   ┌──────────────────────┐    │
- * │   │    image renders     │    │  ← decrypted on-the-fly by Coil + EncryptedFileFetcher
- * │   └──────────────────────┘    │
- * │   Add a caption...            │  ← editable, auto-saves
- * └────────────────────────────────┘
+ * FIX:
+ * Use local TextFieldValue state which carries explicit cursor position:
+ *   var captionValue by remember(block.id) { mutableStateOf(TextFieldValue(payload.caption)) }
  *
- * @param block                 InlineBlock with InlineBlockPayload.Image payload
- * @param voidNoteImageLoader   Injected singleton with EncryptedFileFetcher registered
- * @param onCaptionChange       Called on each caption keystroke
- * @param onDeleteBlock         Called when ✕ tapped — ViewModel deletes file + DB row
+ * The local state OWNS the cursor position. We only sync the text from the
+ * ViewModel payload (external source of truth), preserving cursor on each sync:
+ *   if (payload.caption != captionValue.text) {
+ *       captionValue = captionValue.copy(text = payload.caption)
+ *   }
+ *
+ * captionValue.copy(text = ...) keeps the existing selection/cursor intact
+ * while updating the text content — so the cursor never jumps.
+ *
+ * WHY remember(block.id)?
+ * If the block is replaced entirely (different blockId), we want a fresh
+ * TextFieldValue starting at position 0. Using block.id as the key ensures
+ * the state resets when the block changes but persists through recompositions.
+ *
+ * ─── DELETE CONFIRMATION ──────────────────────────────────────────────────────
+ *
+ * Images are encrypted and stored only in app-private filesDir — they cannot
+ * be recovered once deleted. A simple accidental tap on the ✕ button would
+ * permanently destroy the file. We show a confirmation dialog before deleting.
  */
 @Composable
 fun ImageBlockComposable(
@@ -64,6 +79,23 @@ fun ImageBlockComposable(
 ) {
     val payload = block.payload as? InlineBlockPayload.Image ?: return
 
+    // ── Cursor fix: local TextFieldValue tracks cursor position ───────────────
+    var captionValue by remember(block.id) {
+        mutableStateOf(TextFieldValue(payload.caption))
+    }
+
+    // Sync text from ViewModel without disturbing cursor.
+    // LaunchedEffect fires when payload.caption changes externally (e.g. after
+    // a save round-trip). We only update the text part, not the selection.
+    LaunchedEffect(payload.caption) {
+        if (payload.caption != captionValue.text) {
+            captionValue = captionValue.copy(text = payload.caption)
+        }
+    }
+
+    // ── Delete confirmation state ─────────────────────────────────────────────
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
     Card(
         modifier  = modifier,
         shape     = RoundedCornerShape(8.dp),
@@ -71,9 +103,7 @@ fun ImageBlockComposable(
             width = 1.dp,
             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
         ),
-        colors    = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -81,21 +111,15 @@ fun ImageBlockComposable(
             Column(modifier = Modifier.fillMaxWidth()) {
 
                 // ── Image ──────────────────────────────────────────────────────
-                // model = EncryptedFile(path) — triggers EncryptedFileFetcher.
-                // imageLoader = voidNoteImageLoader.loader — the custom loader
-                //   that has EncryptedFileFetcher registered. Without this,
-                //   Coil uses the global default loader which doesn't know about
-                //   our encryption and would fail to decode the .enc file.
                 SubcomposeAsyncImage(
-                    model             = EncryptedFile(payload.filePath),
-                    imageLoader       = voidNoteImageLoader.loader,
+                    model              = EncryptedFile(payload.filePath),
+                    imageLoader        = voidNoteImageLoader.loader,
                     contentDescription = payload.caption.ifBlank { "Embedded image" },
-                    contentScale      = ContentScale.FillWidth,
-                    modifier          = Modifier
+                    contentScale       = ContentScale.FillWidth,
+                    modifier           = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)),
                     loading = {
-                        // Shimmer-style placeholder while decryption + decode runs
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -104,7 +128,6 @@ fun ImageBlockComposable(
                         )
                     },
                     error = {
-                        // File missing, decryption failed, or data tampered
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -114,13 +137,13 @@ fun ImageBlockComposable(
                         ) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(Spacing.extraLarge)
+                                verticalArrangement = Arrangement.spacedBy(Spacing.extraSmall)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.BrokenImage,
+                                    imageVector        = Icons.Default.BrokenImage,
                                     contentDescription = null,
-                                    tint     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                    modifier = Modifier.size(32.dp)
+                                    tint               = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                    modifier           = Modifier.size(32.dp)
                                 )
                                 Text(
                                     text  = "Image not found",
@@ -132,24 +155,29 @@ fun ImageBlockComposable(
                     }
                 )
 
-                // ── Caption ────────────────────────────────────────────────────
+                // ── Caption (cursor-fixed BasicTextField) ──────────────────────
                 BasicTextField(
-                    value       = payload.caption,
-                    onValueChange = onCaptionChange,
-                    modifier    = Modifier
+                    value         = captionValue,
+                    onValueChange = { newValue ->
+                        captionValue = newValue
+                        // Only propagate text changes to ViewModel — selection/cursor
+                        // is owned locally and must NOT be sent to the DB.
+                        if (newValue.text != payload.caption) {
+                            onCaptionChange(newValue.text)
+                        }
+                    },
+                    modifier      = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = Spacing.medium, vertical = Spacing.small),
-                    textStyle   = TextStyle(
+                    textStyle     = TextStyle(
                         color     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                         fontSize  = 13.sp,
                         textAlign = TextAlign.Center
                     ),
-                    cursorBrush = SolidColor(
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    ),
+                    cursorBrush   = SolidColor(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)),
                     decorationBox = { innerTextField ->
                         Box(contentAlignment = Alignment.Center) {
-                            if (payload.caption.isEmpty()) {
+                            if (captionValue.text.isEmpty()) {
                                 Text(
                                     text     = "Add a caption…",
                                     style    = TextStyle(
@@ -166,9 +194,9 @@ fun ImageBlockComposable(
                 )
             }
 
-            // ── Delete button ──────────────────────────────────────────────────
+            // ── Delete button — opens confirmation dialog ──────────────────────
             IconButton(
-                onClick  = onDeleteBlock,
+                onClick  = { showDeleteConfirm = true },  // ← dialog, not direct delete
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(Spacing.extraSmall)
@@ -186,5 +214,39 @@ fun ImageBlockComposable(
                 )
             }
         }
+    }
+
+    // ── Delete confirmation dialog ─────────────────────────────────────────────
+    // Shown before permanently deleting an encrypted image.
+    // Images live only in app-private filesDir and cannot be recovered once deleted.
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text("Delete Image?") },
+            text  = {
+                Text(
+                    "This image is stored only inside Void Note.\n\n" +
+                            "Once deleted it cannot be recovered."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showDeleteConfirm = false; onDeleteBlock() },
+                    colors  = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Keep") }
+            }
+        )
     }
 }

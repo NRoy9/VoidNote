@@ -12,7 +12,6 @@ import com.greenicephoenix.voidnote.presentation.editor.NoteEditorScreen
 import com.greenicephoenix.voidnote.presentation.folders.FolderNotesScreen
 import com.greenicephoenix.voidnote.presentation.folders.FoldersScreen
 import com.greenicephoenix.voidnote.presentation.notes.NotesListScreen
-import com.greenicephoenix.voidnote.presentation.onboarding.OnboardingScreen
 import com.greenicephoenix.voidnote.presentation.search.SearchScreen
 import com.greenicephoenix.voidnote.presentation.settings.SettingsScreen
 import com.greenicephoenix.voidnote.presentation.splash.SplashScreen
@@ -21,20 +20,53 @@ import com.greenicephoenix.voidnote.presentation.vault.VaultSetupScreen
 import com.greenicephoenix.voidnote.presentation.vault.VaultUnlockScreen
 
 /**
- * SetupNavGraph — complete navigation map for Void Note.
+ * SetupNavGraph — the complete navigation map for Void Note.
  *
- * FIRST INSTALL FLOW:
- *   Splash → Onboarding → VaultSetup → NotesList
+ * ─── THE BACK STACK BUG AND FIX ───────────────────────────────────────────────
  *
- * NORMAL LAUNCH FLOW:
- *   Splash → NotesList   (Keystore unwraps key silently, no screens shown)
+ * WHAT WAS WRONG:
+ * Every place that navigated to NotesList from the onboarding/vault flow used:
  *
- * REINSTALL / FACTORY RESET FLOW:
- *   Splash → VaultUnlock → NotesList
+ *   popUpTo(Screen.Splash.route) { inclusive = true }
  *
- * ALL gateway screens (Splash, Onboarding, VaultSetup, VaultUnlock) clear
- * the back stack when navigating forward. The user cannot press Back into them.
- * NotesList is always the permanent root once reached.
+ * This worked only for the Splash → NotesList path (returning users).
+ * For first-launch users, the flow was:
+ *
+ *   Splash ──[popUpTo(Splash)]──► Onboarding
+ *                                      │
+ *                          [popUpTo(Onboarding)]
+ *                                      ▼
+ *                                 VaultSetup
+ *                                      │
+ *                      [popUpTo(Splash) ← BUG! Splash is already gone]
+ *                                      ▼
+ *                                 NotesList
+ *
+ * Because Splash was already cleared from the stack before VaultSetup ran,
+ * popUpTo(Splash) was a NO-OP. NotesList was pushed on top of VaultSetup,
+ * leaving the stack as: [VaultSetup, NotesList].
+ *
+ * Pressing back from NotesList popped it, revealing VaultSetup. ✗
+ *
+ * THE FIX:
+ * Use popUpTo(0) { inclusive = true } everywhere that navigates to NotesList
+ * as a final destination.
+ *
+ *   popUpTo(0) means "pop all the way to the root of the NavHost graph".
+ *
+ * Unlike a named route, `0` always refers to the graph root itself — it
+ * works regardless of which screens are currently in the stack. Every screen
+ * that was pushed since app launch is cleared, and NotesList becomes the
+ * only entry in the back stack.
+ *
+ * Result: pressing back from NotesList has nowhere to go → moveTaskToBack()
+ * in NotesListScreen's BackHandler sends the app to the background. ✓
+ *
+ * ─── ONE-WAY GATES ────────────────────────────────────────────────────────────
+ *
+ * Splash, Onboarding, VaultSetup, VaultUnlock are one-way gates.
+ * Once the user passes through, they cannot back-navigate into them.
+ * NotesList is the permanent root after first launch.
  */
 @Composable
 fun SetupNavGraph(navController: NavHostController) {
@@ -45,77 +77,102 @@ fun SetupNavGraph(navController: NavHostController) {
     ) {
 
         // ── Splash ────────────────────────────────────────────────────────────
-        // Reads DataStore + Keystore, decides destination.
-        // Animation plays for minimum 2 seconds while decision is made.
+        //
+        // Three exit paths:
+        //   onNavigateToNotes     — returning user, vault already set up
+        //   onNavigateToOnboarding — first launch, no onboarding done yet
+        //   onNavigateToVaultUnlock — reinstall/factory reset, key is gone
+        //
+        // All three use popUpTo(0) so Splash is never in the back stack.
         composable(Screen.Splash.route) {
             SplashScreen(
                 onNavigateToNotes = {
                     navController.navigate(Screen.NotesList.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 },
                 onNavigateToOnboarding = {
                     navController.navigate(Screen.Onboarding.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 },
                 onNavigateToVaultUnlock = {
                     navController.navigate(Screen.VaultUnlock.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             )
         }
 
         // ── Onboarding ────────────────────────────────────────────────────────
-        // 3-page introduction. Skip or Continue on final page → VaultSetup.
-        // OnboardingViewModel marks onboardingComplete and lastSeenVersion here,
-        // so What's New dialog doesn't fire immediately after onboarding.
+        //
+        // Shown once on first launch. After completion → VaultSetup.
+        // popUpTo(0) clears Onboarding from the stack so it can't be
+        // navigated back to after the user reaches VaultSetup.
         composable(Screen.Onboarding.route) {
-            OnboardingScreen(
+            com.greenicephoenix.voidnote.presentation.onboarding.OnboardingScreen(
                 onCompleted = {
                     navController.navigate(Screen.VaultSetup.route) {
-                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             )
         }
 
         // ── Vault Setup ───────────────────────────────────────────────────────
-        // Cannot be skipped. Creates the vault password.
-        // After creation, routes to NotesList — clears entire back stack.
+        //
+        // Cannot be skipped. User MUST create a vault password to proceed.
+        //
+        // FIX APPLIED HERE: popUpTo(0) instead of popUpTo(Screen.Splash.route).
+        //
+        // WHY popUpTo(0)?
+        // By the time VaultSetup's onVaultCreated fires, the back stack is:
+        //   [VaultSetup]   (Splash and Onboarding are already gone)
+        //
+        // popUpTo(Screen.Splash.route) would be a NO-OP because Splash is not
+        // in the stack. NotesList would be pushed on top of VaultSetup, leaving
+        // [VaultSetup, NotesList] — pressing back would reveal VaultSetup. ✗
+        //
+        // popUpTo(0) always pops everything to the graph root, regardless of
+        // what names are or aren't in the stack. NotesList becomes the only
+        // entry. Pressing back calls moveTaskToBack() via BackHandler. ✓
         composable(Screen.VaultSetup.route) {
             VaultSetupScreen(
                 onVaultCreated = {
                     navController.navigate(Screen.NotesList.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
+                        popUpTo(0) { inclusive = true }   // ← THE FIX
                     }
                 }
             )
         }
 
         // ── Vault Unlock ──────────────────────────────────────────────────────
-        // Shown only when Keystore key is gone (reinstall/factory reset).
-        // User enters vault password → key re-derived → NotesList.
+        //
+        // Shown on reinstall or factory reset when the Keystore key is gone.
+        // Same fix applied here — same reasoning as VaultSetup above.
         composable(Screen.VaultUnlock.route) {
             VaultUnlockScreen(
                 onUnlocked = {
                     navController.navigate(Screen.NotesList.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
+                        popUpTo(0) { inclusive = true }   // ← THE FIX
                     }
                 }
             )
         }
 
         // ── Notes List ────────────────────────────────────────────────────────
+        //
+        // Home screen. Permanent root after first launch.
+        // BackHandler inside NotesListScreen calls moveTaskToBack(true) on
+        // system back press — sends the app to background rather than finishing.
         composable(Screen.NotesList.route) {
             NotesListScreen(
                 onNavigateToEditor = { noteId ->
                     navController.navigate(Screen.NoteEditor.createRoute(noteId))
                 },
-                onNavigateToSearch    = { navController.navigate(Screen.Search.route) },
-                onNavigateToSettings  = { navController.navigate(Screen.Settings.route) },
-                onNavigateToFolders   = { navController.navigate(Screen.Folders.route) },
+                onNavigateToSearch      = { navController.navigate(Screen.Search.route) },
+                onNavigateToSettings    = { navController.navigate(Screen.Settings.route) },
+                onNavigateToFolders     = { navController.navigate(Screen.Folders.route) },
                 onNavigateToFolderNotes = { folderId ->
                     navController.navigate(Screen.FolderNotes.createRoute(folderId))
                 }
@@ -137,8 +194,8 @@ fun SetupNavGraph(navController: NavHostController) {
         ) { backStackEntry ->
             val folderId = backStackEntry.arguments?.getString("folderId") ?: return@composable
             FolderNotesScreen(
-                folderId        = folderId,
-                onNavigateBack  = { navController.popBackStack() },
+                folderId          = folderId,
+                onNavigateBack    = { navController.popBackStack() },
                 onNavigateToEditor = { noteId ->
                     navController.navigate(Screen.NoteEditor.createRoute(noteId))
                 }
@@ -148,9 +205,9 @@ fun SetupNavGraph(navController: NavHostController) {
         // ── Settings ──────────────────────────────────────────────────────────
         composable(Screen.Settings.route) {
             SettingsScreen(
-                onNavigateBack      = { navController.popBackStack() },
-                onNavigateToTrash   = { navController.navigate(Screen.Trash.route) },
-                onNavigateToArchive = { navController.navigate(Screen.Archive.route) },
+                onNavigateBack        = { navController.popBackStack() },
+                onNavigateToTrash     = { navController.navigate(Screen.Trash.route) },
+                onNavigateToArchive   = { navController.navigate(Screen.Archive.route) },
                 onNavigateToChangelog = { navController.navigate(Screen.Changelog.route) }
             )
         }
@@ -180,7 +237,7 @@ fun SetupNavGraph(navController: NavHostController) {
 
         // ── Tags ──────────────────────────────────────────────────────────────
         composable(Screen.Tags.route) {
-            // TODO: TagsScreen — Sprint 5
+            // TODO: TagsScreen — future sprint
         }
 
         // ── Trash ─────────────────────────────────────────────────────────────

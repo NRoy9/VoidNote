@@ -1,5 +1,7 @@
 package com.greenicephoenix.voidnote.presentation.notes
 
+import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +15,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -21,17 +24,23 @@ import com.greenicephoenix.voidnote.presentation.components.FolderCard
 import com.greenicephoenix.voidnote.presentation.components.NoteCard
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import com.greenicephoenix.voidnote.presentation.components.ExpandableFab
-import com.greenicephoenix.voidnote.presentation.components.NotesEmptyState
 
 /**
- * Notes List Screen - Main screen of the app
+ * Notes List Screen — the app's home screen.
  *
- * NOW SHOWS FOLDERS AND NOTES TOGETHER!
+ * BACK PRESS HANDLING:
+ * NotesList is the root destination — there is nothing behind it in the
+ * navigation back stack. Without interception, pressing back would call
+ * Activity.finish(), which removes the Activity from the back stack.
+ * The OS then considers the task empty and re-launches the app from scratch,
+ * which shows the vault/lock screen again — wrong behaviour.
  *
- * Layout:
- * - PINNED notes (if any)
- * - FOLDERS (if any)
- * - NOTES (root level notes without folders)
+ * BackHandler captures the system back press and calls moveTaskToBack(true)
+ * instead. This sends the app to the background (like pressing the Home button)
+ * while keeping the Activity alive. Pressing the app icon brings it back
+ * to exactly where the user was — without triggering the lock screen again.
+ *
+ * This is the same behaviour used by Gmail, Google Keep, and Notion.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,9 +54,17 @@ fun NotesListScreen(
     viewModel: NotesListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-
     val showCreateFolderDialog by viewModel.showCreateFolderDialog.collectAsState()
     val newFolderName by viewModel.newFolderName.collectAsState()
+    val context = LocalContext.current
+
+    // ── Back press: minimise app instead of finishing the Activity ────────────
+    // WHY: Without this, pressing back here finishes the Activity. The OS then
+    // re-launches it cold (vault/lock screen appears). moveTaskToBack(true)
+    // sends the whole task to the background instead — preserving state.
+    BackHandler {
+        (context as? Activity)?.moveTaskToBack(true)
+    }
 
     Scaffold(
         topBar = {
@@ -71,42 +88,41 @@ fun NotesListScreen(
         ) {
             when {
                 uiState.isLoading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
 
+                // Empty state: no visible notes on main list AND no folders.
+                // uiState.notes is already filtered to exclude archived notes
+                // (fix applied in NotesListViewModel — see rootNotes filter).
                 uiState.notes.isEmpty() && uiState.folders.isEmpty() -> {
-                    NotesEmptyState(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                    EmptyState(modifier = Modifier.align(Alignment.Center))
                 }
 
                 else -> {
                     NotesAndFoldersContent(
-                        uiState = uiState,
-                        onNoteClick = { note -> onNavigateToEditor(note.id) },
+                        uiState      = uiState,
+                        onNoteClick  = { note -> onNavigateToEditor(note.id) },
                         onFolderClick = { folder -> onNavigateToFolderNotes(folder.id) },
-                        onTogglePin = { noteId -> viewModel.onTogglePin(noteId) }
+                        onTogglePin  = { noteId -> viewModel.onTogglePin(noteId) }
                     )
                 }
             }
         }
     }
 
-    // Create Folder Dialog
     CreateFolderDialog(
-        showDialog = showCreateFolderDialog,
-        folderName = newFolderName,
+        showDialog   = showCreateFolderDialog,
+        folderName   = newFolderName,
         onNameChange = { viewModel.onNewFolderNameChange(it) },
-        onDismiss = { viewModel.hideCreateFolderDialog() },
-        onCreate = { viewModel.createFolder() }
+        onDismiss    = { viewModel.hideCreateFolderDialog() },
+        onCreate     = { viewModel.createFolder() }
     )
 }
 
-/**
- * Top App Bar - Simplified (removed Folders icon, added Settings)
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// TOP APP BAR
+// ─────────────────────────────────────────────────────────────────────────────
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotesListTopBar(
@@ -116,7 +132,7 @@ private fun NotesListTopBar(
     TopAppBar(
         title = {
             Text(
-                text = "VOID NOTE",
+                text  = "VOID NOTE",
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
@@ -125,28 +141,23 @@ private fun NotesListTopBar(
         },
         actions = {
             IconButton(onClick = onSearchClick) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search"
-                )
+                Icon(Icons.Default.Search, contentDescription = "Search")
             }
             IconButton(onClick = onSettingsClick) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings"
-                )
+                Icon(Icons.Default.Settings, contentDescription = "Settings")
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor    = MaterialTheme.colorScheme.background,
             titleContentColor = MaterialTheme.colorScheme.onBackground
         )
     )
 }
 
-/**
- * Main content - Shows folders and notes together
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTES + FOLDERS CONTENT
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
 private fun NotesAndFoldersContent(
     uiState: NotesListUiState,
@@ -154,91 +165,83 @@ private fun NotesAndFoldersContent(
     onFolderClick: (com.greenicephoenix.voidnote.domain.model.Folder) -> Unit,
     onTogglePin: (String) -> Unit
 ) {
-    // Separate pinned and regular notes
-    val pinnedNotes = uiState.notes.filter { it.isPinned && !it.isTrashed && !it.isArchived }
-    val regularNotes = uiState.notes.filter { !it.isPinned && !it.isTrashed && !it.isArchived }
+    // uiState.notes already excludes archived (filtered in ViewModel).
+    // We still guard against trashed here as a safety net.
+    val pinnedNotes  = uiState.notes.filter {  it.isPinned && !it.isTrashed }
+    val regularNotes = uiState.notes.filter { !it.isPinned && !it.isTrashed }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(Spacing.medium),
+        modifier         = Modifier.fillMaxSize(),
+        contentPadding   = PaddingValues(Spacing.medium),
         verticalArrangement = Arrangement.spacedBy(Spacing.medium)
     ) {
-        // PINNED NOTES SECTION
         if (pinnedNotes.isNotEmpty()) {
-            item {
-                SectionHeader(text = "PINNED")
-            }
-
+            item { SectionHeader("PINNED") }
             items(pinnedNotes, key = { it.id }) { note ->
-                NoteCard(
-                    note = note,
-                    onClick = { onNoteClick(note) }
-                )
+                NoteCard(note = note, onClick = { onNoteClick(note) })
             }
-
-            item {
-                Spacer(modifier = Modifier.height(Spacing.small))
-            }
+            item { Spacer(Modifier.height(Spacing.small)) }
         }
 
-        // FOLDERS SECTION
         if (uiState.folders.isNotEmpty()) {
-            item {
-                SectionHeader(text = "FOLDERS")
-            }
-
+            item { SectionHeader("FOLDERS") }
             items(uiState.folders, key = { it.id }) { folder ->
                 FolderCard(
-                    folder = folder,
+                    folder    = folder,
                     noteCount = uiState.folderNoteCounts[folder.id] ?: 0,
-                    onClick = { onFolderClick(folder) }
+                    onClick   = { onFolderClick(folder) }
                 )
             }
-
-            item {
-                Spacer(modifier = Modifier.height(Spacing.small))
-            }
+            item { Spacer(Modifier.height(Spacing.small)) }
         }
 
-        // NOTES SECTION (root level notes)
         if (regularNotes.isNotEmpty()) {
             if (pinnedNotes.isNotEmpty() || uiState.folders.isNotEmpty()) {
-                item {
-                    SectionHeader(text = "NOTES")
-                }
+                item { SectionHeader("NOTES") }
             }
-
             items(regularNotes, key = { it.id }) { note ->
-                NoteCard(
-                    note = note,
-                    onClick = { onNoteClick(note) }
-                )
+                NoteCard(note = note, onClick = { onNoteClick(note) })
             }
         }
 
-        // Bottom spacing for FAB
-        item {
-            Spacer(modifier = Modifier.height(80.dp))
-        }
+        item { Spacer(Modifier.height(80.dp)) }
     }
 }
 
-/**
- * Section Header Component
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED COMPOSABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
 private fun SectionHeader(text: String) {
     Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        text     = text,
+        style    = MaterialTheme.typography.labelMedium,
+        color    = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
         modifier = Modifier.padding(start = Spacing.small, bottom = Spacing.extraSmall)
     )
 }
 
-/**
- * Create Folder Dialog - Inline on Notes List Screen
- */
+@Composable
+private fun EmptyState(modifier: Modifier = Modifier) {
+    Column(
+        modifier              = modifier.padding(Spacing.large),
+        horizontalAlignment   = Alignment.CenterHorizontally,
+        verticalArrangement   = Arrangement.spacedBy(Spacing.medium)
+    ) {
+        Text(
+            text  = "Nothing here yet",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+        )
+        Text(
+            text  = "Tap + to create a note\nTap 📁 to create a folder",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+        )
+    }
+}
+
 @Composable
 private fun CreateFolderDialog(
     showDialog: Boolean,
@@ -253,25 +256,18 @@ private fun CreateFolderDialog(
             title = { Text("Create Folder") },
             text = {
                 OutlinedTextField(
-                    value = folderName,
+                    value        = folderName,
                     onValueChange = onNameChange,
-                    label = { Text("Folder name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label        = { Text("Folder name") },
+                    singleLine   = true,
+                    modifier     = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = onCreate,
-                    enabled = folderName.isNotBlank()
-                ) {
-                    Text("Create")
-                }
+                TextButton(onClick = onCreate, enabled = folderName.isNotBlank()) { Text("Create") }
             },
             dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         )
     }

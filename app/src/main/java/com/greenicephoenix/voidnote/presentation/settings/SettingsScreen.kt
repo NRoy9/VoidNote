@@ -69,6 +69,10 @@ fun SettingsScreen(
     var hasRequestedFromSettings by remember { mutableStateOf(false) }
     var showSettingsCameraRationale by remember { mutableStateOf(false) }
 
+    val micPermissionState = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
+    var hasRequestedMicFromSettings by remember { mutableStateOf(false) }
+    var showSettingsMicRationale    by remember { mutableStateOf(false) }
+
     LaunchedEffect(showExportSuccess) {
         if (showExportSuccess) {
             snackbarHostState.showSnackbar(
@@ -170,6 +174,53 @@ fun SettingsScreen(
                             else -> {
                                 hasRequestedFromSettings = true
                                 cameraPermissionState.launchPermissionRequest()
+                            }
+                        }
+                    }
+                )
+            }
+
+            item {
+                val micStatus = micPermissionState.status
+                val (micSubtitle, micActionLabel) = when {
+                    micStatus.isGranted -> Pair(
+                        "Granted — voice notes are encrypted immediately after recording",
+                        null
+                    )
+                    micStatus.shouldShowRationale -> Pair(
+                        "Denied — tap to allow (audio encrypted before saving)",
+                        "Allow"
+                    )
+                    hasRequestedMicFromSettings -> Pair(
+                        "Permanently denied — tap to open App Settings",
+                        "Open Settings"
+                    )
+                    else -> Pair(
+                        "Not yet granted — tap to allow microphone for voice notes",
+                        "Allow"
+                    )
+                }
+
+                PermissionSettingsItem(
+                    icon        = Icons.Default.Mic,
+                    title       = "Microphone",
+                    subtitle    = micSubtitle,
+                    isGranted   = micStatus.isGranted,
+                    actionLabel = micActionLabel,
+                    onAction    = {
+                        when {
+                            micStatus.isGranted -> { }
+                            micStatus.shouldShowRationale -> showSettingsMicRationale = true
+                            hasRequestedMicFromSettings -> {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.fromParts("package", context.packageName, null)
+                                    }
+                                )
+                            }
+                            else -> {
+                                hasRequestedMicFromSettings = true
+                                micPermissionState.launchPermissionRequest()
                             }
                         }
                     }
@@ -441,6 +492,30 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showSettingsCameraRationale = false }) { Text("Not now") }
+            }
+        )
+    }
+
+    if (showSettingsMicRationale) {
+        AlertDialog(
+            onDismissRequest = { showSettingsMicRationale = false },
+            icon    = { Icon(Icons.Default.Mic, null, tint = MaterialTheme.colorScheme.primary) },
+            title   = { Text("Microphone Access") },
+            text    = {
+                Text(
+                    "Void Note uses the microphone to record voice notes.\n\n" +
+                            "Recordings are encrypted immediately and never stored as plain audio."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSettingsMicRationale = false
+                    hasRequestedMicFromSettings = true
+                    micPermissionState.launchPermissionRequest()
+                }) { Text("Allow") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSettingsMicRationale = false }) { Text("Not now") }
             }
         )
     }
