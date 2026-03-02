@@ -20,52 +20,44 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
+import com.greenicephoenix.voidnote.data.storage.EncryptedFile
+import com.greenicephoenix.voidnote.data.storage.VoidNoteImageLoader
 import com.greenicephoenix.voidnote.domain.model.InlineBlock
 import com.greenicephoenix.voidnote.domain.model.InlineBlockPayload
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
-import java.io.File
 
 /**
- * ImageBlockComposable — renders a single IMAGE inline block in the note editor.
+ * ImageBlockComposable — renders a single encrypted IMAGE inline block.
  *
- * WHAT IT SHOWS:
- * ┌────────────────────────────────┐  ← rounded card
- * │                          [✕]  │  ← delete button top-right
+ * KEY CHANGE FROM SPRINT 5 INITIAL VERSION:
+ * Previously used `model = File(path)` — Coil's default file fetcher which
+ * reads raw bytes and tries to decode them as JPEG. This broke with encryption
+ * because the file contains AES-256-GCM ciphertext, not a JPEG.
+ *
+ * Now uses `model = EncryptedFile(path)` with `imageLoader = voidNoteImageLoader.loader`.
+ * EncryptedFileFetcher intercepts the load, decrypts the bytes in memory, and
+ * returns plain image bytes to Coil's BitmapDecoder for rendering.
+ *
+ * The decrypted bytes exist only in RAM during rendering — never written to disk.
+ *
+ * VISUAL STRUCTURE:
+ * ┌────────────────────────────────┐
+ * │                          [✕]  │  ← delete button
  * │   ┌──────────────────────┐    │
- * │   │                      │    │  ← full-width image, aspect-ratio preserved
- * │   │      image here      │    │
+ * │   │    image renders     │    │  ← decrypted on-the-fly by Coil + EncryptedFileFetcher
  * │   └──────────────────────┘    │
- * │   Add a caption...            │  ← editable caption (optional)
+ * │   Add a caption...            │  ← editable, auto-saves
  * └────────────────────────────────┘
  *
- * COIL LOADING STATES:
- * - Loading  → shimmer-style grey placeholder
- * - Success  → image rendered via AsyncImage
- * - Error    → broken image icon with "Image not found" message
- *   (happens if the file was manually deleted from app storage)
- *
- * CAPTION:
- * Editable inline. No "done" button — caption auto-saves via onCaptionChange
- * which feeds into the ViewModel's debounced save. Same pattern as todo item text.
- *
- * DELETE:
- * The ✕ button in the top-right corner calls onDeleteBlock.
- * The ViewModel deletes the physical file AND the DB row.
- *
- * NOTHING AESTHETIC:
- * - Card with very slight corner rounding (8dp)
- * - Subtle border (1dp, outline.copy(alpha = 0.15f))
- * - No heavy shadows
- * - Caption in small, low-contrast text
- *
- * @param block          The InlineBlock with InlineBlockPayload.Image payload
- * @param onCaptionChange Called on every caption keystroke — ViewModel debounces the save
- * @param onDeleteBlock  Called when ✕ is tapped — ViewModel deletes file + DB row
- * @param modifier       Standard Compose modifier chain
+ * @param block                 InlineBlock with InlineBlockPayload.Image payload
+ * @param voidNoteImageLoader   Injected singleton with EncryptedFileFetcher registered
+ * @param onCaptionChange       Called on each caption keystroke
+ * @param onDeleteBlock         Called when ✕ tapped — ViewModel deletes file + DB row
  */
 @Composable
 fun ImageBlockComposable(
     block: InlineBlock,
+    voidNoteImageLoader: VoidNoteImageLoader,
     onCaptionChange: (String) -> Unit,
     onDeleteBlock: () -> Unit,
     modifier: Modifier = Modifier
@@ -73,13 +65,13 @@ fun ImageBlockComposable(
     val payload = block.payload as? InlineBlockPayload.Image ?: return
 
     Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        border = androidx.compose.foundation.BorderStroke(
+        modifier  = modifier,
+        shape     = RoundedCornerShape(8.dp),
+        border    = androidx.compose.foundation.BorderStroke(
             width = 1.dp,
             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
         ),
-        colors = CardDefaults.cardColors(
+        colors    = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -89,18 +81,21 @@ fun ImageBlockComposable(
             Column(modifier = Modifier.fillMaxWidth()) {
 
                 // ── Image ──────────────────────────────────────────────────────
-                // SubcomposeAsyncImage lets us render custom loading and error states.
-                // We load from the absolute file path stored in the payload.
-                // File() model tells Coil it's a local file (not a URL).
+                // model = EncryptedFile(path) — triggers EncryptedFileFetcher.
+                // imageLoader = voidNoteImageLoader.loader — the custom loader
+                //   that has EncryptedFileFetcher registered. Without this,
+                //   Coil uses the global default loader which doesn't know about
+                //   our encryption and would fail to decode the .enc file.
                 SubcomposeAsyncImage(
-                    model = File(payload.filePath),
+                    model             = EncryptedFile(payload.filePath),
+                    imageLoader       = voidNoteImageLoader.loader,
                     contentDescription = payload.caption.ifBlank { "Embedded image" },
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier
+                    contentScale      = ContentScale.FillWidth,
+                    modifier          = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)),
                     loading = {
-                        // Placeholder while Coil reads and decodes the file
+                        // Shimmer-style placeholder while decryption + decode runs
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -109,7 +104,7 @@ fun ImageBlockComposable(
                         )
                     },
                     error = {
-                        // File missing or corrupted — show a graceful error state
+                        // File missing, decryption failed, or data tampered
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -119,16 +114,16 @@ fun ImageBlockComposable(
                         ) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(Spacing.extraSmall)
+                                verticalArrangement = Arrangement.spacedBy(Spacing.extraLarge)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.BrokenImage,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                    tint     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                                     modifier = Modifier.size(32.dp)
                                 )
                                 Text(
-                                    text = "Image not found",
+                                    text  = "Image not found",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                                 )
@@ -138,36 +133,28 @@ fun ImageBlockComposable(
                 )
 
                 // ── Caption ────────────────────────────────────────────────────
-                // BasicTextField gives us a minimal, unstyled text field — no
-                // Material decoration (no underline, no box, no label).
-                // We style it ourselves to match the Nothing aesthetic.
                 BasicTextField(
-                    value = payload.caption,
+                    value       = payload.caption,
                     onValueChange = onCaptionChange,
-                    modifier = Modifier
+                    modifier    = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            horizontal = Spacing.medium,
-                            vertical = Spacing.small
-                        ),
-                    textStyle = TextStyle(
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                        fontSize = 13.sp,
+                        .padding(horizontal = Spacing.medium, vertical = Spacing.small),
+                    textStyle   = TextStyle(
+                        color     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        fontSize  = 13.sp,
                         textAlign = TextAlign.Center
                     ),
-                    // Cursor colour matches the muted text colour
                     cursorBrush = SolidColor(
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                     ),
                     decorationBox = { innerTextField ->
                         Box(contentAlignment = Alignment.Center) {
-                            // Placeholder shown when caption is empty
                             if (payload.caption.isEmpty()) {
                                 Text(
-                                    text = "Add a caption…",
-                                    style = TextStyle(
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
-                                        fontSize = 13.sp,
+                                    text     = "Add a caption…",
+                                    style    = TextStyle(
+                                        color     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                                        fontSize  = 13.sp,
                                         textAlign = TextAlign.Center
                                     ),
                                     modifier = Modifier.fillMaxWidth()
@@ -180,25 +167,22 @@ fun ImageBlockComposable(
             }
 
             // ── Delete button ──────────────────────────────────────────────────
-            // Floating in the top-right corner over the image.
-            // Semi-transparent dark circle ensures visibility on both light and
-            // dark images. Size kept small (24dp) to not obscure the image.
             IconButton(
-                onClick = onDeleteBlock,
+                onClick  = onDeleteBlock,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(Spacing.extraSmall)
                     .size(28.dp)
                     .background(
-                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
-                        shape = CircleShape
+                        color  = MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
+                        shape  = CircleShape
                     )
             ) {
                 Icon(
-                    imageVector = Icons.Default.Close,
+                    imageVector        = Icons.Default.Close,
                     contentDescription = "Remove image",
-                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
-                    modifier = Modifier.size(14.dp)
+                    tint               = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                    modifier           = Modifier.size(14.dp)
                 )
             }
         }

@@ -1,6 +1,12 @@
 package com.greenicephoenix.voidnote.presentation.editor
 
+import android.Manifest
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -45,19 +51,35 @@ import com.greenicephoenix.voidnote.domain.model.FormatType
 import com.greenicephoenix.voidnote.domain.model.InlineBlockType
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
+import com.greenicephoenix.voidnote.data.storage.VoidNoteImageLoader
+import com.greenicephoenix.voidnote.di.ImageLoaderEntryPoint
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
+import dagger.hilt.android.EntryPointAccessors
 
 /**
  * Note Editor Screen
  *
- * ✅ Native text selection (double-tap, long-press)
- * ✅ MS Word-style formatting toolbar with TODO insert button
- * ✅ TODO blocks rendered below text with polished divider
- * ✅ Block section has "CHECKLISTS" label separator
+ * PERMISSION ARCHITECTURE:
+ * Camera is a "dangerous" permission — it must be requested at runtime even if
+ * declared in the manifest. Accompanist PermissionState tracks three states:
+ *
+ *   GRANTED          → launch camera immediately
+ *   NOT GRANTED      → one of two sub-cases:
+ *     shouldShowRationale = true  → denied once — show rationale dialog first,
+ *                                   then request again on "OK"
+ *     shouldShowRationale = false → permanently denied (or first time) — if first
+ *                                   time: request directly; if permanently denied:
+ *                                   must send user to App Settings (system dialog
+ *                                   won't appear again)
+ *
+ * We distinguish "first time" vs "permanently denied" by tracking whether we've
+ * ever asked in this session via a remembered Boolean.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class,
+    ExperimentalPermissionsApi::class)
 @Composable
 fun NoteEditorScreen(
     onNavigateBack: () -> Unit,
@@ -66,21 +88,80 @@ fun NoteEditorScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
+    // ── VoidNoteImageLoader via Hilt EntryPoint ──────────────────────────────
+    val imageLoader: VoidNoteImageLoader = remember {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            ImageLoaderEntryPoint::class.java
+        ).imageLoader()
+    }
 
-    // ── Photo picker launcher ────────────────────────────────────────────────
-    // PickVisualMedia is Android's built-in photo picker (API 11+ backport).
-    // It does NOT require READ_MEDIA_IMAGES or READ_EXTERNAL_STORAGE permission —
-    // the system grants temporary access to the selected image only.
-    // On result: copy the URI to app storage and insert the image block.
+    // ── Camera permission state (Accompanist) ────────────────────────────────
+    // rememberPermissionState tracks: isGranted, shouldShowRationale.
+    // The lambda fires after the system permission dialog closes.
+    val cameraPermissionState = rememberPermissionState(
+        permission = Manifest.permission.CAMERA
+    ) { isGranted ->
+        // Called when the system dialog closes.
+        // If the user just granted → immediately launch the camera.
+        if (isGranted) {
+            val captureUri = viewModel.prepareCameraCapture()
+            captureUri?.let { pendingCameraUri ->
+                // We can't launch directly here (no launcher reference in this scope).
+                // Store the URI in UiState; a LaunchedEffect below watches for it.
+                viewModel.storePendingCameraUri(pendingCameraUri)
+            }
+        }
+        // If denied: cameraPermissionState.status.shouldShowRationale will be true
+        // on the next tap, and we show the rationale dialog then.
+    }
+
+    // Track whether we should show our rationale dialog.
+    // This is separate from shouldShowRationale — it's our own UI state.
+    var showCameraRationale by remember { mutableStateOf(false) }
+
+    // Track whether we should show the "go to settings" dialog.
+    // Shown when: permission is permanently denied (shouldShowRationale = false
+    // AND we've already attempted a request this session).
+    var showCameraSettingsDialog by remember { mutableStateOf(false) }
+
+    // Track if we have ever launched a permission request this session.
+    // Distinguishes "first time (ask directly)" from "permanently denied (open Settings)".
+    var hasRequestedCameraPermission by remember { mutableStateOf(false) }
+
+    // ── Gallery photo picker ─────────────────────────────────────────────────
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri?.let { viewModel.insertImageBlock(it) }
     }
 
+    // ── Camera capture launcher ──────────────────────────────────────────────
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { captureSuccess ->
+        val tempPath = uiState.cameraCaptureTempPath
+        if (captureSuccess && tempPath != null) {
+            viewModel.insertCameraImage(tempPath)
+        } else {
+            viewModel.clearCameraCapturePath()
+        }
+    }
+
+    // ── Watch for a pending camera URI set after permission granted ──────────
+    // When cameraPermissionState callback grants permission, prepareCameraCapture()
+    // stores the URI in uiState.pendingCameraUri. We launch here where we have
+    // access to cameraLauncher.
+    LaunchedEffect(uiState.pendingCameraUri) {
+        uiState.pendingCameraUri?.let { uri ->
+            cameraLauncher.launch(uri)
+            viewModel.clearPendingCameraUri()
+        }
+    }
+
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showHeadingMenu by remember { mutableStateOf(false) }
-    var showInsertSheet by remember { mutableStateOf(false) }  // controls insert bottom sheet
+    var showInsertSheet by remember { mutableStateOf(false) }
 
     var titleFieldValue by remember {
         mutableStateOf(TextFieldValue(
@@ -113,10 +194,48 @@ fun NoteEditorScreen(
     }
 
     val hasSelection = contentFieldValue.selection.start != contentFieldValue.selection.end
-
-    // Sort blocks oldest-first for stable, predictable display order
     val sortedBlocks = remember(uiState.blocks) {
         uiState.blocks.values.sortedBy { it.createdAt }
+    }
+
+    // ── Camera tap handler — the smart permission flow ───────────────────────
+    // Called when user taps the Camera button in InsertBlockSheet.
+    // Decides what to do based on current permission state:
+    //
+    //   GRANTED                                → launch camera directly
+    //   NOT GRANTED + shouldShowRationale=true → show our rationale dialog
+    //   NOT GRANTED + shouldShowRationale=false:
+    //       first time asking                  → ask system directly
+    //       already asked before               → show "go to settings" dialog
+    val onCameraClick: () -> Unit = {
+        when {
+            // Already granted — skip all dialogs, launch immediately
+            cameraPermissionState.status.isGranted -> {
+                val captureUri = viewModel.prepareCameraCapture()
+                captureUri?.let { cameraLauncher.launch(it) }
+            }
+
+            // Denied once — shouldShowRationale = true.
+            // Android sets this after first denial to prompt you to explain
+            // WHY you need the permission before asking again.
+            cameraPermissionState.status.shouldShowRationale -> {
+                showCameraRationale = true
+            }
+
+            // Not granted, rationale not required.
+            // Two sub-cases: first time (ask directly) or permanently denied.
+            else -> {
+                if (!hasRequestedCameraPermission) {
+                    // First time — ask the system directly
+                    hasRequestedCameraPermission = true
+                    cameraPermissionState.launchPermissionRequest()
+                } else {
+                    // Permanently denied — system dialog won't appear.
+                    // Must guide user to App Settings.
+                    showCameraSettingsDialog = true
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -138,13 +257,6 @@ fun NoteEditorScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // Background must come BEFORE imePadding/navigationBarsPadding.
-                    // Modifier order matters in Compose — the background fills the full
-                    // column area including the space added by navigationBarsPadding(),
-                    // which is the "gap" between toolbar and screen edge.
-                    // Without this, that gap is transparent and shows the Scaffold's
-                    // content background (#121212 dark), not surfaceVariant (#2A2A2A),
-                    // causing the colour mismatch stripe visible at the bottom.
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .imePadding()
                     .navigationBarsPadding()
@@ -191,12 +303,6 @@ fun NoteEditorScreen(
                     charCount = contentFieldValue.text.length
                 )
 
-                // ── Insert Block Bottom Sheet ─────────────────────────────────
-                // Rendered here (at screen level, inside the Column that wraps
-                // the bottom bar) so it can expand full-width over the editor.
-                // InsertBlockSheet is ALWAYS in composition — AnimatedVisibility
-                // handles show/hide. Removing it from composition (if/else) would
-                // lose the exit animation and cause a layout jump.
                 InsertBlockSheet(
                     visible = showInsertSheet,
                     onDismiss = { showInsertSheet = false },
@@ -204,12 +310,15 @@ fun NoteEditorScreen(
                         showInsertSheet = false
                         viewModel.insertTodoBlock()
                     },
-                    onImageClick = {
+                    onGalleryClick = {
                         showInsertSheet = false
-                        // Launch the system photo picker — no permission dialog needed
                         imagePickerLauncher.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
+                    },
+                    onCameraClick = {
+                        showInsertSheet = false
+                        onCameraClick()
                     }
                 )
             }
@@ -225,7 +334,6 @@ fun NoteEditorScreen(
         ) {
             Spacer(Modifier.height(Spacing.small))
 
-            // ── Title ────────────────────────────────────────────────────────
             RichTextEditor(
                 value = titleFieldValue,
                 onValueChange = { newValue ->
@@ -244,14 +352,9 @@ fun NoteEditorScreen(
             )
 
             Spacer(Modifier.height(Spacing.medium))
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-            )
-
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
             Spacer(Modifier.height(Spacing.medium))
 
-            // ── Content Editor ───────────────────────────────────────────────
             RichTextEditor(
                 value = contentFieldValue,
                 onValueChange = { newValue ->
@@ -259,38 +362,17 @@ fun NoteEditorScreen(
                     viewModel.onContentChange(newValue.text)
                 },
                 placeholder = "Start writing...",
-                textStyle = TextStyle(
-                    fontSize = 16.sp,
-                    lineHeight = 24.sp
-                ),
+                textStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
                 formats = uiState.contentFormats,
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
-                        // When blocks exist: NO minimum height at all.
-                        // The text field wraps its content naturally so the checklist
-                        // appears immediately on the next line after the last character.
-                        // Forcing any minimum height (even 48dp) creates the visible gap
-                        // that prompted this fix — the field "reserves" empty space and
-                        // the checklist floats far below the actual text.
-                        //
-                        // When no blocks: 400dp gives a generous blank writing canvas.
                         if (sortedBlocks.isEmpty()) Modifier.heightIn(min = 400.dp) else Modifier
                     )
             )
 
-            // ── Blocks Section ───────────────────────────────────────────────
-            // Only shown when there's at least one block.
-            // A styled divider with "CHECKLISTS" label separates the text editor
-            // from the blocks area — clear visual hierarchy without a heavy card.
             if (sortedBlocks.isNotEmpty()) {
-                // Small gap between the last line of text and the first block.
-                // No divider, no label — the checklist card itself provides enough
-                // visual separation. Removing the "CHECKLISTS" divider keeps the
-                // editor feeling like one continuous surface.
                 Spacer(Modifier.height(Spacing.small))
-
-                // Render each block
                 sortedBlocks.forEach { block ->
                     when (block.type) {
                         InlineBlockType.TODO -> {
@@ -307,6 +389,7 @@ fun NoteEditorScreen(
                         InlineBlockType.IMAGE -> {
                             ImageBlockComposable(
                                 block = block,
+                                voidNoteImageLoader = imageLoader,
                                 onCaptionChange = { newCaption ->
                                     viewModel.updateImageCaption(block.id, newCaption)
                                 },
@@ -322,7 +405,6 @@ fun NoteEditorScreen(
             Spacer(Modifier.height(200.dp))
         }
 
-        // ── Heading Dialog ───────────────────────────────────────────────────
         if (showHeadingMenu) {
             AlertDialog(
                 onDismissRequest = { showHeadingMenu = false },
@@ -373,7 +455,7 @@ fun NoteEditorScreen(
         }
     }
 
-    // ── Delete Dialog ────────────────────────────────────────────────────────
+    // ── Delete dialog ────────────────────────────────────────────────────────
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -389,233 +471,95 @@ fun NoteEditorScreen(
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
         )
     }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CHECKLISTS SECTION DIVIDER
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * A tasteful divider that separates the text editor from the blocks area.
- *
- * Layout:  ──── CHECKLISTS ────────────────────────────────
- *
- * WHY A CUSTOM DIVIDER AND NOT JUST HorizontalDivider?
- * A plain divider gives no context. The label tells the user at a glance
- * what's below — especially useful when the note has both long text AND
- * multiple checklists. It also reinforces the structural hierarchy.
- *
- * NOTHING AESTHETIC:
- * - "CHECKLISTS" in uppercase with wide letter spacing (dot-matrix feel)
- * - Low contrast — it guides the eye without demanding attention
- * - The line extends fully across the remaining width
- */
-@Composable
-private fun ChecklistsSectionDivider() {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.small)
-    ) {
-        // Short left line
-        HorizontalDivider(
-            modifier = Modifier.width(16.dp),
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
-            thickness = 1.dp
-        )
-
-        // Label
-        Text(
-            text = "CHECKLISTS",
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 1.5.sp
-            ),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-        )
-
-        // Long right line — fills remaining width
-        HorizontalDivider(
-            modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
-            thickness = 1.dp
-        )
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FORMATTING TOOLBAR
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Single-row compact toolbar — the modern approach used by Bear, Craft, Notion.
- *
- * DESIGN RATIONALE:
- * Two rows felt heavy and wasted screen space. A single row with a "+" insert
- * button is cleaner and more discoverable:
- *
- *  ┌──────────────────────────────────────────────────────────┐
- *  │  [B][I][U][S̶] │ Aa [✕?] │ [+ ▾]         12w  45c         │
- *  └──────────────────────────────────────────────────────────┘
- *         ↑ format      ↑ size     ↑ insert popup    ↑ count
- *
- * BEHAVIOURS:
- * - [✕] clear only appears when text is selected (contextual, not always visible)
- * - [+ ▾] opens an inline dropdown with insert options (Checklist, Image…)
- * - Format buttons highlight with primaryContainer when active
- * - Separators (│) are 1dp lines — subtle structure without visual noise
- */
-@Composable
-private fun FormattingToolbar(
-    isBoldActive: Boolean,
-    isItalicActive: Boolean,
-    isUnderlineActive: Boolean,
-    isStrikethroughActive: Boolean,
-    activeHeading: FormatType?,
-    hasSelection: Boolean,
-    showInsertSheet: Boolean,       // hoisted — controlled by NoteEditorScreen
-    onBoldClick: () -> Unit,
-    onItalicClick: () -> Unit,
-    onUnderlineClick: () -> Unit,
-    onStrikethroughClick: () -> Unit,
-    onHeadingClick: () -> Unit,
-    onClearClick: () -> Unit,
-    onInsertClick: () -> Unit,      // opens the insert bottom sheet
-    onTodoClick: () -> Unit,
-    wordCount: Int = 0,
-    charCount: Int = 0
-) {
-    // showInsertSheet is hoisted to NoteEditorScreen so the ModalBottomSheet
-    // can be rendered at the screen level (full-width, outside toolbar Surface).
-    val showInsertMenu = showInsertSheet  // local alias for readability
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 0.dp
-    ) {
-        Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.small, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // ── Format buttons ────────────────────────────────────────
-                FormatButton(active = isBoldActive, onClick = onBoldClick) {
-                    Icon(Icons.Default.FormatBold, "Bold", modifier = Modifier.size(18.dp),
-                        tint = if (isBoldActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
-                }
-                FormatButton(active = isItalicActive, onClick = onItalicClick) {
-                    Icon(Icons.Default.FormatItalic, "Italic", modifier = Modifier.size(18.dp),
-                        tint = if (isItalicActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
-                }
-                FormatButton(active = isUnderlineActive, onClick = onUnderlineClick) {
-                    Icon(Icons.Default.FormatUnderlined, "Underline", modifier = Modifier.size(18.dp),
-                        tint = if (isUnderlineActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
-                }
-                FormatButton(active = isStrikethroughActive, onClick = onStrikethroughClick) {
-                    Icon(Icons.Default.FormatStrikethrough, "Strikethrough", modifier = Modifier.size(18.dp),
-                        tint = if (isStrikethroughActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
-                }
-
-                // ── Separator ─────────────────────────────────────────────
-                ToolbarSeparator()
-
-                // ── Heading size ──────────────────────────────────────────
-                FormatButton(active = activeHeading != null, onClick = onHeadingClick) {
-                    Icon(Icons.Default.FormatSize, "Text size", modifier = Modifier.size(18.dp),
-                        tint = if (activeHeading != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
-                }
-
-                // Clear formatting — only when text is selected (contextual)
-                if (hasSelection) {
-                    FormatButton(active = false, onClick = onClearClick) {
-                        Icon(Icons.Default.FormatClear, "Clear formatting", modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurface)
+    // ── Camera rationale dialog ──────────────────────────────────────────────
+    // Shown when user denied permission once. Explains WHY camera is needed
+    // (note it's for private capture that never goes to gallery), then
+    // re-requests on "Allow". User can tap "Not now" to dismiss.
+    if (showCameraRationale) {
+        AlertDialog(
+            onDismissRequest = { showCameraRationale = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.CameraAlt,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text("Camera Access") },
+            text = {
+                Text(
+                    "Void Note needs camera access to capture photos directly into your notes.\n\n" +
+                            "Photos are encrypted immediately and never saved to your gallery — " +
+                            "your captures stay private."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCameraRationale = false
+                        hasRequestedCameraPermission = true
+                        cameraPermissionState.launchPermissionRequest()
                     }
-                }
-
-                // ── Separator ─────────────────────────────────────────────
-                ToolbarSeparator()
-
-                // ── Insert "+" button → opens bottom sheet ────────────
-                // Bottom sheet scales better than a dropdown as we add more
-                // block types (Image, Audio, Code). Each type gets a large
-                // tappable card — easier to hit on mobile than a menu row.
-                FilledTonalIconButton(
-                    onClick = onInsertClick,
-                    modifier = Modifier.size(36.dp),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = if (showInsertMenu) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Icon(Icons.Default.Add, "Insert block", modifier = Modifier.size(18.dp),
-                        tint = if (showInsertMenu) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface)
-                }
-
-                // ── Spacer pushes count to the right ─────────────────────
-                Spacer(modifier = Modifier.weight(1f))
-
-                // ── Word + char count ─────────────────────────────────────
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "$wordCount w",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "$charCount c",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                }
+                ) { Text("Allow") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCameraRationale = false }) { Text("Not now") }
             }
-        }
+        )
+    }
+
+    // ── Permanently denied dialog ────────────────────────────────────────────
+    // Shown when the system will no longer show the permission dialog.
+    // The only option is to open App Settings where the user can manually grant.
+    if (showCameraSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showCameraSettingsDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text("Camera Permission Required") },
+            text = {
+                Text(
+                    "Camera access was denied. To capture photos into notes, " +
+                            "please enable Camera permission in App Settings.\n\n" +
+                            "Settings → Permissions → Camera → Allow"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCameraSettingsDialog = false
+                        // Open this app's page in Android Settings
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                    }
+                ) { Text("Open Settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCameraSettingsDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INSERT BLOCK BOTTOM SHEET
+// INSERT BLOCK PANEL
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Inline insert panel — slides up from above the toolbar.
- *
- * WHY NOT ModalBottomSheet?
- * ModalBottomSheet is a system-level modal that grabs window focus when it
- * opens. This causes Android to DISMISS THE SOFT KEYBOARD immediately — even
- * if the user had the keyboard open and was typing. After selecting an option
- * the keyboard is gone and they must tap again to get it back.
- *
- * THIS APPROACH:
- * We render the panel as a regular Compose layout element that slides in with
- * AnimatedVisibility. It never takes window focus, never touches the IME, and
- * the keyboard stays open the entire time.
- *
- * DESIGN — Nothing aesthetic:
- * - Surface background with top border line (like a second toolbar row)
- * - 2-column grid of equal-sized cards
- * - Available blocks: primary accent border + full opacity
- * - Coming-soon: muted, "SOON" badge, 40% opacity, not clickable
- *
- * ADDING A NEW BLOCK TYPE (Sprint 4+):
- * Add one InsertBlockCard() call — the LazyVerticalGrid reflows automatically.
- *
- * @param visible           Drives the AnimatedVisibility — true = panel open
- * @param onDismiss         Called when user taps the × close button
- * @param onChecklistClick  Called when Checklist card is tapped
- */
 @Composable
 private fun InsertBlockSheet(
     visible: Boolean,
     onDismiss: () -> Unit,
     onChecklistClick: () -> Unit,
-    onImageClick: () -> Unit       // ← NEW parameter
+    onGalleryClick: () -> Unit,
+    onCameraClick: () -> Unit
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -638,7 +582,6 @@ private fun InsertBlockSheet(
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
-                // ── Header row: label + close button ─────────────────────────
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -652,11 +595,7 @@ private fun InsertBlockSheet(
                         ),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                     )
-                    // Close button — tapping × dismisses the panel without inserting
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.size(28.dp)
-                    ) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
                         Icon(
                             Icons.Default.Close,
                             contentDescription = "Close insert panel",
@@ -668,7 +607,6 @@ private fun InsertBlockSheet(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // ── Block type icons — same size as toolbar format buttons ────
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -681,18 +619,19 @@ private fun InsertBlockSheet(
                     )
                     InsertBlockButton(
                         icon = Icons.Default.Image,
-                        contentDescription = "Image",
+                        contentDescription = "Gallery",
                         available = true,
-                        onClick = onImageClick          // ← wire the callback
+                        onClick = onGalleryClick
+                    )
+                    InsertBlockButton(
+                        icon = Icons.Default.CameraAlt,
+                        contentDescription = "Camera",
+                        available = true,
+                        onClick = onCameraClick
                     )
                     InsertBlockButton(
                         icon = Icons.Default.KeyboardVoice,
                         contentDescription = "Voice (coming soon)",
-                        available = false
-                    )
-                    InsertBlockButton(
-                        icon = Icons.Default.FormatQuote,
-                        contentDescription = "Code (coming soon)",
                         available = false
                     )
                 }
@@ -701,11 +640,10 @@ private fun InsertBlockSheet(
     }
 }
 
-/**
- * Compact icon button for the insert panel.
- * Identical size and style to the format buttons (B, I, U…) in the toolbar.
- * Available = highlighted container; unavailable = 35% opacity, not clickable.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED COMPOSABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
 private fun InsertBlockButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -734,10 +672,6 @@ private fun InsertBlockButton(
     }
 }
 
-/**
- * Small square icon button for text formatting.
- * Highlights with primaryContainer background when active.
- */
 @Composable
 private fun FormatButton(
     active: Boolean,
@@ -754,9 +688,6 @@ private fun FormatButton(
     ) { content() }
 }
 
-/**
- * 1dp vertical separator — subtle structure between toolbar groups.
- */
 @Composable
 private fun ToolbarSeparator() {
     Box(
@@ -766,6 +697,96 @@ private fun ToolbarSeparator() {
             .height(22.dp)
             .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))
     )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORMATTING TOOLBAR
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun FormattingToolbar(
+    isBoldActive: Boolean,
+    isItalicActive: Boolean,
+    isUnderlineActive: Boolean,
+    isStrikethroughActive: Boolean,
+    activeHeading: FormatType?,
+    hasSelection: Boolean,
+    showInsertSheet: Boolean,
+    onBoldClick: () -> Unit,
+    onItalicClick: () -> Unit,
+    onUnderlineClick: () -> Unit,
+    onStrikethroughClick: () -> Unit,
+    onHeadingClick: () -> Unit,
+    onClearClick: () -> Unit,
+    onInsertClick: () -> Unit,
+    onTodoClick: () -> Unit,
+    wordCount: Int = 0,
+    charCount: Int = 0
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 0.dp
+    ) {
+        Column {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.small, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FormatButton(active = isBoldActive, onClick = onBoldClick) {
+                    Icon(Icons.Default.FormatBold, "Bold", modifier = Modifier.size(18.dp),
+                        tint = if (isBoldActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                }
+                FormatButton(active = isItalicActive, onClick = onItalicClick) {
+                    Icon(Icons.Default.FormatItalic, "Italic", modifier = Modifier.size(18.dp),
+                        tint = if (isItalicActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                }
+                FormatButton(active = isUnderlineActive, onClick = onUnderlineClick) {
+                    Icon(Icons.Default.FormatUnderlined, "Underline", modifier = Modifier.size(18.dp),
+                        tint = if (isUnderlineActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                }
+                FormatButton(active = isStrikethroughActive, onClick = onStrikethroughClick) {
+                    Icon(Icons.Default.FormatStrikethrough, "Strikethrough", modifier = Modifier.size(18.dp),
+                        tint = if (isStrikethroughActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                }
+                ToolbarSeparator()
+                FormatButton(active = activeHeading != null, onClick = onHeadingClick) {
+                    Icon(Icons.Default.FormatSize, "Text size", modifier = Modifier.size(18.dp),
+                        tint = if (activeHeading != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                }
+                if (hasSelection) {
+                    FormatButton(active = false, onClick = onClearClick) {
+                        Icon(Icons.Default.FormatClear, "Clear formatting", modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+                ToolbarSeparator()
+                FilledTonalIconButton(
+                    onClick = onInsertClick,
+                    modifier = Modifier.size(36.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = if (showInsertSheet) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Icon(Icons.Default.Add, "Insert block",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (showInsertSheet) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface)
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "${wordCount}w  ${charCount}c",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+            }
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

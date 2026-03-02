@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    FileProvider path configuration.
+
+    WHY THIS FILE EXISTS:
+    Since Android 7.0, apps cannot share file:// URIs with other apps — the OS
+    blocks it with a FileUriExposedException. You must use content:// URIs instead.
+    FileProvider converts a file path into a content:// URI that other apps
+    (like the camera) can write to.
+
+    HOW IT WORKS:
+    FileProvider.getUriForFile(context, authority, file) looks up this XML to
+    convert the file's absolute path to a content URI.
+
+    PATHS DECLARED HERE:
+    - files-path / name="images": the encrypted image store (filesDir/images/)
+    - files-path / name="camera_tmp": temp plain JPEG during camera capture (filesDir/camera_tmp/)
+
+    Both paths are inside filesDir which is app-private. The camera app is
+    granted a temporary write permission to camera_tmp/ via the Intent flags
+    FLAG_GRANT_WRITE_URI_PERMISSION | FLAG_GRANT_READ_URI_PERMISSION.
+
+    PLACE THIS FILE AT:
+    app/src/main/res/xml/file_paths.xml
+-->
+<paths>
+    <!--
+        files-path maps to Context.getFilesDir() — app-private internal storage.
+        path="." means the entire filesDir is accessible via this provider.
+        We use subdirectories (images/, camera_tmp/) to keep things organised.
+    -->
+    <files-path
+        name="void_note_files"
+        path="." />
+</paths>

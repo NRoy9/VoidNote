@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Required to open the camera app for photo capture -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <application
         android:name=".VoidNoteApplication"
         android:allowBackup="true"
@@ -23,6 +29,33 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+            FileProvider — converts internal file paths to content:// URIs.
+
+            Required because since Android 7.0, file:// URIs cannot be passed
+            to external apps (camera). FileProvider creates a secure, temporary
+            content:// URI that the camera app can write to.
+
+            android:authorities MUST match the string used in:
+                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+
+            android:exported="false" — other apps cannot directly browse our files.
+            android:grantUriPermissions="true" — allows us to grant per-URI write
+            permission to the camera app via Intent flags.
+
+            resource="@xml/file_paths" references res/xml/file_paths.xml which
+            declares which directories the FileProvider can share.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

@@ -1,6 +1,9 @@
 package com.greenicephoenix.voidnote.presentation.settings
 
+import android.Manifest
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -24,17 +27,23 @@ import androidx.core.net.toUri
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.alpha
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 
 /**
- * Settings Screen - App configuration and preferences
+ * Settings Screen
  *
  * Sections:
- * - Appearance (theme)
- * - Storage info
- * - Data management
- * - About
+ * - APPEARANCE (theme)
+ * - PERMISSIONS (camera — user can grant/manage from here)
+ * - SECURITY (biometric)
+ * - STORAGE
+ * - DATA MANAGEMENT
+ * - ABOUT
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
@@ -47,15 +56,19 @@ fun SettingsScreen(
     val currentTheme by viewModel.currentTheme.collectAsState()
     val context = LocalContext.current
 
-    //ADD: Snackbar for export feedback
     val snackbarHostState = remember { SnackbarHostState() }
     var showExportSuccess by remember { mutableStateOf(false) }
-
     var showThemeDialog by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
     val isBiometricEnabled by viewModel.biometricLockEnabled.collectAsState()
 
-    // ✅ ADD: Show snackbar when export succeeds
+    // ── Camera permission state for the Settings permissions row ────────────
+    // This mirrors the same logic used in NoteEditorScreen, but here it's used
+    // purely for display and one-tap grant from Settings.
+    val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
+    var hasRequestedFromSettings by remember { mutableStateOf(false) }
+    var showSettingsCameraRationale by remember { mutableStateOf(false) }
+
     LaunchedEffect(showExportSuccess) {
         if (showExportSuccess) {
             snackbarHostState.showSnackbar(
@@ -67,6 +80,7 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
@@ -91,10 +105,9 @@ fun SettingsScreen(
                 .padding(paddingValues),
             contentPadding = PaddingValues(vertical = Spacing.medium)
         ) {
-            // APPEARANCE SECTION
-            item {
-                SectionHeader(text = "APPEARANCE")
-            }
+
+            // ── APPEARANCE ───────────────────────────────────────────────────
+            item { SectionHeader(text = "APPEARANCE") }
 
             item {
                 SettingsItem(
@@ -107,10 +120,66 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(Spacing.large)) }
 
-            // STORAGE SECTION
+            // ── PERMISSIONS ──────────────────────────────────────────────────
+            // Shows the status of each runtime permission.
+            // Tapping a row requests the permission (or opens App Settings if
+            // permanently denied). Users can manage permissions without leaving the app.
+            item { SectionHeader(text = "PERMISSIONS") }
+
             item {
-                SectionHeader(text = "STORAGE")
+                // Determine the subtitle and action based on current permission state
+                val permissionStatus = cameraPermissionState.status
+                val (subtitle, actionLabel) = when {
+                    permissionStatus.isGranted -> Pair(
+                        "Granted — camera captures stay private, never in gallery",
+                        null  // no action needed when granted
+                    )
+                    permissionStatus.shouldShowRationale -> Pair(
+                        "Denied — tap to allow (photos are encrypted, never in gallery)",
+                        "Allow"
+                    )
+                    hasRequestedFromSettings -> Pair(
+                        "Permanently denied — tap to open App Settings",
+                        "Open Settings"
+                    )
+                    else -> Pair(
+                        "Not yet granted — tap to allow camera for note photos",
+                        "Allow"
+                    )
+                }
+
+                PermissionSettingsItem(
+                    icon = Icons.Default.CameraAlt,
+                    title = "Camera",
+                    subtitle = subtitle,
+                    isGranted = permissionStatus.isGranted,
+                    actionLabel = actionLabel,
+                    onAction = {
+                        when {
+                            permissionStatus.isGranted -> { /* nothing to do */ }
+                            permissionStatus.shouldShowRationale -> {
+                                showSettingsCameraRationale = true
+                            }
+                            hasRequestedFromSettings -> {
+                                // Permanently denied — open App Settings
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                                context.startActivity(intent)
+                            }
+                            else -> {
+                                hasRequestedFromSettings = true
+                                cameraPermissionState.launchPermissionRequest()
+                            }
+                        }
+                    }
+                )
             }
+
+            item { Spacer(modifier = Modifier.height(Spacing.large)) }
+
+            // ── STORAGE ──────────────────────────────────────────────────────
+            item { SectionHeader(text = "STORAGE") }
 
             item {
                 StorageInfoCard(
@@ -121,37 +190,28 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(Spacing.large)) }
 
-            // SECURITY SECTION
-            item {
-                SectionHeader(text = "SECURITY")
-            }
+            // ── SECURITY ─────────────────────────────────────────────────────
+            item { SectionHeader(text = "SECURITY") }
 
             item {
-                // Biometric lock — always visible so users know the feature exists.
-                // When device has no screen lock set up, the toggle is shown but
-                // disabled at 50% alpha with an explanatory subtitle.
-                // isBiometricAvailable is read directly here as a plain Boolean —
-                // hardware availability never changes at runtime.
                 val biometricAvailable = viewModel.isBiometricAvailable
                 SettingsToggleItem(
-                    icon = Icons.Default.Lock,           // Lock icon — in default set, always available
+                    icon = Icons.Default.Lock,
                     title = "Biometric Lock",
                     subtitle = if (biometricAvailable)
                         "Require fingerprint or PIN to open app"
                     else
                         "Set up a screen lock in Android Settings first",
                     checked = isBiometricEnabled && biometricAvailable,
-                    enabled = biometricAvailable,        // greys out switch when unavailable
+                    enabled = biometricAvailable,
                     onCheckedChange = { if (biometricAvailable) viewModel.setBiometricLock(it) }
                 )
             }
 
             item { Spacer(modifier = Modifier.height(Spacing.large)) }
 
-            // DATA MANAGEMENT SECTION
-            item {
-                SectionHeader(text = "DATA MANAGEMENT")
-            }
+            // ── DATA MANAGEMENT ──────────────────────────────────────────────
+            item { SectionHeader(text = "DATA MANAGEMENT") }
 
             item {
                 SettingsItem(
@@ -174,7 +234,6 @@ fun SettingsScreen(
             item {
                 var showFormatDialog by remember { mutableStateOf(false) }
 
-                // File pickers for different formats
                 val jsonExportLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.CreateDocument("application/json")
                 ) { uri ->
@@ -200,81 +259,53 @@ fun SettingsScreen(
                     onClick = { showFormatDialog = true }
                 )
 
-                // Format selection dialog
                 if (showFormatDialog) {
                     AlertDialog(
                         onDismissRequest = { showFormatDialog = false },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Upload,
-                                contentDescription = null
-                            )
-                        },
+                        icon = { Icon(imageVector = Icons.Default.Upload, contentDescription = null) },
                         title = { Text("Choose Export Format") },
                         text = {
                             Column(verticalArrangement = Arrangement.spacedBy(Spacing.small)) {
                                 Text("Select format:")
                                 Spacer(modifier = Modifier.height(Spacing.small))
-
-                                // JSON option
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     onClick = {
                                         showFormatDialog = false
                                         val timestamp = java.text.SimpleDateFormat(
-                                            "yyyyMMdd_HHmmss",
-                                            java.util.Locale.getDefault()
+                                            "yyyyMMdd_HHmmss", java.util.Locale.getDefault()
                                         ).format(java.util.Date())
                                         jsonExportLauncher.launch("voidnote_backup_$timestamp.json")
                                     }
                                 ) {
                                     Column(modifier = Modifier.padding(Spacing.medium)) {
-                                        Text(
-                                            text = "JSON (Recommended)",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "Preserves formatting, can be imported back",
+                                        Text("JSON (Recommended)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text("Preserves formatting, can be imported back",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                        )
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                                     }
                                 }
-
-                                // TXT option
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     onClick = {
                                         showFormatDialog = false
                                         val timestamp = java.text.SimpleDateFormat(
-                                            "yyyyMMdd_HHmmss",
-                                            java.util.Locale.getDefault()
+                                            "yyyyMMdd_HHmmss", java.util.Locale.getDefault()
                                         ).format(java.util.Date())
                                         txtExportLauncher.launch("voidnote_backup_$timestamp.txt")
                                     }
                                 ) {
                                     Column(modifier = Modifier.padding(Spacing.medium)) {
-                                        Text(
-                                            text = "Plain Text",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "Human-readable, easy to view anywhere",
+                                        Text("Plain Text", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text("Human-readable, easy to view anywhere",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                        )
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                                     }
                                 }
                             }
                         },
                         confirmButton = {},
-                        dismissButton = {
-                            TextButton(onClick = { showFormatDialog = false }) {
-                                Text("Cancel")
-                            }
-                        }
+                        dismissButton = { TextButton(onClick = { showFormatDialog = false }) { Text("Cancel") } }
                     )
                 }
             }
@@ -291,14 +322,10 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(Spacing.large)) }
 
-            // ABOUT SECTION
-            item {
-                SectionHeader(text = "ABOUT")
-            }
+            // ── ABOUT ────────────────────────────────────────────────────────
+            item { SectionHeader(text = "ABOUT") }
 
             item {
-                // "What's New" — taps through to full changelog screen
-                // Shows latest version as subtitle so users know what to expect
                 SettingsItem(
                     icon = Icons.Default.StarOutline,
                     title = "What's New",
@@ -340,7 +367,6 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(Spacing.extraLarge)) }
 
-            // FOOTER
             item {
                 Text(
                     text = "Void Note • Notes that disappear into the void",
@@ -354,7 +380,7 @@ fun SettingsScreen(
         }
     }
 
-    // Theme Selection Dialog
+    // ── Theme dialog ─────────────────────────────────────────────────────────
     if (showThemeDialog) {
         ThemeSelectionDialog(
             currentTheme = currentTheme,
@@ -366,60 +392,64 @@ fun SettingsScreen(
         )
     }
 
-    // Clear Data Confirmation Dialog
+    // ── Clear data dialog ────────────────────────────────────────────────────
     if (showClearDataDialog) {
         AlertDialog(
             onDismissRequest = { showClearDataDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
-            },
+            icon = { Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Clear All Data?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "This will permanently delete:",
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("This will permanently delete:", fontWeight = FontWeight.Bold)
                     Text("• All notes (including trash)")
                     Text("• All folders")
                     Text("• All tags")
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "This action cannot be undone!",
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("This action cannot be undone!", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
             },
             confirmButton = {
                 TextButton(
+                    onClick = { viewModel.clearAllNotes(); showClearDataDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete Everything") }
+            },
+            dismissButton = { TextButton(onClick = { showClearDataDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    // ── Camera rationale dialog (from Settings) ──────────────────────────────
+    if (showSettingsCameraRationale) {
+        AlertDialog(
+            onDismissRequest = { showSettingsCameraRationale = false },
+            icon = { Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Camera Access") },
+            text = {
+                Text(
+                    "Void Note uses the camera to capture photos directly into your notes.\n\n" +
+                            "Photos are encrypted immediately and never saved to your gallery."
+                )
+            },
+            confirmButton = {
+                TextButton(
                     onClick = {
-                        viewModel.clearAllNotes()
-                        showClearDataDialog = false
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Delete Everything")
-                }
+                        showSettingsCameraRationale = false
+                        hasRequestedFromSettings = true
+                        cameraPermissionState.launchPermissionRequest()
+                    }
+                ) { Text("Allow") }
             },
             dismissButton = {
-                TextButton(onClick = { showClearDataDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showSettingsCameraRationale = false }) { Text("Not now") }
             }
         )
     }
 }
 
-/**
- * Section Header
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPOSABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
 private fun SectionHeader(text: String) {
     Text(
@@ -432,8 +462,83 @@ private fun SectionHeader(text: String) {
 }
 
 /**
- * Settings Item - Individual setting row
+ * Permission row — shows permission status with a tappable action.
+ *
+ * GRANTED:    Green check icon, full opacity, no action label
+ * NOT GRANTED: Muted icon at 60% opacity, action label ("Allow" or "Open Settings")
+ *
+ * The two-tone design (green for granted, muted for denied) gives users an
+ * at-a-glance status without needing to read every subtitle.
  */
+@Composable
+private fun PermissionSettingsItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    isGranted: Boolean,
+    actionLabel: String?,
+    onAction: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onAction),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.large, vertical = Spacing.medium),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.medium)
+        ) {
+            // Icon — green when granted, muted when denied
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isGranted) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier = Modifier.size(24.dp)
+            )
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+
+            // Status badge on the right
+            if (isGranted) {
+                // Granted: filled green check
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Granted",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            } else if (actionLabel != null) {
+                // Not granted: small action label button
+                TextButton(
+                    onClick = onAction,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = actionLabel,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SettingsItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -445,10 +550,7 @@ private fun SettingsItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (onClick != null) Modifier.clickable(onClick = onClick)
-                else Modifier
-            ),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         color = MaterialTheme.colorScheme.background
     ) {
         Row(
@@ -461,23 +563,16 @@ private fun SettingsItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isDestructive) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                },
+                tint = if (isDestructive) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier.size(24.dp)
             )
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (isDestructive) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    }
+                    color = if (isDestructive) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = subtitle,
@@ -485,7 +580,6 @@ private fun SettingsItem(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }
-
             if (onClick != null) {
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
@@ -498,31 +592,19 @@ private fun SettingsItem(
     }
 }
 
-/**
- * Settings item with a toggle switch instead of a chevron.
- * Used for binary on/off preferences like Biometric Lock.
- */
 @Composable
 private fun SettingsToggleItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String,
     checked: Boolean,
-    enabled: Boolean = true,        // when false: 50% alpha, switch disabled
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    // Alpha communicates "this exists but can't be used yet"
-    // better than hiding the item completely
-    val contentAlpha = if (enabled) 1f else 0.45f
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .alpha(contentAlpha)
-            .then(
-                if (enabled) Modifier.clickable { onCheckedChange(!checked) }
-                else Modifier          // no click when disabled
-            ),
+            .alpha(if (enabled) 1f else 0.5f),
         color = MaterialTheme.colorScheme.background
     ) {
         Row(
@@ -548,28 +630,20 @@ private fun SettingsToggleItem(
             }
             Switch(
                 checked = checked,
-                enabled = enabled,
-                onCheckedChange = onCheckedChange
+                onCheckedChange = onCheckedChange,
+                enabled = enabled
             )
         }
     }
 }
 
-/**
- * Storage Info Card
- */
 @Composable
-private fun StorageInfoCard(
-    noteCount: Int,
-    folderCount: Int
-) {
+private fun StorageInfoCard(noteCount: Int, folderCount: Int) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.large),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
             modifier = Modifier
@@ -577,61 +651,34 @@ private fun StorageInfoCard(
                 .padding(Spacing.large),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            StorageInfoItem(
-                icon = Icons.Default.Description,
-                count = noteCount,
-                label = "Notes"
-            )
-
-            VerticalDivider(
-                modifier = Modifier.height(48.dp),
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-            )
-
-            StorageInfoItem(
-                icon = Icons.Default.Folder,
-                count = folderCount,
-                label = "Folders"
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = noteCount.toString(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Notes",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = folderCount.toString(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Folders",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
         }
     }
 }
 
-/**
- * Storage Info Item
- */
-@Composable
-private fun StorageInfoItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    count: Int,
-    label: String
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.small)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(32.dp)
-        )
-        Text(
-            text = count.toString(),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-        )
-    }
-}
-
-/**
- * Theme Selection Dialog
- */
 @Composable
 private fun ThemeSelectionDialog(
     currentTheme: AppTheme,
@@ -644,30 +691,41 @@ private fun ThemeSelectionDialog(
         text = {
             Column {
                 AppTheme.entries.forEach { theme ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onThemeSelected(theme) }
-                            .padding(vertical = Spacing.medium),
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        onClick = { onThemeSelected(theme) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.small,
+                        color = if (theme == currentTheme) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surface
                     ) {
-                        RadioButton(
-                            selected = theme == currentTheme,
-                            onClick = { onThemeSelected(theme) }
-                        )
-                        Spacer(modifier = Modifier.width(Spacing.medium))
-                        Text(
-                            text = theme.displayName,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(Spacing.medium),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = theme.displayName,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (theme == currentTheme) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface
+                            )
+                            if (theme == currentTheme) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Done")
-            }
-        }
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

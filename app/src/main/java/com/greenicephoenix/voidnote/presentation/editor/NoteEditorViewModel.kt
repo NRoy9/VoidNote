@@ -1,8 +1,10 @@
 package com.greenicephoenix.voidnote.presentation.editor
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.greenicephoenix.voidnote.data.storage.ImageStorageManager
 import com.greenicephoenix.voidnote.domain.model.FormatRange
 import com.greenicephoenix.voidnote.domain.model.FormatType
 import com.greenicephoenix.voidnote.domain.model.InlineBlock
@@ -22,11 +24,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
-import android.content.Context
-import android.graphics.BitmapFactory
-import android.net.Uri
-import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.File
 
 /**
  * ViewModel for Note Editor Screen
@@ -59,7 +56,7 @@ class NoteEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val noteRepository: NoteRepository,
     private val inlineBlockRepository: InlineBlockRepository,
-    @ApplicationContext private val context: Context
+    private val imageStorage: ImageStorageManager   // ← NEW: handles encrypted file I/O
 ) : ViewModel() {
 
     // Navigation argument — "new" means create a new note
@@ -230,81 +227,94 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     /**
-     * Insert a new IMAGE block into this note.
+     * Insert a new IMAGE block from a gallery URI.
      *
-     * FLOW:
-     * 1. Ensure the note row exists (FK guard — same as insertTodoBlock)
-     * 2. Copy the picked image URI to app-private storage
-     * 3. Read image dimensions without loading the full bitmap into memory
-     * 4. Insert the block into the database
-     * 5. Save the note to embed the marker token in raw content
+     * Gallery flow:
+     * - Read bytes from the content URI
+     * - Encrypt them with AES-256-GCM → write to filesDir/images/image_<id>.enc
+     * - Source gallery file is UNTOUCHED (user chose to include it, may need it elsewhere)
+     * - Insert block into DB with the .enc file path
      *
-     * WHY COPY THE FILE?
-     * Content URIs from the photo picker are temporary — they expire when the
-     * user revokes access or the system clears the grant. We copy to
-     * filesDir/images/ (app-private storage) so the image is always accessible
-     * regardless of what happens to the original URI.
-     *
-     * WHY inJustDecodeBounds?
-     * BitmapFactory.Options.inJustDecodeBounds = true reads ONLY the header
-     * (dimensions, MIME type) without loading pixels into memory. This avoids
-     * an OOM on large photos (12MP+) just to get width/height.
-     *
-     * @param imageUri  The content URI returned by the photo picker.
+     * @param imageUri  Content URI from PickVisualMedia
      */
     fun insertImageBlock(imageUri: Uri) {
         viewModelScope.launch {
-            // ── FK Guard ──────────────────────────────────────────────────────
-            // Same as insertTodoBlock — ensure the note row exists before inserting
-            // a block with a foreign key reference to it.
             ensureNotePersisted()
 
             val blockId = UUID.randomUUID().toString()
 
-            // ── Copy to app-private storage ───────────────────────────────────
-            // filesDir is internal storage — no permission needed, survives updates,
-            // deleted when the app is uninstalled.
-            val imagesDir = File(context.filesDir, "images").also { it.mkdirs() }
-            val destFile  = File(imagesDir, "image_$blockId.jpg")
-
-            try {
-                context.contentResolver.openInputStream(imageUri)?.use { input ->
-                    destFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            } catch (e: Exception) {
-                // Copy failed (permission revoked, storage full, etc.)
-                // Don't insert a block with a broken file path.
-                android.util.Log.e("NoteEditor", "Image copy failed: ${e.message}")
+            // Encrypt and save to app-private storage
+            val encFilePath = imageStorage.saveFromUri(imageUri, blockId)
+            if (encFilePath == null) {
+                android.util.Log.e("NoteEditor", "insertImageBlock: save failed, aborting")
                 return@launch
             }
 
-            // ── Read dimensions ───────────────────────────────────────────────
-            // inJustDecodeBounds = true: reads header only, no pixels decoded.
-            // Stored in the payload so the UI can reserve space before the image loads.
-            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(destFile.absolutePath, options)
+            // Read image dimensions from the encrypted file (decrypts in memory, no disk write)
+            val (width, height) = imageStorage.readDimensions(encFilePath)
 
-            // ── Build and insert the block ────────────────────────────────────
             val newBlock = InlineBlock(
                 id        = blockId,
                 noteId    = currentNoteId,
                 type      = InlineBlockType.IMAGE,
                 payload   = InlineBlockPayload.Image(
-                    filePath = destFile.absolutePath,
+                    filePath = encFilePath,
                     caption  = "",
-                    width    = options.outWidth.coerceAtLeast(0),
-                    height   = options.outHeight.coerceAtLeast(0)
+                    width    = width,
+                    height   = height
                 ),
                 createdAt = System.currentTimeMillis()
             )
 
             inlineBlockRepository.insertBlock(newBlock)
+            delay(50)
+            saveNote()
+        }
+    }
 
-            // Brief delay lets the Flow emit the new block before saveNote()
-            // queries the repository — prevents a race where saveNote() runs
-            // before the new block appears in getBlocksForNote().
+    /**
+     * Insert an IMAGE block from a camera capture.
+     *
+     * Camera flow:
+     * - createCameraTempFile() creates a plain JPEG in filesDir/camera_tmp/
+     *   and returns a FileProvider content:// URI for the camera app to write to
+     * - Camera writes the JPEG directly to our app-private storage (NEVER to DCIM)
+     * - After capture succeeds, encryptCameraTempFile() encrypts it in-place:
+     *     temp plain JPEG → encrypted .enc → delete plain JPEG
+     * - Insert block into DB with the .enc file path
+     *
+     * @param tempFilePath  The absolute path of the temp file (returned when
+     *                      creating the capture URI in the Screen)
+     */
+    fun insertCameraImage(tempFilePath: String) {
+        viewModelScope.launch {
+            ensureNotePersisted()
+
+            val blockId = UUID.randomUUID().toString()
+
+            // Encrypt the temp JPEG and delete the plain file
+            val encFilePath = imageStorage.encryptCameraTempFile(tempFilePath, blockId)
+            if (encFilePath == null) {
+                android.util.Log.e("NoteEditor", "insertCameraImage: encryption failed, aborting")
+                return@launch
+            }
+
+            val (width, height) = imageStorage.readDimensions(encFilePath)
+
+            val newBlock = InlineBlock(
+                id        = blockId,
+                noteId    = currentNoteId,
+                type      = InlineBlockType.IMAGE,
+                payload   = InlineBlockPayload.Image(
+                    filePath = encFilePath,
+                    caption  = "",
+                    width    = width,
+                    height   = height
+                ),
+                createdAt = System.currentTimeMillis()
+            )
+
+            inlineBlockRepository.insertBlock(newBlock)
             delay(50)
             saveNote()
         }
@@ -498,18 +508,11 @@ class NoteEditorViewModel @Inject constructor(
      */
     fun deleteBlock(blockId: String) {
         viewModelScope.launch {
-            // If it's an image block, delete the physical file first.
-            // We do this before deleting the DB row so we still have the filePath.
+            // For IMAGE blocks: delete the physical .enc file before removing DB row
             val block = _uiState.value.blocks[blockId]
             if (block?.type == InlineBlockType.IMAGE) {
                 val payload = block.payload as? InlineBlockPayload.Image
-                payload?.filePath?.let { path ->
-                    try {
-                        File(path).delete()
-                    } catch (e: Exception) {
-                        // File may already be gone — ignore and continue with DB delete
-                    }
-                }
+                payload?.filePath?.let { imageStorage.deleteEncFile(it) }
             }
 
             inlineBlockRepository.deleteBlock(blockId)
@@ -801,6 +804,46 @@ class NoteEditorViewModel @Inject constructor(
         )
         scheduleAutoSave()
     }
+
+    /**
+     * Store the camera temp file path in UiState so the Screen can retrieve it
+     * when the camera returns. The Screen needs the path to call insertCameraImage().
+     *
+     * WHY STATE?
+     * The path is created in the ViewModel (where ImageStorageManager lives) and
+     * consumed in the Screen (where the TakePicture launcher callback runs).
+     * UiState is the correct channel to pass data from ViewModel → Screen.
+     */
+    fun prepareCameraCapture(): android.net.Uri? {
+        val (uri, tempPath) = imageStorage.createCameraTempFile()
+        _uiState.value = _uiState.value.copy(cameraCaptureTempPath = tempPath)
+        return uri
+    }
+
+    /**
+     * Store a camera capture URI in UiState so NoteEditorScreen's LaunchedEffect
+     * can launch the camera after the permission callback grants access.
+     *
+     * WHY THIS PATTERN?
+     * The Accompanist permission callback fires AFTER the system dialog closes.
+     * At that point, the Screen composable (which holds cameraLauncher) isn't
+     * directly accessible from the ViewModel. The clean solution is:
+     *   1. ViewModel stores the URI in state
+     *   2. LaunchedEffect(uiState.pendingCameraUri) in the Screen sees the change
+     *   3. Screen launches the camera
+     *   4. ViewModel clears the URI so the effect doesn't fire twice
+     */
+    fun storePendingCameraUri(uri: android.net.Uri) {
+        _uiState.value = _uiState.value.copy(pendingCameraUri = uri)
+    }
+
+    fun clearPendingCameraUri() {
+        _uiState.value = _uiState.value.copy(pendingCameraUri = null)
+    }
+
+    fun clearCameraCapturePath() {
+        _uiState.value = _uiState.value.copy(cameraCaptureTempPath = null)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -835,5 +878,7 @@ data class NoteEditorUiState(
     val activeItalic: Boolean = false,
     val activeUnderline: Boolean = false,
     val activeStrikethrough: Boolean = false,   // ← NEW
-    val activeHeading: FormatType? = null
+    val activeHeading: FormatType? = null,
+    val cameraCaptureTempPath: String? = null, // path of temp JPEG during camera capture
+    val pendingCameraUri: android.net.Uri? = null
 )
