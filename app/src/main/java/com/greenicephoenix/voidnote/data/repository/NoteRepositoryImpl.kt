@@ -17,8 +17,6 @@ import javax.inject.Inject
  *
  * ─── ENCRYPTION LAYER ────────────────────────────────────────────────────────
  *
- * NoteEncryptionManager is injected and called at two boundaries:
- *
  * ON WRITE: Note (plain text) → encrypt fields → NoteEntity (ciphertext) → Room
  * ON READ:  Room → NoteEntity (ciphertext) → decrypt fields → Note (plain text)
  *
@@ -28,27 +26,20 @@ import javax.inject.Inject
  * ENCRYPTED FIELDS: title, content, tags (each tag individually)
  * NOT ENCRYPTED: id, folderId, timestamps, flags — metadata, not sensitive
  *
- * ─── SEARCH STRATEGY ─────────────────────────────────────────────────────────
+ * ─── VERSION 5 CHANGE ────────────────────────────────────────────────────────
  *
- * searchNotes() below does SQL LIKE on DB content — but because content is
- * encrypted, the SQL LIKE matches nothing meaningful. It is therefore
- * NOT used by SearchViewModel.
+ * moveToTrash() now records the current timestamp in trashedAt.
+ * restoreFromTrash() now clears trashedAt back to null.
  *
- * SearchViewModel correctly calls getAllNotes() instead, which returns fully
- * decrypted notes, and then filters them in-memory with Kotlin's .contains().
- * This is the correct pattern for any encrypted notes app — Standard Notes,
- * Bitwarden, and others all use the same approach.
- *
- * searchNotes() is kept in the interface and implemented here (with decryption)
- * so it is correct if anything calls it in future, but it is not the primary
- * search path.
+ * This feeds TrashCleanupWorker, which runs daily and permanently deletes
+ * notes where trashedAt is older than 30 days.
  *
  * ─── FLAG-ONLY UPDATES ───────────────────────────────────────────────────────
  *
  * togglePin, toggleArchive, moveToTrash, restoreFromTrash, moveNoteToFolder
- * all update only boolean flags or folderId — not content. They work directly
- * on NoteEntity from the DAO, bypassing decrypt → re-encrypt. This is both
- * faster and correct — the ciphertext in the DB is untouched.
+ * all update only boolean flags or timestamps — not encrypted content.
+ * They work directly on NoteEntity from the DAO, bypassing decrypt → re-encrypt.
+ * This is both faster and correct — the ciphertext in the DB is untouched.
  */
 class NoteRepositoryImpl @Inject constructor(
     private val noteDao: NoteDao,
@@ -58,21 +49,12 @@ class NoteRepositoryImpl @Inject constructor(
 
     // ─── Encryption helpers ───────────────────────────────────────────────────
 
-    /**
-     * Returns a copy of the Note with title, content, and tags encrypted.
-     * Called before every write to the database.
-     */
     private fun Note.encrypted(): Note = copy(
         title   = encryption.encrypt(title),
         content = encryption.encrypt(content),
         tags    = tags.map { encryption.encrypt(it) }
     )
 
-    /**
-     * Returns a copy of the Note with title, content, and tags decrypted.
-     * Called after every read from the database.
-     * decrypt() handles plain-text values gracefully for migration safety.
-     */
     private fun Note.decrypted(): Note = copy(
         title   = encryption.decrypt(title),
         content = encryption.decrypt(content),
@@ -109,13 +91,9 @@ class NoteRepositoryImpl @Inject constructor(
             .map { entities -> entities.toDomainModels().map { it.decrypted() } }
 
     /**
-     * SQL-based search — exists for interface completeness but is NOT the primary
-     * search path. SearchViewModel uses getAllNotes() + in-memory Kotlin filter
-     * instead, because SQL LIKE cannot match against encrypted ciphertext.
-     *
-     * This implementation decrypts results so it behaves correctly if called,
-     * but results will be empty because the SQL WHERE clause matches nothing
-     * in an encrypted database.
+     * SQL-based search — NOT the primary search path.
+     * SearchViewModel uses getAllNotes() + in-memory Kotlin filter instead,
+     * because SQL LIKE cannot match against encrypted ciphertext.
      */
     override fun searchNotes(query: String): Flow<List<Note>> =
         noteDao.searchNotes(query)
@@ -143,11 +121,21 @@ class NoteRepositoryImpl @Inject constructor(
 
     // ─── Trash ────────────────────────────────────────────────────────────────
 
+    /**
+     * Move a note to trash and record WHEN it was trashed.
+     *
+     * VERSION 5: trashedAt is now set to the current timestamp.
+     * TrashCleanupWorker reads this value to find notes older than 30 days.
+     *
+     * folderId is cleared so if the note is restored, it goes to the main
+     * list rather than back into a (possibly deleted) folder.
+     */
     override suspend fun moveToTrash(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
         noteDao.updateNote(
             note.copy(
                 isTrashed  = true,
+                trashedAt  = System.currentTimeMillis(),   // ← v5: record when trashed
                 folderId   = null,
                 isArchived = false,
                 updatedAt  = System.currentTimeMillis()
@@ -155,10 +143,21 @@ class NoteRepositoryImpl @Inject constructor(
         )
     }
 
+    /**
+     * Restore a note from trash.
+     *
+     * VERSION 5: trashedAt is cleared back to null.
+     * This ensures a re-trashed note gets a fresh 30-day timer if it
+     * is moved to trash again in the future.
+     */
     override suspend fun restoreFromTrash(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
         noteDao.updateNote(
-            note.copy(isTrashed = false, updatedAt = System.currentTimeMillis())
+            note.copy(
+                isTrashed = false,
+                trashedAt = null,                          // ← v5: clear the trash timestamp
+                updatedAt = System.currentTimeMillis()
+            )
         )
     }
 
@@ -187,11 +186,6 @@ class NoteRepositoryImpl @Inject constructor(
         )
     }
 
-    /**
-     * ARCHIVE: clear folderId, set isArchived = true → note leaves folder instantly.
-     * UNARCHIVE: set isArchived = false → note goes to main list (folderId already null).
-     * See Sprint 3 fix3 for full rationale on why folderId is cleared on archive.
-     */
     override suspend fun toggleArchive(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
         if (note.isArchived) {

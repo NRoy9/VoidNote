@@ -17,6 +17,9 @@ package com.greenicephoenix.voidnote.domain.model
  * stripped by DocumentParser.extractLogicalContent() when loading.
  * But they appear in this raw field, so all preview and isEmpty logic
  * must be marker-aware.
+ *
+ * VERSION 5 CHANGE: Added trashedAt field to track when a note was trashed.
+ * Used by TrashCleanupWorker to auto-delete notes after 30 days.
  */
 data class Note(
     val id: String,
@@ -28,6 +31,14 @@ data class Note(
     val isPinned: Boolean = false,
     val isArchived: Boolean = false,
     val isTrashed: Boolean = false,
+
+    /**
+     * Unix timestamp (millis) when this note was moved to trash.
+     * NULL if not trashed, or trashed before v5 (before this field existed).
+     * TrashCleanupWorker uses this to find notes older than 30 days.
+     */
+    val trashedAt: Long? = null,
+
     val tags: List<String> = emptyList(),
     val folderId: String? = null
 ) {
@@ -74,7 +85,6 @@ data class Note(
     fun getContentPreview(maxLength: Int = 100): String {
         val clean = logicalContent()
         return if (clean.length > maxLength) {
-            // Trim at a word boundary when possible — don't cut mid-word
             val truncated = clean.take(maxLength).trimEnd()
             "$truncated…"
         } else {
@@ -86,9 +96,6 @@ data class Note(
 
     /**
      * Returns true if this note contains at least one checklist block.
-     *
-     * Used by NoteCard to decide whether to show the checklist badge.
-     * Implemented as a simple regex search — O(n) string scan, zero DB calls.
      */
     fun hasChecklists(): Boolean {
         return TODO_MARKER_REGEX.containsMatchIn(content)
@@ -96,16 +103,6 @@ data class Note(
 
     /**
      * Returns the number of checklist blocks embedded in this note.
-     *
-     * Used by NoteCard to show "☑ 2" when a note has multiple checklists.
-     * Returns 0 if the note has no checklists.
-     *
-     * WHY COUNT MARKERS AND NOT QUERY THE DB?
-     * NoteCard is rendered for every note in the list — potentially dozens.
-     * Querying InlineBlockRepository once per note would fire N database
-     * reads every time the list refreshes, which is wasteful.
-     * Counting regex matches in the already-loaded content string is
-     * effectively free by comparison.
      */
     fun checklistBlockCount(): Int {
         return TODO_MARKER_REGEX.findAll(content).count()
@@ -115,10 +112,6 @@ data class Note(
 
     /**
      * Returns true if the note has no meaningful content at all.
-     *
-     * Updated to use logicalContent() so a note that has ONLY checklist
-     * blocks (and no text) is not considered empty — it has real content,
-     * just not in the text field.
      */
     fun isEmpty(): Boolean {
         val hasText = title.isNotBlank() || logicalContent().isNotBlank()

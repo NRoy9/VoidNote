@@ -39,9 +39,14 @@ datastore = "1.1.1"
 accompanist = "0.36.0"
 
 # Coil — image loading for Compose
-# coil-compose provides AsyncImage: handles disk loading, memory caching, and
-# error/loading states in one composable. Used to render IMAGE blocks in the editor.
 coil = "2.7.0"
+
+# WorkManager — background task scheduling (trash auto-delete)
+workManager = "2.9.1"
+
+# Hilt Work — allows @HiltWorker annotation so WorkManager workers can
+# receive injected dependencies via @AssistedInject
+hiltWork = "1.2.0"
 
 # Testing
 junit = "4.13.2"
@@ -90,6 +95,13 @@ accompanist-permissions = { group = "com.google.accompanist", name = "accompanis
 
 # Coil — Compose image loading
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# WorkManager — background tasks (trash auto-delete)
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
+
+# Hilt Work — @HiltWorker support (inject into WorkManager workers)
+androidx-hilt-work = { group = "androidx.hilt", name = "hilt-work", version.ref = "hiltWork" }
+androidx-hilt-compiler = { group = "androidx.hilt", name = "hilt-compiler", version.ref = "hiltWork" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

@@ -4,28 +4,117 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.greenicephoenix.voidnote.data.local.PreferencesManager
+import com.greenicephoenix.voidnote.data.manager.ImportExportManager
+import com.greenicephoenix.voidnote.data.security.NoteEncryptionManager
 import com.greenicephoenix.voidnote.domain.repository.FolderRepository
 import com.greenicephoenix.voidnote.domain.repository.NoteRepository
+import com.greenicephoenix.voidnote.security.BiometricLockManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import com.greenicephoenix.voidnote.security.BiometricLockManager
 import javax.inject.Inject
-import kotlinx.coroutines.flow.map
 
+// ─── Export flow state machine ─────────────────────────────────────────────────
+//
+// The export UI is driven by a state machine to avoid a tangle of Boolean flags.
+// Each state maps to a distinct UI: no dialog, format picker, password entry, etc.
+//
+// Flow for SECURE BACKUP:
+//   Idle
+//     → user taps "Export Notes"
+//   ChoosingFormat
+//     → user picks "Secure Backup"
+//   ConfirmingPassword(format = SECURE_BACKUP)
+//     → user types password, taps "Confirm"
+//   PasswordVerifying
+//     → async: verifyPasswordAgainstBlob()
+//   PasswordError(message)  OR  ReadyToExport(format = SECURE_BACKUP)
+//     → ReadyToExport: screen launches file picker → user picks save location
+//   Exporting
+//     → async: exportSecureBackup() / exportPlainTextZip()
+//   ExportSuccess(noteCount)  OR  ExportError(message)
+//     → Idle (after user dismisses)
+//
+// Flow for PLAIN TEXT ZIP:
+//   Idle → ChoosingFormat → ReadyToExport(PLAIN_TEXT_ZIP)
+//   (no password step — plain text export is intentionally unencrypted)
+
+sealed class ExportState {
+    /** No export in progress. */
+    object Idle : ExportState()
+
+    /** Format selection dialog is open. */
+    object ChoosingFormat : ExportState()
+
+    /**
+     * Password confirmation dialog is open.
+     * [format] is always SECURE_BACKUP here — plain text needs no password.
+     */
+    data class ConfirmingPassword(val format: ExportFormat) : ExportState()
+
+    /** PBKDF2 + blob verification is running (~300ms). Show spinner in dialog. */
+    object PasswordVerifying : ExportState()
+
+    /** Verification failed — show error inside the password dialog. */
+    data class PasswordError(val message: String) : ExportState()
+
+    /**
+     * Password verified (or plain text chosen — no password needed).
+     * The screen observes this state and launches the file picker.
+     * After the picker returns a URI, call startExport().
+     */
+    data class ReadyToExport(val format: ExportFormat) : ExportState()
+
+    /** ZIP is being written to disk. Show spinner. */
+    object Exporting : ExportState()
+
+    data class ExportSuccess(val noteCount: Int, val format: ExportFormat) : ExportState()
+    data class ExportError(val message: String) : ExportState()
+}
+
+// Two export formats exposed to the UI
 enum class ExportFormat {
-    JSON, TXT
+    SECURE_BACKUP,    // .vnbackup — encrypted ZIP, importable
+    PLAIN_TEXT_ZIP    // .zip — folder structure, human-readable, export-only
 }
 
 /**
- * ViewModel for Settings Screen
+ * SettingsViewModel — settings screen state and actions.
  *
- * NOW WITH PERSISTENT THEME STORAGE!
+ * ─── EXPORT ARCHITECTURE ──────────────────────────────────────────────────────
+ *
+ * WHY USE A STATE MACHINE?
+ * Export involves multiple async steps plus UI dialogs. A flat set of Boolean
+ * flags (showDialog1, showDialog2, isLoading, isError...) becomes impossible to
+ * reason about — any combination of flags can be valid or invalid, and you need
+ * to reset them all correctly on every path.
+ *
+ * A sealed class state machine has ONE active state at a time. Transitions are
+ * explicit. The UI renders a specific layout per state. Impossible states are
+ * impossible to represent.
+ *
+ * HOW THE FILE PICKER IS TRIGGERED FROM THE VIEWMODEL:
+ * Android's ActivityResultLauncher (CreateDocument) must be called from a
+ * Composable — it cannot be called from a ViewModel. So the ViewModel sets state
+ * to ReadyToExport and the screen observes it:
+ *
+ *   LaunchedEffect(exportState) {
+ *     if (exportState is ReadyToExport) {
+ *       when (exportState.format) {
+ *         SECURE_BACKUP   → secureBackupLauncher.launch(filename)
+ *         PLAIN_TEXT_ZIP  → plainTextLauncher.launch(filename)
+ *       }
+ *     }
+ *   }
+ *
+ * After the launcher returns a URI, the screen calls viewModel.startExport(uri).
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -33,300 +122,198 @@ class SettingsViewModel @Inject constructor(
     private val noteRepository: NoteRepository,
     private val folderRepository: FolderRepository,
     private val preferencesManager: PreferencesManager,
-    private val biometricLockManager: BiometricLockManager
+    private val biometricLockManager: BiometricLockManager,
+    private val importExportManager: ImportExportManager,
+    private val encryption: NoteEncryptionManager
 ) : ViewModel() {
 
-    // ── Biometric lock ────────────────────────────────────────────────────────
+    // ── Biometric ─────────────────────────────────────────────────────────────
 
-    /**
-     * Whether this device supports biometric/device-credential authentication.
-     * Checked once at ViewModel creation — hardware doesn't change at runtime.
-     * The Settings screen uses this to show/hide the biometric toggle item.
-     */
     val isBiometricAvailable: Boolean = biometricLockManager.isAvailable()
 
-    /**
-     * Reactive biometric lock preference from DataStore.
-     * Settings screen observes this to keep the Switch in sync.
-     */
     val biometricLockEnabled: StateFlow<Boolean> = preferencesManager.biometricLockFlow
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = false
-        )
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    /**
-     * Enable or disable the biometric lock.
-     * Called by the Switch onCheckedChange in SettingsScreen.
-     */
     fun setBiometricLock(enabled: Boolean) {
-        viewModelScope.launch {
-            preferencesManager.setBiometricLock(enabled)
-        }
+        viewModelScope.launch { preferencesManager.setBiometricLock(enabled) }
     }
 
-    // Current theme from DataStore
-    val currentTheme: StateFlow<AppTheme> = preferencesManager.themeFlow
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = AppTheme.DARK
-        )
+    // ── Theme ─────────────────────────────────────────────────────────────────
 
-    // UI State
+    val currentTheme: StateFlow<AppTheme> = preferencesManager.themeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppTheme.DARK)
+
+    fun setTheme(theme: AppTheme) {
+        viewModelScope.launch { preferencesManager.setTheme(theme) }
+    }
+
+    // ── UI state ──────────────────────────────────────────────────────────────
+
     val uiState: StateFlow<SettingsUiState> = combine(
         noteRepository.getNoteCount(),
         folderRepository.getFolderCount(),
         currentTheme
-    ) { noteCount, folderCount, theme ->
+    ) { noteCount: Int, folderCount: Int, theme: AppTheme ->
         SettingsUiState(
-            noteCount = noteCount,
-            folderCount = folderCount,
+            noteCount    = noteCount,
+            folderCount  = folderCount,
             currentTheme = theme,
-            appVersion = getAppVersion()
+            appVersion   = getAppVersion()
         )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = SettingsUiState()
-    )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 
-    /**
-     * Change app theme (now persists!)
-     */
-    fun setTheme(theme: AppTheme) {
-        viewModelScope.launch {
-            preferencesManager.setTheme(theme)
-        }
-    }
+    // ── Clear all data ────────────────────────────────────────────────────────
 
-    /**
-     * Clear all notes (with confirmation)
-     */
     fun clearAllNotes() {
         viewModelScope.launch {
             try {
-                // Get all notes and delete permanently
-                val allNotes = noteRepository.getAllNotes().first()
-                allNotes.forEach { note ->
+                noteRepository.getAllNotes().first().forEach { note ->
                     noteRepository.deleteNotePermanently(note.id)
                 }
-
-                // Get all folders and delete
-                val allFolders = folderRepository.getAllFolders().first()
-                allFolders.forEach { folder ->
+                folderRepository.getAllFolders().first().forEach { folder ->
                     folderRepository.deleteFolder(folder.id)
                 }
-
-                // Empty trash as well
                 noteRepository.emptyTrash()
-
-                android.util.Log.d("Settings", "All data cleared successfully")
             } catch (e: Exception) {
                 android.util.Log.e("Settings", "Failed to clear data", e)
             }
         }
     }
 
+    // ── Export state machine ──────────────────────────────────────────────────
+
+    private val _exportState = MutableStateFlow<ExportState>(ExportState.Idle)
+    val exportState: StateFlow<ExportState> = _exportState.asStateFlow()
+
+    // The format that was chosen — kept so startExport() knows which path to take
+    private var pendingExportFormat: ExportFormat? = null
+
+    // ── Export actions (called by SettingsScreen) ─────────────────────────────
+
+    /** User tapped "Export Notes" → open the format selection dialog. */
+    fun onExportTapped() {
+        _exportState.value = ExportState.ChoosingFormat
+    }
+
+    /** User dismissed any export dialog → return to idle. */
+    fun onExportDismissed() {
+        _exportState.value = ExportState.Idle
+        pendingExportFormat = null
+    }
+
     /**
-     * Export all notes
+     * User selected a format from the format picker.
+     *
+     * SECURE_BACKUP → show password confirmation dialog.
+     * PLAIN_TEXT_ZIP → go straight to ReadyToExport (no password needed
+     *                  because the output is intentionally unencrypted).
      */
-    fun exportNotes() {
+    fun onFormatSelected(format: ExportFormat) {
+        pendingExportFormat = format
+        _exportState.value = when (format) {
+            ExportFormat.SECURE_BACKUP   -> ExportState.ConfirmingPassword(format)
+            ExportFormat.PLAIN_TEXT_ZIP  -> ExportState.ReadyToExport(format)
+        }
+    }
+
+    /**
+     * User tapped "Confirm" in the password dialog.
+     *
+     * Verifies the entered password against the verification blob.
+     * On success → ReadyToExport (screen will launch the file picker).
+     * On failure → PasswordError (dialog stays open, shows error message).
+     *
+     * WHY PBKDF2 HERE INSTEAD OF A SIMPLE STRING COMPARE?
+     * The vault password is never stored — only the derived key is (wrapped in
+     * Keystore). To verify the password, we re-run PBKDF2(password + stored
+     * salt) and try to decrypt the verification blob with the resulting key.
+     * If the GCM authentication tag passes, the password produced the same key,
+     * which means it is the correct password.
+     *
+     * This takes ~300ms (same as vault setup). The spinner in the dialog
+     * prevents impatient double-taps.
+     */
+    fun onExportPasswordConfirmed(password: String) {
+        val format = pendingExportFormat ?: return
+        if (password.isBlank()) {
+            _exportState.value = ExportState.PasswordError("Please enter your vault password")
+            return
+        }
+
         viewModelScope.launch {
+            _exportState.value = ExportState.PasswordVerifying
+
             try {
-                val notes = noteRepository.getAllNotes().first()
+                val saltBase64 = preferencesManager.vaultSaltFlow.first()
+                val blobBase64 = preferencesManager.vaultVerificationBlobFlow.first()
 
-                // Create simple text export
-                val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
-                    .format(java.util.Date())
+                // verifyPasswordAgainstBlob() is a pure function — does not
+                // modify the session key or any other mutable state.
+                val isCorrect = encryption.verifyPasswordAgainstBlob(
+                    password   = password,
+                    saltBase64 = saltBase64,
+                    blobBase64 = blobBase64
+                )
 
-                val exportText = buildString {
-                    appendLine("VOID NOTE BACKUP")
-                    appendLine("Export Date: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
-                    appendLine("Total Notes: ${notes.size}")
-                    appendLine()
-                    appendLine("=" .repeat(50))
-                    appendLine()
-
-                    notes.forEach { note ->
-                        appendLine("TITLE: ${note.title.ifBlank { "Untitled" }}")
-                        appendLine("Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(note.createdAt))}")
-                        if (note.tags.isNotEmpty()) {
-                            appendLine("Tags: ${note.tags.joinToString(", ")}")
-                        }
-                        if (note.isPinned) appendLine("[PINNED]")
-                        appendLine()
-                        appendLine(note.content)
-                        appendLine()
-                        appendLine("-" .repeat(50))
-                        appendLine()
-                    }
+                _exportState.value = if (isCorrect) {
+                    ExportState.ReadyToExport(format)
+                } else {
+                    ExportState.PasswordError("Incorrect vault password. Please try again.")
                 }
 
-                // Save to file
-                val fileName = "voidnote_backup_$timestamp.txt"
-                val exportDir = java.io.File(context.getExternalFilesDir(null), "exports")
-                if (!exportDir.exists()) {
-                    exportDir.mkdirs()
+            } catch (e: Exception) {
+                _exportState.value = ExportState.PasswordError(
+                    "Verification failed: ${e.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * Called by the screen after the file picker returns a URI.
+     *
+     * This is the actual write step. State transitions:
+     *   ReadyToExport → Exporting → ExportSuccess / ExportError
+     */
+    fun startExport(contentResolver: android.content.ContentResolver, uri: android.net.Uri) {
+        val format = pendingExportFormat ?: return
+
+        viewModelScope.launch {
+            _exportState.value = ExportState.Exporting
+
+            try {
+                val noteCount = when (format) {
+                    ExportFormat.SECURE_BACKUP  ->
+                        importExportManager.exportSecureBackup(contentResolver, uri)
+                    ExportFormat.PLAIN_TEXT_ZIP ->
+                        importExportManager.exportPlainTextZip(contentResolver, uri)
                 }
 
-                val file = java.io.File(exportDir, fileName)
-                file.writeText(exportText)
-
-                android.util.Log.d("Settings", "Export successful: ${file.absolutePath}")
-
-                // Show success somehow (we'll add toast/snackbar later)
+                _exportState.value = ExportState.ExportSuccess(noteCount, format)
 
             } catch (e: Exception) {
                 android.util.Log.e("Settings", "Export failed", e)
-            }
-        }
-    }
-
-    /**
-     * Export notes to user-selected location
-     * Supports both JSON (structured) and TXT (human-readable) formats
-     */
-    fun exportNotesToUri(
-        contentResolver: android.content.ContentResolver,
-        uri: android.net.Uri,
-        format: ExportFormat
-    ) {
-        viewModelScope.launch {
-            try {
-                val notes = noteRepository.getAllNotes().first()
-                val folders = folderRepository.getAllFolders().first()
-
-                when (format) {
-                    ExportFormat.JSON -> exportAsJson(contentResolver, uri, notes, folders)
-                    ExportFormat.TXT -> exportAsTxt(contentResolver, uri, notes)
-                }
-
-                android.util.Log.d("Settings", "Export successful to: $uri (format: $format)")
-
-            } catch (e: Exception) {
-                android.util.Log.e("Settings", "Export failed", e)
-            }
-        }
-    }
-
-    /**
-     * Export as JSON - preserves all formatting and metadata
-     */
-    private suspend fun exportAsJson(
-        contentResolver: android.content.ContentResolver,
-        uri: android.net.Uri,
-        notes: List<com.greenicephoenix.voidnote.domain.model.Note>,
-        folders: List<com.greenicephoenix.voidnote.domain.model.Folder>
-    ) {
-        val backup = VoidNoteBackup(
-            version = "1.0",
-            exportDate = System.currentTimeMillis(),
-            appVersion = getAppVersion(),
-            noteCount = notes.size,
-            folderCount = folders.size,
-            notes = notes.map { note ->
-                NoteBackup(
-                    id = note.id,
-                    title = note.title,
-                    content = note.content,
-                    contentType = ContentType.RICH_TEXT,
-                    formatting = parseFormatting(note.content),  // Parse formatting from content
-                    createdAt = note.createdAt,
-                    updatedAt = note.updatedAt,
-                    isPinned = note.isPinned,
-                    isArchived = note.isArchived,
-                    tags = note.tags,
-                    folderId = note.folderId,
-                    // Future: add images, audio, drawings
-                    images = emptyList(),
-                    audioFiles = emptyList(),
-                    drawings = emptyList()
-                )
-            },
-            folders = folders.map { folder ->
-                FolderBackup(
-                    id = folder.id,
-                    name = folder.name,
-                    createdAt = folder.createdAt,
-                    parentFolderId = null  // Future: nested folders
+                _exportState.value = ExportState.ExportError(
+                    e.message ?: "Export failed. Please try again."
                 )
             }
-        )
-
-        // Serialize to JSON
-        val json = kotlinx.serialization.json.Json {
-            prettyPrint = true
-            ignoreUnknownKeys = true
-        }
-        val jsonString = json.encodeToString(VoidNoteBackup.serializer(), backup)
-
-        // Write to file
-        contentResolver.openOutputStream(uri)?.use { outputStream ->
-            outputStream.write(jsonString.toByteArray())
         }
     }
 
-    /**
-     * Export as plain text - human-readable format
-     */
-    private suspend fun exportAsTxt(
-        contentResolver: android.content.ContentResolver,
-        uri: android.net.Uri,
-        notes: List<com.greenicephoenix.voidnote.domain.model.Note>
-    ) {
-        val exportText = buildString {
-            appendLine("VOID NOTE BACKUP")
-            appendLine("Export Date: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
-            appendLine("Total Notes: ${notes.size}")
-            appendLine()
-            appendLine("=" .repeat(50))
-            appendLine()
-
-            notes.forEach { note ->
-                appendLine("TITLE: ${note.title.ifBlank { "Untitled" }}")
-                appendLine("Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(note.createdAt))}")
-                if (note.tags.isNotEmpty()) {
-                    appendLine("Tags: ${note.tags.joinToString(", ")}")
-                }
-                if (note.isPinned) appendLine("[PINNED]")
-                if (note.isArchived) appendLine("[ARCHIVED]")
-                appendLine()
-                appendLine(note.content)
-                appendLine()
-                appendLine("-" .repeat(50))
-                appendLine()
-            }
-        }
-
-        contentResolver.openOutputStream(uri)?.use { outputStream ->
-            outputStream.write(exportText.toByteArray())
-        }
+    /** Reset export state after the user has seen the success/error snackbar. */
+    fun onExportResultAcknowledged() {
+        _exportState.value = ExportState.Idle
+        pendingExportFormat = null
     }
 
-    /**
-     * Parse formatting from content
-     * TODO: Implement when we add rich text support
-     * For now, returns empty list
-     */
-    private fun parseFormatting(content: String): List<FormattingSpan> {
-        // Future: Parse markdown-style formatting
-        // **bold** → FormattingSpan(start, end, BOLD)
-        // *italic* → FormattingSpan(start, end, ITALIC)
-        // - [ ] checkbox → FormattingSpan(start, end, CHECKBOX_UNCHECKED)
-        return emptyList()
-    }
+    // ── Filename helpers (used by the file picker launchers) ──────────────────
 
-    /**
-     * Get app version from BuildConfig
-     */
-    private fun getAppVersion(): String {
-        return try {
-            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            packageInfo.versionName ?: "1.0.0"
-        } catch (e: Exception) {
-            "1.0.0"
-        }
-    }
+    fun secureBackupFilename(): String = importExportManager.generateSecureBackupFilename()
+    fun plainTextFilename(): String    = importExportManager.generatePlainTextFilename()
+
+    // ── Private ───────────────────────────────────────────────────────────────
+
+    private fun getAppVersion(): String = try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+    } catch (e: Exception) { "1.0.0" }
 }

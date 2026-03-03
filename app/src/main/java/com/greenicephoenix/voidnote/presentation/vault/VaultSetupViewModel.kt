@@ -14,19 +14,28 @@ import javax.inject.Inject
 /**
  * VaultSetupViewModel — handles first-time vault password creation.
  *
- * Called once in the app's lifetime (or after a reinstall when the user
- * needs to re-establish their vault on the new install).
+ * ─── WHAT HAPPENS ON confirmSetup() ──────────────────────────────────────────
  *
- * WHAT HAPPENS ON confirmSetup():
- * 1. Generate 16-byte random salt
- * 2. PBKDF2(password, salt, 100_000 iterations) → masterKey
- * 3. Wrap masterKey using Keystore → wrappedKey
- * 4. Store salt + wrappedKey in DataStore
- * 5. Activate masterKey in NoteEncryptionManager (session is now ready)
- * 6. Mark vault setup complete in DataStore
- * 7. Navigate to NotesList
+ *  1. Generate 16-byte random salt
+ *  2. PBKDF2(password, salt, 100_000 iterations) → masterKey       [~300ms]
+ *  3. Wrap masterKey using Keystore → wrappedKey
+ *  4. Store salt + wrappedKey in DataStore
+ *  5. Activate masterKey in NoteEncryptionManager (session is now ready)
+ *  6. Create verification blob (encrypt "void_note_verify_v1" with masterKey)  ← NEW
+ *  7. Store verification blob in DataStore                                      ← NEW
+ *  8. Mark vault setup complete in DataStore
+ *  9. Navigate forward (onComplete callback)
  *
- * After step 5, NoteRepositoryImpl can encrypt and decrypt notes immediately.
+ * ─── WHAT THE VERIFICATION BLOB IS FOR ───────────────────────────────────────
+ *
+ * When the user re-types their password at export time, we can't compare
+ * passwords directly (we never stored the password — only the derived key).
+ *
+ * Instead: PBKDF2(re-entered password + same salt) → candidate key →
+ * try to decrypt the blob → GCM auth tag passes = same key = correct password.
+ *
+ * This check happens BEFORE the file picker opens, so a typo is caught
+ * immediately with a clear error message rather than producing a corrupt backup.
  */
 @HiltViewModel
 class VaultSetupViewModel @Inject constructor(
@@ -42,7 +51,6 @@ class VaultSetupViewModel @Inject constructor(
     private val _confirmPassword = MutableStateFlow("")
     val confirmPassword: StateFlow<String> = _confirmPassword.asStateFlow()
 
-    // Controls whether password characters are visible or hidden
     private val _showPassword = MutableStateFlow(false)
     val showPassword: StateFlow<Boolean> = _showPassword.asStateFlow()
 
@@ -51,15 +59,12 @@ class VaultSetupViewModel @Inject constructor(
 
     // ── Async state ───────────────────────────────────────────────────────────
 
-    // True while PBKDF2 is running (can take ~300ms — show a spinner)
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // Non-null = setup failed, show this error to the user
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    // True once setup is complete — screen navigates away
     private val _setupComplete = MutableStateFlow(false)
     val setupComplete: StateFlow<Boolean> = _setupComplete.asStateFlow()
 
@@ -75,51 +80,27 @@ class VaultSetupViewModel @Inject constructor(
         _errorMessage.value = null
     }
 
-    fun toggleShowPassword() {
-        _showPassword.value = !_showPassword.value
-    }
+    fun toggleShowPassword() { _showPassword.value = !_showPassword.value }
 
-    fun toggleShowConfirmPassword() {
-        _showConfirmPassword.value = !_showConfirmPassword.value
-    }
+    fun toggleShowConfirmPassword() { _showConfirmPassword.value = !_showConfirmPassword.value }
 
     // ── Validation ────────────────────────────────────────────────────────────
 
-    /**
-     * Password requirements:
-     * - At least 8 characters
-     * The generate button produces passwords that meet this automatically.
-     * We don't enforce complexity on manual entry — trust the user.
-     */
     val isPasswordValid: Boolean
         get() = _password.value.length >= 8
 
     val doPasswordsMatch: Boolean
         get() = _password.value == _confirmPassword.value
 
-    /**
-     * True when the "Create Vault" button should be enabled.
-     */
     val canConfirm: Boolean
         get() = isPasswordValid && doPasswordsMatch && !_isLoading.value
 
     // ── Password generator ────────────────────────────────────────────────────
 
-    /**
-     * Fill both password fields with a generated 8-char password.
-     *
-     * Generates via NoteEncryptionManager.generateRandomPassword() which
-     * guarantees: lowercase + uppercase + digit + special character,
-     * shuffled, visually unambiguous characters only.
-     *
-     * Both fields are set to the same value so the confirm check passes
-     * automatically — the user doesn't need to type it twice.
-     */
     fun generatePassword() {
         val generated = encryption.generateRandomPassword()
         _password.value = generated
         _confirmPassword.value = generated
-        // Show the generated password so the user can see and save it
         _showPassword.value = true
         _showConfirmPassword.value = true
         _errorMessage.value = null
@@ -130,15 +111,13 @@ class VaultSetupViewModel @Inject constructor(
     /**
      * Create the vault with the entered password.
      *
-     * Runs on viewModelScope because PBKDF2 with 100,000 iterations takes
-     * ~200-400ms on a modern Android device — long enough to block the main
-     * thread and cause a jank/ANR. We move it off the main thread via the
-     * coroutine dispatcher (Hilt provides the correct scope).
+     * Runs off the main thread via viewModelScope because PBKDF2 with 100,000
+     * iterations takes ~200–400ms. The loading state shows a spinner to prevent
+     * double-taps.
      *
-     * The loading spinner prevents the user from tapping twice.
-     *
-     * @param onComplete Called on the main thread when setup is done.
-     *                   NavGraph uses this to navigate to NotesList.
+     * @param onComplete Called on the main thread when setup is fully done.
+     *                   NavGraph uses this to show the biometric offer dialog,
+     *                   then navigate to NotesList.
      */
     fun confirmSetup(onComplete: () -> Unit) {
         if (!canConfirm) return
@@ -151,26 +130,33 @@ class VaultSetupViewModel @Inject constructor(
                 val password = _password.value
 
                 // Step 1: Generate a random 16-byte salt
-                val salt = encryption.generateSalt()
+                val salt       = encryption.generateSalt()
                 val saltBase64 = encryption.encodeSalt(salt)
 
-                // Step 2: Derive the 256-bit master key from password + salt
-                // This is the slow step — PBKDF2 with 100,000 iterations
+                // Step 2: Derive the 256-bit master key — this is the slow step
                 val masterKey = encryption.deriveKey(password, salt)
 
-                // Step 3: Wrap (encrypt) the master key using Keystore
-                // The Keystore wrap key is generated here if it doesn't exist yet
+                // Step 3: Wrap the master key using the Keystore wrap key
                 val wrappedKeyBase64 = encryption.wrapAndEncode(masterKey)
 
-                // Step 4: Persist salt and wrapped key to DataStore
+                // Step 4: Persist salt + wrapped key
                 preferencesManager.setVaultSalt(saltBase64)
                 preferencesManager.setVaultWrappedKey(wrappedKeyBase64)
 
                 // Step 5: Activate the master key for this session
-                // From this point, NoteRepositoryImpl can encrypt/decrypt
+                // After this point NoteRepositoryImpl can encrypt/decrypt.
                 encryption.activateKey(masterKey)
 
-                // Step 6: Mark vault as set up (won't show setup screen again)
+                // Step 6 (NEW): Create verification blob — encrypts "void_note_verify_v1"
+                // with the now-active master key. Stored in DataStore so future export
+                // password confirmation and vault unlock checks can verify the password
+                // without re-deriving the full key.
+                val blob = encryption.createVerificationBlob()
+
+                // Step 7 (NEW): Persist the verification blob
+                preferencesManager.setVaultVerificationBlob(blob)
+
+                // Step 8: Mark vault as set up
                 preferencesManager.setVaultSetupComplete()
 
                 _setupComplete.value = true

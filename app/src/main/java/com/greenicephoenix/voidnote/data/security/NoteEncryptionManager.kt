@@ -17,41 +17,36 @@ import javax.inject.Singleton
 /**
  * NoteEncryptionManager — the single cryptographic authority for Void Note.
  *
- * ─── ENCRYPTION SCOPE (Sprint 5 update) ──────────────────────────────────────
+ * ─── NEW IN THIS SPRINT ───────────────────────────────────────────────────────
  *
- * Previously this class only encrypted text (note title, content, tags) via the
- * String-based encrypt()/decrypt() methods.
+ * TWO NEW METHODS:
  *
- * Sprint 5 adds encryptBytes()/decryptBytes() — the same AES-256-GCM algorithm
- * but operating on raw ByteArray instead of String. This is used for image files
- * (and future audio files). The same session key encrypts both text and files,
- * so the entire note — words AND images — is protected by the user's vault password.
+ * 1. createVerificationBlob()
+ *    Called once at vault setup. Encrypts the known string VERIFICATION_VALUE
+ *    with the current session key. The resulting Base64 ciphertext is stored
+ *    in DataStore via PreferencesManager.setVaultVerificationBlob().
  *
- * ─── FILE ENCRYPTION FORMAT ───────────────────────────────────────────────────
+ * 2. verifyPasswordAgainstBlob(password, saltBase64, blobBase64)
+ *    Called at export (and future: vault unlock). Derives a candidate key from
+ *    (entered password + stored salt) without touching the session key, then
+ *    tries to decrypt the blob. If the GCM authentication tag passes, the
+ *    password is correct. This is a PURE FUNCTION — it does not modify any
+ *    state.
  *
- * Encrypted files are stored as:
- *   IV[12 bytes] + GCM_ciphertext[n bytes]
+ * ─── WHY NOT SWAP THE SESSION KEY? ───────────────────────────────────────────
  *
- * Written directly to disk — no Base64 encoding (unlike text encryption which
- * uses Base64 for safe string storage). Raw bytes are more efficient for large
- * binary files.
+ * An earlier design swapped sessionKey temporarily to use the existing decrypt()
+ * method. That approach has a race condition: if another coroutine calls
+ * encrypt() or decrypt() while the session key is swapped, it would use the
+ * wrong key. By making verifyPasswordAgainstBlob() completely standalone (it
+ * calls the JCE Cipher directly without touching sessionKey), it is thread-safe.
  *
- * ─── TWO KEYS ─────────────────────────────────────────────────────────────────
+ * ─── FALLBACK FOR OLD INSTALLS ───────────────────────────────────────────────
  *
- * KEY 1 — Master Key (derived from vault password via PBKDF2)
- * Used for: encrypt/decrypt text AND encryptBytes/decryptBytes
- *
- * KEY 2 — Wrap Key (Android Keystore, hardware-backed)
- * Used for: wrapping/unwrapping the Master Key for safe DataStore storage
- *
- * ─── SECURITY PROPERTIES ─────────────────────────────────────────────────────
- *
- * - All encryption: AES-256-GCM (authenticated — detects tampering)
- * - Key derivation: PBKDF2-HMAC-SHA256, 100,000 iterations
- * - Salt: 16 bytes random, stored in DataStore + included in .vnbackup
- * - IV: 12 bytes random per call — fresh IV for every text AND every file
- * - Files never stored in gallery — written to app-private filesDir only
- * - Camera photos written directly to filesDir via FileProvider — never to DCIM
+ * If blobBase64 is empty (vault set up before this feature was added),
+ * verifyPasswordAgainstBlob() returns true for any non-empty password.
+ * This lets existing users export without being blocked. They will get the blob
+ * stored the next time they change their vault password (future feature).
  */
 @Singleton
 class NoteEncryptionManager @Inject constructor() {
@@ -66,6 +61,10 @@ class NoteEncryptionManager @Inject constructor() {
         private const val MASTER_KEY_SIZE   = 256   // bits
         private const val PBKDF2_ITERATIONS = 100_000
         private const val PBKDF2_ALGORITHM  = "PBKDF2WithHmacSHA256"
+
+        // The known plaintext encrypted to create the verification blob.
+        // Not a secret — AES-GCM's authentication tag is what makes this safe.
+        const val VERIFICATION_VALUE = "void_note_verify_v1"
     }
 
     /** Session key — null until activateKey() is called after vault unlock/setup. */
@@ -134,14 +133,85 @@ class NoteEncryptionManager @Inject constructor() {
         return (required + rest).shuffled().joinToString("")
     }
 
+    // ─── Verification blob (NEW) ──────────────────────────────────────────────
+
+    /**
+     * Encrypt VERIFICATION_VALUE with the current session key.
+     * Store the result in DataStore via PreferencesManager.setVaultVerificationBlob().
+     *
+     * Call this ONCE at vault setup, after activateKey().
+     *
+     * @throws IllegalStateException if called before the session key is loaded
+     */
+    fun createVerificationBlob(): String = encrypt(VERIFICATION_VALUE)
+
+    /**
+     * Check whether [password] matches the vault password used at setup.
+     *
+     * Algorithm:
+     *   1. Decode salt from [saltBase64]
+     *   2. PBKDF2(password, salt, 100_000 iterations) → candidateKey
+     *   3. Decode [blobBase64] → IV + ciphertext
+     *   4. AES-256-GCM decrypt(ciphertext, IV, candidateKey)
+     *   5. If decryption succeeds AND plaintext == VERIFICATION_VALUE → true
+     *      If GCM auth tag fails (wrong key) → catch → false
+     *
+     * This is a PURE function — it does NOT modify sessionKey or any other state.
+     * Safe to call from any coroutine without locking.
+     *
+     * FALLBACK: if [blobBase64] is empty (old install, no blob stored yet),
+     * returns true for any non-empty password to avoid blocking the user.
+     * They will be warned to back up their password in the export UI.
+     *
+     * @param password    The vault password the user just typed
+     * @param saltBase64  The base64 salt from DataStore (stored at vault setup)
+     * @param blobBase64  The base64 verification blob from DataStore
+     * @return            true if password is correct, false otherwise
+     */
+    fun verifyPasswordAgainstBlob(
+        password: String,
+        saltBase64: String,
+        blobBase64: String
+    ): Boolean {
+        // Fallback for users who set up the vault before this sprint
+        if (blobBase64.isEmpty()) {
+            return password.isNotEmpty()
+        }
+
+        return try {
+            // Step 1: Re-derive the candidate key from the entered password
+            val salt         = decodeSalt(saltBase64)
+            val candidateKey = deriveKey(password, salt)
+
+            // Step 2: Decode the stored blob → IV + ciphertext
+            val combined     = Base64.decode(blobBase64, Base64.NO_WRAP)
+            if (combined.size <= GCM_IV_LENGTH) return false
+
+            val iv         = combined.copyOfRange(0, GCM_IV_LENGTH)
+            val ciphertext = combined.copyOfRange(GCM_IV_LENGTH, combined.size)
+
+            // Step 3: Decrypt with the candidate key (NOT sessionKey — pure function)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, candidateKey, GCMParameterSpec(GCM_TAG_LENGTH, iv))
+            val plaintext = String(cipher.doFinal(ciphertext), Charsets.UTF_8)
+
+            // Step 4: Verify the plaintext matches exactly
+            plaintext == VERIFICATION_VALUE
+
+        } catch (e: Exception) {
+            // javax.crypto.AEADBadTagException — GCM authentication failed = wrong key
+            // Any other exception also means verification failed
+            false
+        }
+    }
+
     // ─── Text encryption (note title / content / tags) ────────────────────────
 
     /**
      * Encrypt a plaintext String → Base64(IV + ciphertext).
-     * Used for note title, content, and each tag.
      */
     fun encrypt(plaintext: String): String {
-        val key = requireKey()
+        val key    = requireKey()
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key)
 
@@ -157,7 +227,8 @@ class NoteEncryptionManager @Inject constructor() {
 
     /**
      * Decrypt a Base64(IV + ciphertext) String → plaintext.
-     * Handles legacy plain-text values gracefully (migration safety).
+     * Returns "" on wrong key; returns [ciphertext] unchanged if it is not
+     * valid Base64 (migration safety for plain-text notes from before encryption).
      */
     fun decrypt(ciphertext: String): String {
         if (ciphertext.isEmpty()) return ""
@@ -165,8 +236,8 @@ class NoteEncryptionManager @Inject constructor() {
         val key = requireKey()
 
         return try {
-            val combined       = Base64.decode(ciphertext, Base64.NO_WRAP)
-            if (combined.size <= GCM_IV_LENGTH) return ciphertext  // too short → plain text
+            val combined = Base64.decode(ciphertext, Base64.NO_WRAP)
+            if (combined.size <= GCM_IV_LENGTH) return ciphertext
 
             val iv             = combined.copyOfRange(0, GCM_IV_LENGTH)
             val encryptedBytes = combined.copyOfRange(GCM_IV_LENGTH, combined.size)
@@ -178,31 +249,15 @@ class NoteEncryptionManager @Inject constructor() {
         } catch (e: IllegalArgumentException) {
             ciphertext  // not valid Base64 → plain text from before encryption
         } catch (e: Exception) {
-            ""  // decryption failed (wrong key, tampered data)
+            ""          // GCM auth tag mismatch (wrong key or tampered data)
         }
     }
 
     // ─── Binary file encryption (images, audio) ───────────────────────────────
 
-    /**
-     * Encrypt raw file bytes (image, audio) → ByteArray ready to write to disk.
-     *
-     * Output format: IV[12 bytes] + GCM_ciphertext[n bytes]
-     *
-     * WHY NOT Base64 FOR FILES?
-     * Base64 expands data by ~33%. A 3MB photo becomes 4MB of Base64.
-     * For text (a few KB) this overhead is negligible. For binary files it
-     * wastes significant storage. Raw bytes written to .enc files are fine
-     * because file systems handle arbitrary bytes natively — unlike JSON/DB
-     * which need text-safe encoding.
-     *
-     * A fresh 12-byte IV is generated per call. Never reuse IVs.
-     *
-     * @param plainBytes  Raw bytes of the original file (JPEG, PNG, etc.)
-     * @return            IV + ciphertext — write this directly to the .enc file
-     */
+    /** Encrypt raw file bytes → IV[12] + ciphertext. Write directly to .enc file. */
     fun encryptBytes(plainBytes: ByteArray): ByteArray {
-        val key = requireKey()
+        val key    = requireKey()
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key)
 
@@ -216,17 +271,7 @@ class NoteEncryptionManager @Inject constructor() {
         return combined
     }
 
-    /**
-     * Decrypt a .enc file's bytes back to the original file bytes.
-     *
-     * Reads IV from the first 12 bytes, decrypts the rest.
-     * Called by EncryptedFileFetcher inside Coil to decrypt images on-the-fly
-     * before they are rendered.
-     *
-     * @param encryptedBytes  The full content of a .enc file (IV + ciphertext)
-     * @return                Original file bytes (JPEG, PNG, etc.), or null if
-     *                        decryption fails (wrong key, tampered file).
-     */
+    /** Decrypt a .enc file's bytes (IV[12] + ciphertext) → original bytes. */
     fun decryptBytes(encryptedBytes: ByteArray): ByteArray? {
         if (encryptedBytes.size <= GCM_IV_LENGTH) return null
 
@@ -241,7 +286,6 @@ class NoteEncryptionManager @Inject constructor() {
 
             cipher.doFinal(ciphertext)
         } catch (e: Exception) {
-            // Authentication tag mismatch (tampered) or wrong key
             null
         }
     }

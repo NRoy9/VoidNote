@@ -130,9 +130,17 @@ dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
 
     // Coil — image loading for Compose
-    // AsyncImage composable: loads from file path, handles caching, loading + error states.
-    // Used to render IMAGE blocks embedded in notes.
     implementation(libs.coil.compose)
+
+    // WorkManager — runs TrashCleanupWorker once per day to auto-delete
+    // notes that have been in the trash for more than 30 days.
+    implementation(libs.androidx.work.runtime.ktx)
+
+    // Hilt Work — enables @HiltWorker so WorkManager workers can have
+    // @Inject dependencies (NoteDao, InlineBlockDao) like any other Hilt class.
+    // Requires HiltWorkerFactory to be registered in VoidNoteApplication.
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     // Testing
     testImplementation(libs.junit)

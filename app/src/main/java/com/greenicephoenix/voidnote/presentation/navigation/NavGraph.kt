@@ -18,6 +18,7 @@ import com.greenicephoenix.voidnote.presentation.splash.SplashScreen
 import com.greenicephoenix.voidnote.presentation.trash.TrashScreen
 import com.greenicephoenix.voidnote.presentation.vault.VaultSetupScreen
 import com.greenicephoenix.voidnote.presentation.vault.VaultUnlockScreen
+import com.greenicephoenix.voidnote.presentation.vault.RestoreBackupScreen
 
 /**
  * SetupNavGraph — the complete navigation map for Void Note.
@@ -136,12 +137,16 @@ fun SetupNavGraph(navController: NavHostController) {
         // popUpTo(0) always pops everything to the graph root, regardless of
         // what names are or aren't in the stack. NotesList becomes the only
         // entry. Pressing back calls moveTaskToBack() via BackHandler. ✓
+        // CHANGE VaultSetup composable to pass onNavigateToImport:
         composable(Screen.VaultSetup.route) {
             VaultSetupScreen(
-                onVaultCreated = {
+                onVaultCreated     = {
                     navController.navigate(Screen.NotesList.route) {
-                        popUpTo(0) { inclusive = true }   // ← THE FIX
+                        popUpTo(0) { inclusive = true }
                     }
+                },
+                onNavigateToImport = {                           // ← ADD
+                    navController.navigate(Screen.RestoreBackup.route)
                 }
             )
         }
@@ -155,6 +160,18 @@ fun SetupNavGraph(navController: NavHostController) {
                 onUnlocked = {
                     navController.navigate(Screen.NotesList.route) {
                         popUpTo(0) { inclusive = true }   // ← THE FIX
+                    }
+                }
+            )
+        }
+
+        // ADD new composable after VaultUnlock:
+        composable(Screen.RestoreBackup.route) {
+            RestoreBackupScreen(
+                onNavigateBack    = { navController.popBackStack() },
+                onRestoreComplete = {
+                    navController.navigate(Screen.NotesList.route) {
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             )

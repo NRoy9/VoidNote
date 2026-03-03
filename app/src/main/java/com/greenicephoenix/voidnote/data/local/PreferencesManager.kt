@@ -18,42 +18,49 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 /**
  * PreferencesManager — DataStore wrapper for all user preferences and app state.
  *
- * DEFAULT THEME CHANGE (Sprint 4):
- * Default is now AppTheme.SYSTEM instead of AppTheme.DARK.
- * On first install (no preference stored), the app respects the OS light/dark
- * setting rather than forcing dark mode. Users who prefer dark can set it in Settings.
+ * ─── NEW: VAULT_VERIFICATION_BLOB ────────────────────────────────────────────
+ *
+ * WHAT IS IT?
+ * At vault creation, we encrypt the known string "void_note_verify_v1" with
+ * the master key → store the Base64 ciphertext in this key.
+ *
+ * WHY?
+ * PBKDF2 never fails — it always produces a key, even from a wrong password
+ * (it just produces a *different* key). Without the blob, we can't know if
+ * the password is correct until notes silently show blank. Bad UX.
+ *
+ * HOW USED?
+ * Export: user re-types password → we derive candidate key from (password +
+ * stored salt) → try to decrypt blob → GCM auth tag passes = correct password,
+ * fails = wrong password. Check happens before the file picker opens.
+ *
+ * Vault unlock (reinstall): same check, prevents silent decrypt failures.
+ *
+ * SECURITY:
+ * The plaintext "void_note_verify_v1" is not secret. AES-256-GCM makes it
+ * safe: without the exact key, no one can forge a ciphertext that passes
+ * the authentication tag check, so the blob reveals nothing.
  */
 @Singleton
 class PreferencesManager @Inject constructor(
     private val context: Context
 ) {
     companion object {
-        private val THEME_KEY                = stringPreferencesKey("app_theme")
-        private val BIOMETRIC_LOCK_KEY       = booleanPreferencesKey("biometric_lock_enabled")
-        private val LAST_SEEN_VERSION_KEY    = stringPreferencesKey("last_seen_version")
-        private val ONBOARDING_COMPLETE_KEY  = booleanPreferencesKey("onboarding_complete")
-        private val VAULT_SETUP_COMPLETE_KEY = booleanPreferencesKey("vault_setup_complete")
-        private val VAULT_SALT_KEY           = stringPreferencesKey("vault_salt")
-        private val VAULT_WRAPPED_KEY        = stringPreferencesKey("vault_wrapped_key")
+        private val THEME_KEY                   = stringPreferencesKey("app_theme")
+        private val BIOMETRIC_LOCK_KEY          = booleanPreferencesKey("biometric_lock_enabled")
+        private val LAST_SEEN_VERSION_KEY       = stringPreferencesKey("last_seen_version")
+        private val ONBOARDING_COMPLETE_KEY     = booleanPreferencesKey("onboarding_complete")
+        private val VAULT_SETUP_COMPLETE_KEY    = booleanPreferencesKey("vault_setup_complete")
+        private val VAULT_SALT_KEY              = stringPreferencesKey("vault_salt")
+        private val VAULT_WRAPPED_KEY           = stringPreferencesKey("vault_wrapped_key")
+        private val VAULT_VERIFICATION_BLOB_KEY = stringPreferencesKey("vault_verification_blob") // NEW
     }
 
     // ─── Theme ────────────────────────────────────────────────────────────────
 
-    /**
-     * Emits the current theme, defaulting to SYSTEM if nothing is stored yet.
-     *
-     * WHY SYSTEM DEFAULT?
-     * Android users have explicitly chosen their OS theme (light or dark).
-     * Overriding that choice on first launch is presumptuous and jarring.
-     * SYSTEM respects their preference from the very first frame.
-     */
     val themeFlow: Flow<AppTheme> = context.dataStore.data.map { prefs ->
-        val name = prefs[THEME_KEY] ?: AppTheme.SYSTEM.name   // ← was AppTheme.DARK
-        try {
-            AppTheme.valueOf(name)
-        } catch (e: IllegalArgumentException) {
-            AppTheme.SYSTEM                                    // ← was AppTheme.DARK
-        }
+        val name = prefs[THEME_KEY] ?: AppTheme.SYSTEM.name
+        try { AppTheme.valueOf(name) } catch (e: IllegalArgumentException) { AppTheme.SYSTEM }
     }
 
     suspend fun setTheme(theme: AppTheme) {
@@ -90,7 +97,7 @@ class PreferencesManager @Inject constructor(
         context.dataStore.edit { it[ONBOARDING_COMPLETE_KEY] = true }
     }
 
-    // ─── Vault / Encryption ───────────────────────────────────────────────────
+    // ─── Vault ────────────────────────────────────────────────────────────────
 
     val vaultSetupCompleteFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[VAULT_SETUP_COMPLETE_KEY] ?: false
@@ -114,5 +121,16 @@ class PreferencesManager @Inject constructor(
 
     suspend fun setVaultWrappedKey(wrappedKeyBase64: String) {
         context.dataStore.edit { it[VAULT_WRAPPED_KEY] = wrappedKeyBase64 }
+    }
+
+    // ─── Vault verification blob (NEW) ────────────────────────────────────────
+
+    /** Empty string = vault created before this feature (old install). */
+    val vaultVerificationBlobFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[VAULT_VERIFICATION_BLOB_KEY] ?: ""
+    }
+
+    suspend fun setVaultVerificationBlob(blobBase64: String) {
+        context.dataStore.edit { it[VAULT_VERIFICATION_BLOB_KEY] = blobBase64 }
     }
 }

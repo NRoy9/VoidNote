@@ -14,6 +14,7 @@ sealed class Screen(val route: String) {
     data object VaultSetup  : Screen("vault_setup")    // ← NEW
     data object VaultUnlock : Screen("vault_unlock")   // ← NEW
     data object NotesList   : Screen("notes_list")
+    data object RestoreBackup  : Screen("restore_backup")
 
     data object NoteEditor  : Screen("note_editor/{noteId}") {
         fun createRoute(noteId: String = "new") = "note_editor/$noteId"

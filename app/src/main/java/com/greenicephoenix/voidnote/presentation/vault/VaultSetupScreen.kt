@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -44,6 +45,7 @@ import com.greenicephoenix.voidnote.presentation.theme.Spacing
 @Composable
 fun VaultSetupScreen(
     onVaultCreated: () -> Unit,
+    onNavigateToImport: () -> Unit,
     viewModel: VaultSetupViewModel = hiltViewModel()
 ) {
     val password        by viewModel.password.collectAsState()
@@ -284,6 +286,33 @@ fun VaultSetupScreen(
                     )
                 }
             }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = Spacing.medium),
+                color    = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f)
+            )
+
+            TextButton(
+                onClick  = onNavigateToImport,
+                enabled  = !isLoading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector        = Icons.Default.Restore,
+                    contentDescription = null,
+                    modifier           = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(Spacing.small))
+                Text("Restore from existing backup")
+            }
+
+            Text(
+                text      = "Have a .vnbackup file from another device?",
+                style     = MaterialTheme.typography.labelSmall,
+                color     = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                textAlign = TextAlign.Center,
+                modifier  = Modifier.fillMaxWidth()
+            )
 
             Spacer(modifier = Modifier.height(Spacing.large))
         }
