@@ -4,14 +4,10 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -22,13 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -40,24 +30,9 @@ import com.greenicephoenix.voidnote.presentation.theme.Spacing
 /**
  * SettingsScreen
  *
- * ─── EXPORT FLOW ──────────────────────────────────────────────────────────────
- *
- * The export UI is driven by ExportState from SettingsViewModel.
- * There are NO separate Boolean flags for the export dialogs — the sealed class
- * handles all transitions and impossible states cannot be represented.
- *
- * Launching the file picker (CreateDocument) MUST happen from a Composable —
- * it cannot be called from a ViewModel. So the ViewModel emits ReadyToExport
- * and a LaunchedEffect here observes it and calls the appropriate launcher.
- *
- * Dialogs rendered based on ExportState:
- *   ChoosingFormat      → ExportFormatDialog
- *   ConfirmingPassword  → ExportPasswordDialog (with plain confirm button)
- *   PasswordVerifying   → ExportPasswordDialog (with spinner, fields disabled)
- *   PasswordError       → ExportPasswordDialog (with error message shown)
- *   Exporting           → ExportProgressDialog (non-dismissible)
- *   ExportSuccess       → success snackbar, state reset to Idle
- *   ExportError         → error snackbar, state reset to Idle
+ * Export and Import both navigate to their own dedicated screens.
+ * No export dialogs live here anymore — ExportNotesScreen owns that flow.
+ * This keeps Settings as a simple navigation hub for data management.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -66,18 +41,17 @@ fun SettingsScreen(
     onNavigateToTrash: () -> Unit = {},
     onNavigateToArchive: () -> Unit = {},
     onNavigateToChangelog: () -> Unit = {},
-    onNavigateToImport: () -> Unit = {},            // Flow B: import backup from Settings
-    onNavigateToChangePassword: () -> Unit = {},    // Change vault password
+    onNavigateToExport: () -> Unit = {},            // → ExportNotesScreen
+    onNavigateToImport: () -> Unit = {},            // → ImportBackupScreen
+    onNavigateToChangePassword: () -> Unit = {},    // → ChangeVaultPasswordScreen
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val uiState        by viewModel.uiState.collectAsState()
-    val currentTheme   by viewModel.currentTheme.collectAsState()
+    val uiState            by viewModel.uiState.collectAsState()
+    val currentTheme       by viewModel.currentTheme.collectAsState()
     val isBiometricEnabled by viewModel.biometricLockEnabled.collectAsState()
-    val exportState    by viewModel.exportState.collectAsState()
     val context = LocalContext.current
 
-    val snackbarHostState = remember { SnackbarHostState() }
-    var showThemeDialog    by remember { mutableStateOf(false) }
+    var showThemeDialog     by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
 
     // ── Permission states ─────────────────────────────────────────────────────
@@ -89,82 +63,15 @@ fun SettingsScreen(
     var hasRequestedMicFromSettings by remember { mutableStateOf(false) }
     var showSettingsMicRationale    by remember { mutableStateOf(false) }
 
-    // ── File picker launchers ─────────────────────────────────────────────────
-    // These CANNOT be called from the ViewModel — ActivityResultLauncher requires
-    // a Composable context. The ViewModel emits ReadyToExport and the
-    // LaunchedEffect below calls the correct launcher.
-
-    val secureBackupLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri ->
-        // uri is null if user cancelled the picker — reset state cleanly
-        if (uri != null) {
-            viewModel.startExport(context.contentResolver, uri)
-        } else {
-            viewModel.onExportDismissed()
-        }
-    }
-
-    val plainTextLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/zip")
-    ) { uri ->
-        if (uri != null) {
-            viewModel.startExport(context.contentResolver, uri)
-        } else {
-            viewModel.onExportDismissed()
-        }
-    }
-
-    // ── Observe ReadyToExport → trigger the correct file picker ───────────────
-    // LaunchedEffect re-runs whenever exportState changes.
-    // We only act on ReadyToExport — all other states are handled by dialogs below.
-    LaunchedEffect(exportState) {
-        if (exportState is ExportState.ReadyToExport) {
-            val state = exportState as ExportState.ReadyToExport
-            when (state.format) {
-                ExportFormat.SECURE_BACKUP  ->
-                    secureBackupLauncher.launch(viewModel.secureBackupFilename())
-                ExportFormat.PLAIN_TEXT_ZIP ->
-                    plainTextLauncher.launch(viewModel.plainTextFilename())
-            }
-        }
-    }
-
-    // ── Show snackbar for success and error outcomes ───────────────────────────
-    LaunchedEffect(exportState) {
-        when (val state = exportState) {
-            is ExportState.ExportSuccess -> {
-                val formatLabel = when (state.format) {
-                    ExportFormat.SECURE_BACKUP  -> "Secure backup"
-                    ExportFormat.PLAIN_TEXT_ZIP -> "Plain text export"
-                }
-                snackbarHostState.showSnackbar(
-                    message  = "$formatLabel saved — ${state.noteCount} notes",
-                    duration = SnackbarDuration.Short
-                )
-                viewModel.onExportResultAcknowledged()
-            }
-            is ExportState.ExportError -> {
-                snackbarHostState.showSnackbar(
-                    message  = state.message,
-                    duration = SnackbarDuration.Long
-                )
-                viewModel.onExportResultAcknowledged()
-            }
-            else -> Unit
-        }
-    }
-
     // ── Main scaffold ─────────────────────────────────────────────────────────
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
@@ -336,13 +243,15 @@ fun SettingsScreen(
                 )
             }
 
-            // ── Export ────────────────────────────────────────────────────────
+            // ── Export — navigates to ExportNotesScreen ───────────────────────
+            // Previously called viewModel.onExportTapped() which opened dialogs.
+            // Now consistently navigates to a full screen like Import does.
             item {
                 SettingsItem(
                     icon     = Icons.Default.Upload,
                     title    = "Export Notes",
                     subtitle = "Secure backup or plain text",
-                    onClick  = { viewModel.onExportTapped() }
+                    onClick  = onNavigateToExport
                 )
             }
 
@@ -358,10 +267,10 @@ fun SettingsScreen(
 
             item {
                 SettingsItem(
-                    icon         = Icons.Default.DeleteForever,
-                    title        = "Clear All Data",
-                    subtitle     = "Delete all notes and folders",
-                    onClick      = { showClearDataDialog = true },
+                    icon          = Icons.Default.DeleteForever,
+                    title         = "Clear All Data",
+                    subtitle      = "Delete all notes and folders",
+                    onClick       = { showClearDataDialog = true },
                     isDestructive = true
                 )
             }
@@ -427,42 +336,6 @@ fun SettingsScreen(
         }
     }
 
-    // ── Dialogs ───────────────────────────────────────────────────────────────
-    // Each dialog is rendered based on the current ExportState. Only one is
-    // ever visible at a time because only one ExportState is active at a time.
-
-    when (val state = exportState) {
-        is ExportState.ChoosingFormat -> {
-            ExportFormatDialog(
-                onSecureBackupSelected = { viewModel.onFormatSelected(ExportFormat.SECURE_BACKUP) },
-                onPlainTextSelected    = { viewModel.onFormatSelected(ExportFormat.PLAIN_TEXT_ZIP) },
-                onDismiss              = { viewModel.onExportDismissed() }
-            )
-        }
-
-        is ExportState.ConfirmingPassword,
-        is ExportState.PasswordVerifying,
-        is ExportState.PasswordError -> {
-            val isVerifying = state is ExportState.PasswordVerifying
-            val errorMsg    = (state as? ExportState.PasswordError)?.message
-            ExportPasswordDialog(
-                isVerifying  = isVerifying,
-                errorMessage = errorMsg,
-                onConfirm    = { password -> viewModel.onExportPasswordConfirmed(password) },
-                onDismiss    = { viewModel.onExportDismissed() }
-            )
-        }
-
-        is ExportState.Exporting -> {
-            // Non-dismissible progress dialog while ZIP is being written
-            ExportProgressDialog()
-        }
-
-        // ReadyToExport, Idle, ExportSuccess, ExportError — no dialog
-        // (ReadyToExport triggers the file picker via LaunchedEffect above)
-        else -> Unit
-    }
-
     // ── Theme dialog ──────────────────────────────────────────────────────────
     if (showThemeDialog) {
         ThemeSelectionDialog(
@@ -478,9 +351,9 @@ fun SettingsScreen(
             onDismissRequest = { showClearDataDialog = false },
             icon  = {
                 Icon(
-                    imageVector = Icons.Default.Warning,
+                    imageVector        = Icons.Default.Warning,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
+                    tint               = MaterialTheme.colorScheme.error
                 )
             },
             title = { Text("Clear All Data?") },
@@ -491,16 +364,19 @@ fun SettingsScreen(
                     Text("• All folders")
                     Text("• All tags")
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("This action cannot be undone!",
-                        color        = MaterialTheme.colorScheme.error,
-                        fontWeight   = FontWeight.Bold)
+                    Text(
+                        text       = "This action cannot be undone!",
+                        color      = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = { viewModel.clearAllNotes(); showClearDataDialog = false },
                     colors  = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error)
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
                 ) { Text("Delete Everything") }
             },
             dismissButton = {
@@ -516,8 +392,10 @@ fun SettingsScreen(
             icon  = { Icon(Icons.Default.CameraAlt, null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text("Camera Access") },
             text  = {
-                Text("Void Note uses the camera to capture photos directly into your notes.\n\n" +
-                        "Photos are encrypted immediately and never saved to your gallery.")
+                Text(
+                    "Void Note uses the camera to capture photos directly into your notes.\n\n" +
+                            "Photos are encrypted immediately and never saved to your gallery."
+                )
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -532,14 +410,17 @@ fun SettingsScreen(
         )
     }
 
+    // ── Microphone rationale dialog ───────────────────────────────────────────
     if (showSettingsMicRationale) {
         AlertDialog(
             onDismissRequest = { showSettingsMicRationale = false },
             icon  = { Icon(Icons.Default.Mic, null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text("Microphone Access") },
             text  = {
-                Text("Void Note uses the microphone to record voice notes.\n\n" +
-                        "Recordings are encrypted immediately and never stored as plain audio.")
+                Text(
+                    "Void Note uses the microphone to record voice notes.\n\n" +
+                            "Recordings are encrypted immediately and never stored as plain audio."
+                )
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -556,272 +437,17 @@ fun SettingsScreen(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXPORT DIALOGS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Step 1: User picks between Secure Backup and Plain Text ZIP.
- *
- * Secure Backup — next step is password confirmation.
- * Plain Text    — next step is the file picker directly.
- */
-@Composable
-private fun ExportFormatDialog(
-    onSecureBackupSelected: () -> Unit,
-    onPlainTextSelected: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon  = { Icon(Icons.Default.Upload, null) },
-        title = { Text("Export Notes") },
-        text  = {
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.small)) {
-
-                // ── Option 1: Secure Backup ───────────────────────────────────
-                Card(
-                    modifier  = Modifier.fillMaxWidth(),
-                    onClick   = onSecureBackupSelected,
-                    colors    = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(Spacing.medium)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.small)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint     = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text       = "Secure Backup  (.vnbackup)",
-                                style      = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text  = "Encrypted. Can be restored on any device with your vault password.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            lineHeight = 18.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text  = "Requires vault password to export.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-
-                // ── Option 2: Plain Text ZIP ──────────────────────────────────
-                Card(
-                    modifier  = Modifier.fillMaxWidth(),
-                    onClick   = onPlainTextSelected,
-                    colors    = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(Spacing.medium)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.small)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FolderOpen,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                            Text(
-                                text       = "Plain Text  (.zip)",
-                                style      = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text  = "Readable Markdown files, organized in folders. For archiving — cannot be imported back.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            lineHeight = 18.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text  = "No password required. Notes are unencrypted.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton  = {},
-        dismissButton  = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
-/**
- * Step 2 (Secure Backup only): User re-types their vault password.
- *
- * This dialog is reused for three states:
- *   ConfirmingPassword — waiting for input, confirm button enabled
- *   PasswordVerifying  — PBKDF2 running, spinner shown, fields disabled
- *   PasswordError      — error message shown, fields re-enabled for retry
- *
- * The caller (SettingsScreen) passes [isVerifying] and [errorMessage].
- *
- * WHY ASK FOR THE PASSWORD BEFORE THE FILE PICKER?
- * If we opened the file picker first and the user picked a location, then
- * found out the password was wrong, they'd need to go through the picker again.
- * Verifying password first also means we never open an output stream we won't
- * be able to fill correctly.
- */
-@Composable
-private fun ExportPasswordDialog(
-    isVerifying: Boolean,
-    errorMessage: String?,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var password by remember { mutableStateOf("") }
-    var showPassword by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = { if (!isVerifying) onDismiss() },
-        icon  = {
-            if (isVerifying) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-            } else {
-                Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.primary)
-            }
-        },
-        title = { Text("Confirm Your Vault Password") },
-        text  = {
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.small)) {
-                Text(
-                    text  = "Enter your vault password to create the backup.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                OutlinedTextField(
-                    value         = password,
-                    onValueChange = { password = it },
-                    label         = { Text("Vault Password") },
-                    singleLine    = true,
-                    enabled       = !isVerifying,
-                    isError       = errorMessage != null,
-                    supportingText = errorMessage?.let {
-                        { Text(it, color = MaterialTheme.colorScheme.error) }
-                    },
-                    visualTransformation = if (showPassword) VisualTransformation.None
-                    else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    trailingIcon   = {
-                        IconButton(
-                            onClick  = { showPassword = !showPassword },
-                            enabled  = !isVerifying
-                        ) {
-                            Icon(
-                                imageVector = if (showPassword) Icons.Default.VisibilityOff
-                                else Icons.Default.Visibility,
-                                contentDescription = if (showPassword) "Hide" else "Show"
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Reminder to keep the password safe
-                AnimatedVisibility(visible = !isVerifying) {
-                    Text(
-                        text  = "⚠ This password is needed to restore the backup on any device. " +
-                                "There is no recovery option.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        lineHeight = 16.sp
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick  = { onConfirm(password) },
-                enabled  = !isVerifying && password.isNotEmpty()
-            ) {
-                if (isVerifying) {
-                    CircularProgressIndicator(
-                        modifier    = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color       = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Text("Export")
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isVerifying
-            ) { Text("Cancel") }
-        }
-    )
-}
-
-/**
- * Non-dismissible progress dialog shown while the ZIP is being written.
- *
- * Writing a large backup with media files can take several seconds.
- * The dialog prevents navigation away and communicates that work is in progress.
- */
-@Composable
-private fun ExportProgressDialog() {
-    Dialog(
-        onDismissRequest = { /* non-dismissible */ },
-        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
-    ) {
-        Card(shape = MaterialTheme.shapes.large) {
-            Column(
-                modifier = Modifier.padding(Spacing.extraLarge),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(Spacing.medium)
-            ) {
-                CircularProgressIndicator()
-                Text(
-                    text  = "Creating backup…",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text  = "Please keep the app open.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// REUSABLE COMPOSABLES (unchanged from original)
+// REUSABLE COMPOSABLES
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun SectionHeader(text: String) {
     Text(
-        text      = text,
-        style     = MaterialTheme.typography.labelMedium,
-        color     = MaterialTheme.colorScheme.primary,
+        text       = text,
+        style      = MaterialTheme.typography.labelMedium,
+        color      = MaterialTheme.colorScheme.primary,
         fontWeight = FontWeight.Bold,
-        modifier  = Modifier.padding(horizontal = Spacing.large, vertical = Spacing.small)
+        modifier   = Modifier.padding(horizontal = Spacing.large, vertical = Spacing.small)
     )
 }
 
@@ -842,21 +468,27 @@ private fun PermissionSettingsItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.large, vertical = Spacing.medium),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.medium)
         ) {
             Icon(
-                imageVector = icon,
+                imageVector        = icon,
                 contentDescription = null,
-                tint     = if (isGranted) MaterialTheme.colorScheme.primary
+                tint               = if (isGranted) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                modifier = Modifier.size(24.dp)
+                modifier           = Modifier.size(24.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface)
-                Text(text = subtitle, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text(
+                    text  = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text  = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
             }
             if (isGranted) {
                 Icon(
@@ -895,15 +527,15 @@ private fun SettingsItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.large, vertical = Spacing.medium),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.medium)
         ) {
             Icon(
-                imageVector = icon,
+                imageVector        = icon,
                 contentDescription = null,
-                tint     = if (isDestructive) MaterialTheme.colorScheme.error
+                tint               = if (isDestructive) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                modifier = Modifier.size(24.dp)
+                modifier           = Modifier.size(24.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -947,16 +579,21 @@ private fun SettingsToggleItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.large, vertical = Spacing.medium),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.medium)
         ) {
-            Icon(icon, null,
+            Icon(
+                icon, null,
                 tint     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                modifier = Modifier.size(24.dp))
+                modifier = Modifier.size(24.dp)
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = title, style = MaterialTheme.typography.bodyLarge)
-                Text(text = subtitle, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text(
+                    text  = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
             }
             Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
         }
@@ -970,7 +607,7 @@ private fun StorageInfoCard(noteCount: Int, folderCount: Int) {
         colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(Spacing.large),
+            modifier              = Modifier.fillMaxWidth().padding(Spacing.large),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -979,8 +616,11 @@ private fun StorageInfoCard(noteCount: Int, folderCount: Int) {
                     style      = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Text(text = "Notes", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text(
+                    text  = "Notes",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
@@ -988,8 +628,11 @@ private fun StorageInfoCard(noteCount: Int, folderCount: Int) {
                     style      = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Text(text = "Folders", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text(
+                    text  = "Folders",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
             }
         }
     }
@@ -1008,16 +651,16 @@ private fun ThemeSelectionDialog(
             Column {
                 AppTheme.entries.forEach { theme ->
                     Surface(
-                        onClick   = { onThemeSelected(theme) },
-                        modifier  = Modifier.fillMaxWidth(),
-                        shape     = MaterialTheme.shapes.small,
-                        color     = if (theme == currentTheme)
+                        onClick  = { onThemeSelected(theme) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = MaterialTheme.shapes.small,
+                        color    = if (theme == currentTheme)
                             MaterialTheme.colorScheme.primaryContainer
                         else MaterialTheme.colorScheme.surface
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(Spacing.medium),
-                            verticalAlignment = Alignment.CenterVertically,
+                            modifier              = Modifier.fillMaxWidth().padding(Spacing.medium),
+                            verticalAlignment     = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
@@ -1041,7 +684,7 @@ private fun ThemeSelectionDialog(
                 }
             }
         },
-        confirmButton  = {},
-        dismissButton  = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

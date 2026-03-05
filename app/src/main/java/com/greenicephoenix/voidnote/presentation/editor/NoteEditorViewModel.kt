@@ -594,6 +594,21 @@ class NoteEditorViewModel @Inject constructor(
         scheduleAutoSave()
     }
 
+    /**
+     * Toggle between edit mode and format preview mode.
+     *
+     * PREVIEW MODE:
+     * Shows a read-only styled view of the note content with all FormatRanges
+     * rendered visually (bold is bold, headings are large, etc.).
+     * Uses the existing applyFormatting() — no new library needed.
+     *
+     * The toolbar simplifies in preview mode — only the toggle button is shown
+     * so the user can return to editing.
+     */
+    fun togglePreview() {
+        _uiState.value = _uiState.value.copy(showPreview = !_uiState.value.showPreview)
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // NOTE ACTIONS
     // ─────────────────────────────────────────────────────────────────────────
@@ -715,5 +730,8 @@ data class NoteEditorUiState(
     // Voice recording state
     val isRecording: Boolean = false,            // true while MediaRecorder is active
     val recordingElapsedMs: Long = 0L,           // elapsed recording time, updated every 100ms
-    val recordingTempPath: String? = null        // path of plain .aac during active recording
+    val recordingTempPath: String? = null,        // path of plain .aac during active recording
+
+    // Preview toggle — shows rendered formatted text instead of the editor
+    val showPreview: Boolean = false
 )

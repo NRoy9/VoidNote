@@ -43,7 +43,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.horizontalScroll
 import com.greenicephoenix.voidnote.domain.model.FormatRange
 import com.greenicephoenix.voidnote.domain.model.FormatType
 import com.greenicephoenix.voidnote.domain.model.InlineBlockType
@@ -59,6 +58,10 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
 import dagger.hilt.android.EntryPointAccessors
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 
 /**
  * Note Editor Screen.
@@ -177,11 +180,62 @@ fun NoteEditorScreen(
     var showHeadingMenu   by remember { mutableStateOf(false) }
     var showInsertSheet   by remember { mutableStateOf(false) }
 
+    // Declared here — ABOVE onNumberedListClick — because that lambda
+    // captures contentFieldValue by reference and Kotlin does not hoist vars.
     var titleFieldValue by remember {
         mutableStateOf(TextFieldValue(text = uiState.title, selection = TextRange(uiState.title.length)))
     }
     var contentFieldValue by remember {
         mutableStateOf(TextFieldValue(text = uiState.content, selection = TextRange(uiState.content.length)))
+    }
+
+    /**
+     * Numbered list insertion — runs in the screen because it needs to
+     * reposition the cursor, which lives in contentFieldValue (local state).
+     *
+     * Logic:
+     * 1. Find the start of the line where the cursor currently sits.
+     * 2. Check if that line already starts with "N. " (toggle off if so).
+     * 3. If the previous line is a numbered list item, use nextNum; else "1. ".
+     * 4. Insert the prefix, update contentFieldValue with the new cursor position,
+     *    then call viewModel.onContentChange() to trigger format adjustment + save.
+     */
+    val onNumberedListClick: () -> Unit = {
+        val text      = contentFieldValue.text
+        val cursor    = contentFieldValue.selection.start.coerceIn(0, text.length)
+        val lineStart = text.lastIndexOf('\n', cursor - 1) + 1   // 0 if no prior newline
+        val lineEnd   = text.indexOf('\n', cursor).let { if (it == -1) text.length else it }
+        val lineText  = text.substring(lineStart, lineEnd)
+
+        val existingNumPattern = Regex("""^\d+\.\s""")
+
+        if (existingNumPattern.containsMatchIn(lineText)) {
+            // ── Toggle OFF: remove the "N. " prefix ──────────────────────────
+            val prefixLen  = existingNumPattern.find(lineText)!!.value.length
+            val newText    = text.removeRange(lineStart, lineStart + prefixLen)
+            val newCursor  = (cursor - prefixLen).coerceAtLeast(lineStart)
+            contentFieldValue = TextFieldValue(
+                text      = newText,
+                selection = TextRange(newCursor)
+            )
+            viewModel.onContentChange(newText)
+        } else {
+            // ── Toggle ON: find what number to use ───────────────────────────
+            val prevLineEnd   = (lineStart - 1).coerceAtLeast(0)
+            val prevLineStart = text.lastIndexOf('\n', prevLineEnd - 1) + 1
+            val prevLine      = if (lineStart > 0) text.substring(prevLineStart, prevLineEnd) else ""
+            val prevNum       = existingNumPattern.find(prevLine)
+                ?.value?.trimEnd()?.dropLast(1)?.toIntOrNull()
+            val num    = if (prevNum != null) prevNum + 1 else 1
+            val prefix = "$num. "
+            val newText   = text.substring(0, lineStart) + prefix + text.substring(lineStart)
+            val newCursor = cursor + prefix.length
+            contentFieldValue = TextFieldValue(
+                text      = newText,
+                selection = TextRange(newCursor)
+            )
+            viewModel.onContentChange(newText)
+        }
     }
 
     LaunchedEffect(uiState.title) {
@@ -232,6 +286,7 @@ fun NoteEditorScreen(
                     activeHeading  = uiState.activeHeading,
                     hasSelection   = hasSelection,
                     showInsertSheet = showInsertSheet,
+                    showPreview    = uiState.showPreview,
                     onInsertClick  = { showInsertSheet = true },
                     onBoldClick    = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.BOLD) else viewModel.toggleActiveBold() },
                     onItalicClick  = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.ITALIC) else viewModel.toggleActiveItalic() },
@@ -240,6 +295,8 @@ fun NoteEditorScreen(
                     onHeadingClick = { showHeadingMenu = true },
                     onClearClick   = { viewModel.clearAllFormatting() },
                     onTodoClick    = { viewModel.insertTodoBlock() },
+                    onNumberedListClick = onNumberedListClick,
+                    onPreviewClick = { viewModel.togglePreview() },
                     wordCount      = contentFieldValue.text.split("\\s+".toRegex()).filter { it.isNotBlank() }.size,
                     charCount      = contentFieldValue.text.length
                 )
@@ -266,94 +323,170 @@ fun NoteEditorScreen(
             }
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = Spacing.medium)
-        ) {
-            Spacer(Modifier.height(Spacing.small))
-
-            RichTextEditor(
-                value        = titleFieldValue,
-                onValueChange = { newValue ->
-                    if (newValue.text.length <= 100) {
-                        titleFieldValue = newValue
-                        viewModel.onTitleChange(newValue.text)
-                    }
-                },
-                placeholder  = "Note title",
-                textStyle    = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp),
-                modifier     = Modifier.fillMaxWidth()
+        if (uiState.showPreview) {
+            // ── PREVIEW MODE — read-only styled view ─────────────────────────
+            // Shows the note with all FormatRanges rendered visually.
+            // Uses applyFormatting() which already lives in TextSpanUtils.kt.
+            // SelectionContainer allows the user to copy text from the preview.
+            NotePreviewPanel(
+                title          = uiState.title,
+                content        = uiState.content,
+                contentFormats = uiState.contentFormats,
+                modifier       = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
             )
-
-            Spacer(Modifier.height(Spacing.medium))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-            Spacer(Modifier.height(Spacing.medium))
-
-            RichTextEditor(
-                value        = contentFieldValue,
-                onValueChange = { newValue ->
-                    contentFieldValue = newValue
-                    viewModel.onContentChange(newValue.text)
-                },
-                placeholder  = "Start writing...",
-                textStyle    = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-                formats      = uiState.contentFormats,
-                modifier     = Modifier.fillMaxWidth().then(
-                    if (sortedBlocks.isEmpty()) Modifier.heightIn(min = 400.dp) else Modifier
-                )
-            )
-
-            if (sortedBlocks.isNotEmpty()) {
+        } else {
+            // ── EDIT MODE (existing editor) ───────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(paddingValues)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Spacing.medium)
+            ) {
                 Spacer(Modifier.height(Spacing.small))
-                sortedBlocks.forEach { block ->
-                    when (block.type) {
-                        InlineBlockType.TODO -> {
-                            TodoBlockComposable(
-                                block            = block,
-                                onToggleItem     = { itemId -> viewModel.toggleTodoItem(block.id, itemId) },
-                                onAddItem        = { viewModel.addTodoItem(block.id) },
-                                onUpdateItemText = { itemId, newText -> viewModel.updateTodoItemText(block.id, itemId, newText) },
-                                onDeleteItem     = { itemId -> viewModel.deleteTodoItem(block.id, itemId) },
-                                onDeleteBlock    = { viewModel.deleteBlock(block.id) },
-                                modifier         = Modifier.fillMaxWidth()
-                            )
-                        }
-                        InlineBlockType.IMAGE -> {
-                            ImageBlockComposable(
-                                block               = block,
-                                voidNoteImageLoader = imageLoader,
-                                onCaptionChange     = { viewModel.updateImageCaption(block.id, it) },
-                                onDeleteBlock       = { viewModel.deleteBlock(block.id) },
-                                modifier            = Modifier.fillMaxWidth()
-                            )
-                        }
-                        InlineBlockType.AUDIO -> {
-                            // AudioBlockComposable manages its own playback state locally.
-                            // It gets audioStorage and voiceRecorder from EntryPoint (passed as params)
-                            // so it can decrypt and create a MediaPlayer without a ViewModel reference.
-                            AudioBlockComposable(
-                                block         = block,
-                                audioStorage  = audioStorage,
-                                voiceRecorder = voiceRecorder,
-                                onDeleteBlock = { viewModel.deleteBlock(block.id) },
-                                modifier      = Modifier.fillMaxWidth()
-                            )
-                        }
-                        else -> {
-                            // DRAWING and any future block types — not yet implemented.
-                            // The else branch is required because InlineBlockType is an enum
-                            // and Kotlin's when must be exhaustive when used as an expression.
-                        }
-                    }
-                    Spacer(Modifier.height(Spacing.small))
-                }
-            }
 
-            Spacer(Modifier.height(200.dp))
+                RichTextEditor(
+                    value = titleFieldValue,
+                    onValueChange = { newValue ->
+                        if (newValue.text.length <= 100) {
+                            titleFieldValue = newValue
+                            viewModel.onTitleChange(newValue.text)
+                        }
+                    },
+                    placeholder = "Note title",
+                    textStyle = TextStyle(
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 32.sp
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(Spacing.medium))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                Spacer(Modifier.height(Spacing.medium))
+
+                RichTextEditor(
+                    value = contentFieldValue,
+                    onValueChange = { newValue ->
+                        val oldText = contentFieldValue.text
+                        val newText = newValue.text
+                        val cursor  = newValue.selection.start
+
+                        // Auto-continue numbered list when Enter is pressed.
+                        // Detect: text grew by exactly 1 char AND that char is \n.
+                        val handled = if (
+                            newText.length == oldText.length + 1 &&
+                            cursor > 0 &&
+                            newText[cursor - 1] == '\n'
+                        ) {
+                            // Find the line that just had Enter pressed at its end
+                            val insertedAt    = cursor - 1
+                            val prevLineStart = newText.lastIndexOf('\n', insertedAt - 1) + 1
+                            val prevLine      = newText.substring(prevLineStart, insertedAt)
+                            val numMatch      = Regex("""^(\d+)\.\s""").find(prevLine)
+                            if (numMatch != null) {
+                                // Previous line was "N. something" → insert "N+1. " on new line
+                                val nextNum = (numMatch.groupValues[1].toIntOrNull() ?: 0) + 1
+                                val prefix  = "$nextNum. "
+                                val finalText = newText.substring(0, cursor) + prefix + newText.substring(cursor)
+                                contentFieldValue = TextFieldValue(
+                                    text      = finalText,
+                                    selection = androidx.compose.ui.text.TextRange(cursor + prefix.length)
+                                )
+                                viewModel.onContentChange(finalText)
+                                true
+                            } else false
+                        } else false
+
+                        if (!handled) {
+                            contentFieldValue = newValue
+                            viewModel.onContentChange(newValue.text)
+                        }
+                    },
+                    placeholder = "Start writing...",
+                    textStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+                    formats = uiState.contentFormats,
+                    modifier = Modifier.fillMaxWidth().then(
+                        if (sortedBlocks.isEmpty()) Modifier.heightIn(min = 400.dp) else Modifier
+                    )
+                )
+
+                if (sortedBlocks.isNotEmpty()) {
+                    Spacer(Modifier.height(Spacing.small))
+                    sortedBlocks.forEach { block ->
+                        when (block.type) {
+                            InlineBlockType.TODO -> {
+                                TodoBlockComposable(
+                                    block = block,
+                                    onToggleItem = { itemId ->
+                                        viewModel.toggleTodoItem(
+                                            block.id,
+                                            itemId
+                                        )
+                                    },
+                                    onAddItem = { viewModel.addTodoItem(block.id) },
+                                    onUpdateItemText = { itemId, newText ->
+                                        viewModel.updateTodoItemText(
+                                            block.id,
+                                            itemId,
+                                            newText
+                                        )
+                                    },
+                                    onDeleteItem = { itemId ->
+                                        viewModel.deleteTodoItem(
+                                            block.id,
+                                            itemId
+                                        )
+                                    },
+                                    onDeleteBlock = { viewModel.deleteBlock(block.id) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            InlineBlockType.IMAGE -> {
+                                ImageBlockComposable(
+                                    block = block,
+                                    voidNoteImageLoader = imageLoader,
+                                    onCaptionChange = {
+                                        viewModel.updateImageCaption(
+                                            block.id,
+                                            it
+                                        )
+                                    },
+                                    onDeleteBlock = { viewModel.deleteBlock(block.id) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            InlineBlockType.AUDIO -> {
+                                // AudioBlockComposable manages its own playback state locally.
+                                // It gets audioStorage and voiceRecorder from EntryPoint (passed as params)
+                                // so it can decrypt and create a MediaPlayer without a ViewModel reference.
+                                AudioBlockComposable(
+                                    block = block,
+                                    audioStorage = audioStorage,
+                                    voiceRecorder = voiceRecorder,
+                                    onDeleteBlock = { viewModel.deleteBlock(block.id) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            else -> {
+                                // DRAWING and any future block types — not yet implemented.
+                                // The else branch is required because InlineBlockType is an enum
+                                // and Kotlin's when must be exhaustive when used as an expression.
+                            }
+                        }
+                        Spacer(Modifier.height(Spacing.small))
+                    }
+                }
+
+                Spacer(Modifier.height(200.dp))
+            }
         }
 
         // ── Heading dialog ────────────────────────────────────────────────────
@@ -522,29 +655,48 @@ private fun ToolbarSeparator() {
 private fun FormattingToolbar(
     isBoldActive: Boolean, isItalicActive: Boolean, isUnderlineActive: Boolean,
     isStrikethroughActive: Boolean, activeHeading: FormatType?, hasSelection: Boolean,
-    showInsertSheet: Boolean, onBoldClick: () -> Unit, onItalicClick: () -> Unit,
+    showInsertSheet: Boolean, showPreview: Boolean,
+    onBoldClick: () -> Unit, onItalicClick: () -> Unit,
     onUnderlineClick: () -> Unit, onStrikethroughClick: () -> Unit, onHeadingClick: () -> Unit,
     onClearClick: () -> Unit, onInsertClick: () -> Unit, onTodoClick: () -> Unit,
+    onNumberedListClick: () -> Unit, onPreviewClick: () -> Unit,
     wordCount: Int = 0, charCount: Int = 0
 ) {
     Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, tonalElevation = 0.dp) {
         Column {
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.small, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                FormatButton(isBoldActive, onBoldClick) { Icon(Icons.Default.FormatBold, "Bold", Modifier.size(18.dp), tint = if (isBoldActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
-                FormatButton(isItalicActive, onItalicClick) { Icon(Icons.Default.FormatItalic, "Italic", Modifier.size(18.dp), tint = if (isItalicActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
-                FormatButton(isUnderlineActive, onUnderlineClick) { Icon(Icons.Default.FormatUnderlined, "Underline", Modifier.size(18.dp), tint = if (isUnderlineActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
-                FormatButton(isStrikethroughActive, onStrikethroughClick) { Icon(Icons.Default.FormatStrikethrough, "Strikethrough", Modifier.size(18.dp), tint = if (isStrikethroughActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
-                ToolbarSeparator()
-                FormatButton(activeHeading != null, onHeadingClick) { Icon(Icons.Default.FormatSize, "Text size", Modifier.size(18.dp), tint = if (activeHeading != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
-                if (hasSelection) { FormatButton(false, onClearClick) { Icon(Icons.Default.FormatClear, "Clear", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface) } }
-                ToolbarSeparator()
-                FilledTonalIconButton(onClick = onInsertClick, modifier = Modifier.size(36.dp),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = if (showInsertSheet) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)) {
-                    Icon(Icons.Default.Add, "Insert", Modifier.size(18.dp), tint = if (showInsertSheet) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                // Formatting buttons hidden in preview mode — nothing to format
+                if (!showPreview) {
+                    FormatButton(isBoldActive, onBoldClick) { Icon(Icons.Default.FormatBold, "Bold", Modifier.size(18.dp), tint = if (isBoldActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                    FormatButton(isItalicActive, onItalicClick) { Icon(Icons.Default.FormatItalic, "Italic", Modifier.size(18.dp), tint = if (isItalicActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                    FormatButton(isUnderlineActive, onUnderlineClick) { Icon(Icons.Default.FormatUnderlined, "Underline", Modifier.size(18.dp), tint = if (isUnderlineActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                    FormatButton(isStrikethroughActive, onStrikethroughClick) { Icon(Icons.Default.FormatStrikethrough, "Strikethrough", Modifier.size(18.dp), tint = if (isStrikethroughActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                    ToolbarSeparator()
+                    FormatButton(activeHeading != null, onHeadingClick) { Icon(Icons.Default.FormatSize, "Text size", Modifier.size(18.dp), tint = if (activeHeading != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                    // Numbered list button — inserts "N. " prefix on current line
+                    FormatButton(false, onNumberedListClick) { Icon(Icons.Default.FormatListNumbered, "Numbered list", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface) }
+                    if (hasSelection) { FormatButton(false, onClearClick) { Icon(Icons.Default.FormatClear, "Clear", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface) } }
+                    ToolbarSeparator()
+                    FilledTonalIconButton(onClick = onInsertClick, modifier = Modifier.size(36.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = if (showInsertSheet) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)) {
+                        Icon(Icons.Default.Add, "Insert", Modifier.size(18.dp), tint = if (showInsertSheet) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                    }
                 }
                 Spacer(Modifier.weight(1f))
-                Text("${wordCount}w  ${charCount}c", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), modifier = Modifier.padding(end = 4.dp))
+                // Word/char count hidden in preview mode
+                if (!showPreview) {
+                    Text("${wordCount}w  ${charCount}c", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), modifier = Modifier.padding(end = 4.dp))
+                }
+                // Preview toggle — always visible so user can enter/exit preview
+                IconButton(onClick = onPreviewClick, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = if (showPreview) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = if (showPreview) "Exit preview" else "Preview formatting",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (showPreview) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
     }
@@ -617,6 +769,76 @@ private fun TagsSection(tags: List<String>, onAddTag: (String) -> Unit, onRemove
             confirmButton = { TextButton(onClick = { onAddTag(tagName.trim()); showAddDialog = false }, enabled = tagName.trim().isNotBlank()) { Text("Add") } },
             dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancel") } }
         )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORMAT PREVIEW PANEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Read-only preview of the note with all FormatRanges rendered visually.
+ *
+ * WHY NO MARKDOWN LIBRARY:
+ * The existing FormatRange system already tracks every bold/italic/heading.
+ * applyFormatting() converts those ranges to an AnnotatedString — the same
+ * AnnotatedString the editor renders. The preview just shows it without
+ * the editing affordances. No markdown parser, no new dependency, no conflict.
+ *
+ * SelectionContainer lets the user copy text from the preview.
+ */
+@Composable
+private fun NotePreviewPanel(
+    title: String,
+    content: String,
+    contentFormats: List<FormatRange>,
+    modifier: Modifier = Modifier
+) {
+    val annotatedContent = remember(content, contentFormats) {
+        if (contentFormats.isEmpty()) androidx.compose.ui.text.AnnotatedString(content)
+        else applyFormatting(content, contentFormats)
+    }
+
+    SelectionContainer {
+        Column(
+            modifier = modifier
+                .background(MaterialTheme.colorScheme.background)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Spacing.medium)
+        ) {
+            Spacer(Modifier.height(Spacing.medium))
+
+            // Title
+            Text(
+                text  = title.ifBlank { "Untitled Note" },
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(Spacing.medium))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            Spacer(Modifier.height(Spacing.medium))
+
+            // Formatted content
+            if (content.isBlank()) {
+                Text(
+                    text  = "Nothing written yet",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                )
+            } else {
+                Text(
+                    text  = annotatedContent,
+                    style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 26.sp),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+
+            Spacer(Modifier.height(200.dp))
+        }
     }
 }
 

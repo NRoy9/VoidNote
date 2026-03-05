@@ -22,6 +22,7 @@ import com.greenicephoenix.voidnote.presentation.vault.VaultSetupScreen
 import com.greenicephoenix.voidnote.presentation.vault.VaultUnlockScreen
 import com.greenicephoenix.voidnote.presentation.vault.RestoreBackupScreen
 import com.greenicephoenix.voidnote.presentation.tags.TagsScreen
+import com.greenicephoenix.voidnote.presentation.settings.ExportNotesScreen
 
 /**
  * SetupNavGraph — the complete navigation map for Void Note.
@@ -230,8 +231,16 @@ fun SetupNavGraph(navController: NavHostController) {
                 onNavigateToTrash         = { navController.navigate(Screen.Trash.route) },
                 onNavigateToArchive       = { navController.navigate(Screen.Archive.route) },
                 onNavigateToChangelog     = { navController.navigate(Screen.Changelog.route) },
+                onNavigateToExport         = { navController.navigate(Screen.ExportNotes.route) },
                 onNavigateToImport        = { navController.navigate(Screen.ImportBackup.route) },
                 onNavigateToChangePassword = { navController.navigate(Screen.ChangeVaultPassword.route) }
+            )
+        }
+
+        // ── Export Notes (Settings → Data Management → Export Notes) ──────────
+        composable(Screen.ExportNotes.route) {
+            ExportNotesScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
