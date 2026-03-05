@@ -66,6 +66,8 @@ fun SettingsScreen(
     onNavigateToTrash: () -> Unit = {},
     onNavigateToArchive: () -> Unit = {},
     onNavigateToChangelog: () -> Unit = {},
+    onNavigateToImport: () -> Unit = {},            // Flow B: import backup from Settings
+    onNavigateToChangePassword: () -> Unit = {},    // Change vault password
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState        by viewModel.uiState.collectAsState()
@@ -302,6 +304,15 @@ fun SettingsScreen(
                 )
             }
 
+            item {
+                SettingsItem(
+                    icon     = Icons.Default.LockReset,
+                    title    = "Change Vault Password",
+                    subtitle = "Re-encrypts all notes with a new password",
+                    onClick  = onNavigateToChangePassword
+                )
+            }
+
             item { Spacer(modifier = Modifier.height(Spacing.large)) }
 
             // ── DATA MANAGEMENT ──────────────────────────────────────────────
@@ -325,13 +336,23 @@ fun SettingsScreen(
                 )
             }
 
-            // ── Export (new — state machine driven) ──────────────────────────
+            // ── Export ────────────────────────────────────────────────────────
             item {
                 SettingsItem(
                     icon     = Icons.Default.Upload,
                     title    = "Export Notes",
                     subtitle = "Secure backup or plain text",
                     onClick  = { viewModel.onExportTapped() }
+                )
+            }
+
+            // ── Import Backup ─────────────────────────────────────────────────
+            item {
+                SettingsItem(
+                    icon     = Icons.Default.Download,
+                    title    = "Import Backup",
+                    subtitle = "Merge notes from a .vnbackup file",
+                    onClick  = onNavigateToImport
                 )
             }
 

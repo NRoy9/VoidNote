@@ -52,6 +52,23 @@ object ChangelogData {
     val entries: List<VersionEntry> = listOf(
 
         VersionEntry(
+            version     = "0.0.2-alpha",
+            releaseDate = "05 Mar 2026",
+            tagline     = "Your notes now travel with you — securely.",
+            changes     = listOf(
+                ChangeItem(ChangeType.NEW,      "Secure backup — export all notes as an encrypted .vnbackup file"),
+                ChangeItem(ChangeType.NEW,      "Restore from backup — recover your vault on a fresh install"),
+                ChangeItem(ChangeType.NEW,      "Import backup — merge notes from a backup into your existing vault"),
+                ChangeItem(ChangeType.NEW,      "Change vault password — re-encrypts all notes with a new password"),
+                ChangeItem(ChangeType.NEW,      "Image blocks — attach photos to notes from gallery or camera"),
+                ChangeItem(ChangeType.NEW,      "Audio blocks — record voice notes directly inside a note"),
+                ChangeItem(ChangeType.SECURITY, "Backup files are end-to-end encrypted — unreadable without your vault password"),
+                ChangeItem(ChangeType.SECURITY, "Password change uses atomic database transaction — no data loss if interrupted"),
+                ChangeItem(ChangeType.FIXED,    "Checklists, images and audio now correctly preserved in backup and restore"),
+                ChangeItem(ChangeType.FIXED,    "Restore button now activates correctly after selecting a backup file"),
+            )
+        ),
+        VersionEntry(
             version = "0.0.1-alpha",
             releaseDate = "28 Feb 2026",
             tagline = "First alpha — the void opens.",

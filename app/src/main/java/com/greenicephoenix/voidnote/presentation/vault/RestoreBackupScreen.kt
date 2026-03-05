@@ -59,6 +59,10 @@ fun RestoreBackupScreen(
     val isLoading        by viewModel.isLoading.collectAsState()
     val errorMessage     by viewModel.errorMessage.collectAsState()
 
+    // Derived here — Compose recomputes this whenever any of the three flows above change.
+    // Simpler and more reliable than a combine+stateIn in the ViewModel.
+    val canRestore = fileReady && password.isNotEmpty() && !isLoading
+
     // File picker — opens the system file manager filtered to .vnbackup
     // "application/octet-stream" is used because .vnbackup is a custom extension
     val filePicker = rememberLauncherForActivityResult(
@@ -265,7 +269,7 @@ fun RestoreBackupScreen(
             // ── Restore button ────────────────────────────────────────────────
             Button(
                 onClick  = { viewModel.confirmRestore(context.contentResolver, onRestoreComplete) },
-                enabled  = viewModel.canRestore,
+                enabled  = canRestore,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 if (isLoading && fileReady) {

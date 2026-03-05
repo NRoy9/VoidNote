@@ -13,6 +13,8 @@ import com.greenicephoenix.voidnote.presentation.folders.FolderNotesScreen
 import com.greenicephoenix.voidnote.presentation.folders.FoldersScreen
 import com.greenicephoenix.voidnote.presentation.notes.NotesListScreen
 import com.greenicephoenix.voidnote.presentation.search.SearchScreen
+import com.greenicephoenix.voidnote.presentation.settings.ChangeVaultPasswordScreen
+import com.greenicephoenix.voidnote.presentation.settings.ImportBackupScreen
 import com.greenicephoenix.voidnote.presentation.settings.SettingsScreen
 import com.greenicephoenix.voidnote.presentation.splash.SplashScreen
 import com.greenicephoenix.voidnote.presentation.trash.TrashScreen
@@ -222,10 +224,26 @@ fun SetupNavGraph(navController: NavHostController) {
         // ── Settings ──────────────────────────────────────────────────────────
         composable(Screen.Settings.route) {
             SettingsScreen(
-                onNavigateBack        = { navController.popBackStack() },
-                onNavigateToTrash     = { navController.navigate(Screen.Trash.route) },
-                onNavigateToArchive   = { navController.navigate(Screen.Archive.route) },
-                onNavigateToChangelog = { navController.navigate(Screen.Changelog.route) }
+                onNavigateBack            = { navController.popBackStack() },
+                onNavigateToTrash         = { navController.navigate(Screen.Trash.route) },
+                onNavigateToArchive       = { navController.navigate(Screen.Archive.route) },
+                onNavigateToChangelog     = { navController.navigate(Screen.Changelog.route) },
+                onNavigateToImport        = { navController.navigate(Screen.ImportBackup.route) },
+                onNavigateToChangePassword = { navController.navigate(Screen.ChangeVaultPassword.route) }
+            )
+        }
+
+        // ── Import Backup (Flow B — Settings → Data Management) ───────────────
+        composable(Screen.ImportBackup.route) {
+            ImportBackupScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Change Vault Password (Settings → Security) ───────────────────────
+        composable(Screen.ChangeVaultPassword.route) {
+            ChangeVaultPasswordScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

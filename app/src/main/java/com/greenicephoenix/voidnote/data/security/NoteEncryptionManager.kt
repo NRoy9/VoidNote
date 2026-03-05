@@ -290,6 +290,98 @@ class NoteEncryptionManager @Inject constructor() {
         }
     }
 
+    // ─── Explicit-key variants (Flow B import + Change Vault Password) ──────────
+    //
+    // These four methods are PURE FUNCTIONS — they use an explicit key parameter
+    // instead of sessionKey. None of them read or write sessionKey.
+    //
+    // WHY NEEDED FOR CHANGE VAULT PASSWORD:
+    //   1. Decrypt all notes with OLD session key   → use decrypt() as normal
+    //   2. Re-encrypt with NEW key                  → use encryptWithKey(newKey)
+    //   3. @Transaction DB write                    → happens BEFORE activateKey()
+    //   4. Only then activateKey(newKey)
+    //   If DB write fails: session key is still old key, DataStore unchanged. Safe.
+    //
+    // WHY NEEDED FOR FLOW B (import into existing vault):
+    //   decryptWithKey + decryptBytesWithKey: use K2 (backup key) while K1 stays active.
+
+    /**
+     * Encrypt plaintext → Base64(IV + ciphertext) using an EXPLICIT key.
+     * Used during Change Vault Password to produce new-key ciphertext before
+     * activating the new key as the session key.
+     */
+    fun encryptWithKey(plaintext: String, key: SecretKey): String {
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+
+        val iv         = cipher.iv
+        val ciphertext = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
+
+        val combined = ByteArray(iv.size + ciphertext.size)
+        System.arraycopy(iv, 0, combined, 0, iv.size)
+        System.arraycopy(ciphertext, 0, combined, iv.size, ciphertext.size)
+
+        return Base64.encodeToString(combined, Base64.NO_WRAP)
+    }
+
+    /**
+     * Encrypt raw bytes → IV[12] + ciphertext using an EXPLICIT key.
+     * Used during Change Vault Password to re-encrypt media files (.enc)
+     * with the new key before replacing the originals on disk.
+     */
+    fun encryptBytesWithKey(plainBytes: ByteArray, key: SecretKey): ByteArray {
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+
+        val iv         = cipher.iv
+        val ciphertext = cipher.doFinal(plainBytes)
+
+        val combined = ByteArray(iv.size + ciphertext.size)
+        System.arraycopy(iv, 0, combined, 0, iv.size)
+        System.arraycopy(ciphertext, 0, combined, iv.size, ciphertext.size)
+
+        return combined
+    }
+
+    /**
+     * Decrypt Base64(IV + ciphertext) → plaintext using an EXPLICIT key.
+     * Used in Flow B (import into existing vault) to decrypt backup notes
+     * encrypted with K2 while K1 (session key) remains active.
+     */
+    fun decryptWithKey(ciphertext: String, key: SecretKey): String {
+        if (ciphertext.isEmpty()) return ""
+        return try {
+            val combined = Base64.decode(ciphertext, Base64.NO_WRAP)
+            if (combined.size <= GCM_IV_LENGTH) return ciphertext
+            val iv             = combined.copyOfRange(0, GCM_IV_LENGTH)
+            val encryptedBytes = combined.copyOfRange(GCM_IV_LENGTH, combined.size)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH, iv))
+            String(cipher.doFinal(encryptedBytes), Charsets.UTF_8)
+        } catch (e: IllegalArgumentException) {
+            ciphertext  // not valid Base64 → treat as plain text (migration safety)
+        } catch (e: Exception) {
+            ""          // GCM auth tag mismatch — wrong key
+        }
+    }
+
+    /**
+     * Decrypt raw encrypted bytes (IV[12] + ciphertext) → original bytes using an EXPLICIT key.
+     * Used in Flow B and Change Vault Password for media file re-encryption.
+     */
+    fun decryptBytesWithKey(encryptedBytes: ByteArray, key: SecretKey): ByteArray? {
+        if (encryptedBytes.size <= GCM_IV_LENGTH) return null
+        return try {
+            val iv         = encryptedBytes.copyOfRange(0, GCM_IV_LENGTH)
+            val ciphertext = encryptedBytes.copyOfRange(GCM_IV_LENGTH, encryptedBytes.size)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH, iv))
+            cipher.doFinal(ciphertext)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     // ─── Salt helpers ─────────────────────────────────────────────────────────
 
     fun generateSalt(): ByteArray {

@@ -116,6 +116,20 @@ interface NoteDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertNote(note: NoteEntity)
 
+    /**
+     * Bulk insert/replace notes in a single atomic database transaction.
+     *
+     * WHY @Transaction HERE:
+     * During Change Vault Password, all notes must be re-encrypted and written
+     * in one atomic operation. If the process is killed halfway through:
+     *   WITHOUT @Transaction: some notes encrypted with new key, some with old key → unreadable
+     *   WITH @Transaction:    Room rolls back every write → old-key ciphertext intact → app works
+     *
+     * OnConflictStrategy.REPLACE means if a note ID already exists (it always will
+     * during password change), the existing row is replaced with the new one.
+     * This is safe because we are replacing with newly re-encrypted content.
+     */
+    @Transaction
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertNotes(notes: List<NoteEntity>)
 

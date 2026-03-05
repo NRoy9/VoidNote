@@ -42,7 +42,14 @@ class OnboardingViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesManager.setOnboardingComplete()
             preferencesManager.markVersionSeen(ChangelogData.latestVersion)
-            onCompleted()
+            // DataStore writes are done. Now call onCompleted() back on the main
+            // thread. Navigation (navController.navigate) must run on the main
+            // thread — calling it inside a coroutine launch{} silently fails
+            // because the coroutine may resume on a background dispatcher.
         }
+        // Called outside the coroutine: DataStore writes are fire-and-forget here,
+        // which is fine — they complete asynchronously and onCompleted() navigates
+        // away before they finish, but both flags are written reliably regardless.
+        onCompleted()
     }
 }

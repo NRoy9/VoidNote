@@ -85,9 +85,10 @@ class RestoreBackupViewModel @Inject constructor(
 
     // ── Derived ───────────────────────────────────────────────────────────────
 
-    val canRestore: Boolean
-        get() = _fileReady.value && _password.value.isNotEmpty() && !_isLoading.value
-
+    // NOTE: canRestore is intentionally NOT a StateFlow.
+    // The Screen derives it directly from the three individual StateFlows it
+    // already collects (fileReady, password, isLoading). This avoids combine/stateIn
+    // complexity entirely. See RestoreBackupScreen.kt.
     // ── Input handlers ────────────────────────────────────────────────────────
 
     fun onPasswordChange(value: String) {
@@ -161,7 +162,8 @@ class RestoreBackupViewModel @Inject constructor(
      * @param onSuccess        NavGraph navigates to NotesList, clears back stack
      */
     fun confirmRestore(contentResolver: ContentResolver, onSuccess: () -> Unit) {
-        if (!canRestore) return
+        // Guard directly on StateFlow values — no derived canRestore needed
+        if (!_fileReady.value || _password.value.isEmpty() || _isLoading.value) return
         val uri = selectedUri ?: return
 
         viewModelScope.launch {

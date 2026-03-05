@@ -24,7 +24,9 @@ sealed class Screen(val route: String) {
         fun createRoute(folderId: String) = "folder_notes/$folderId"
     }
 
-    data object Settings    : Screen("settings")
+    data object Settings            : Screen("settings")
+    data object ImportBackup        : Screen("import_backup")           // Settings → Data Management → Import Backup
+    data object ChangeVaultPassword : Screen("change_vault_password")   // Settings → Security → Change Password
     data object Search      : Screen("search")
     data object Folders     : Screen("folders")
     data object Tags        : Screen("tags")

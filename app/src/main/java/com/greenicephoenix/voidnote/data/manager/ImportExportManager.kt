@@ -427,57 +427,64 @@ class ImportExportManager @Inject constructor(
                 }
             }
 
-            // ── 8b. Import notes ──────────────────────────────────────────────
+            // ── 8b. Import notes + blocks ─────────────────────────────────────
+            android.util.Log.d("VoidNoteImport", "Backup contains ${backup.notes.size} notes")
+            var totalBlocksInBackup = 0
+            backup.notes.forEach { totalBlocksInBackup += it.inlineBlocks.size }
+            android.util.Log.d("VoidNoteImport", "Backup contains $totalBlocksInBackup total blocks")
+
             for (noteBackup in backup.notes) {
+                android.util.Log.d("VoidNoteImport",
+                    "Note ${noteBackup.id}: ${noteBackup.inlineBlocks.size} blocks in backup, " +
+                            "alreadyExists=${noteBackup.id in existingNoteIds}")
+
                 if (noteBackup.id !in existingNoteIds) {
-                    // Notes are inserted with their encrypted ciphertext as-is.
-                    // The session key (just activated above) will decrypt them
-                    // correctly because it was derived from the same password + salt.
-                    //
-                    // contentFormats = emptyList<FormatRange>()
-                    //   The type argument MUST be explicit — see ImportExportManager
-                    //   comments in previous sessions for the full explanation.
-                    //
-                    // trashedAt is intentionally NOT set. It defaults to null in
-                    //   NoteEntity (Long? = null). Restored notes should start a
-                    //   fresh 30-day trash window rather than inheriting an old
-                    //   timestamp. Not referencing trashedAt also ensures this
-                    //   file compiles against both pre-v5 and v5 NoteEntity.
                     noteDao.insertNote(
                         NoteEntity(
                             id             = noteBackup.id,
-                            title          = noteBackup.title,    // encrypted as-is
-                            content        = noteBackup.content,  // encrypted as-is
+                            title          = noteBackup.title,
+                            content        = noteBackup.content,
                             contentFormats = emptyList<FormatRange>(),
                             createdAt      = noteBackup.createdAt,
                             updatedAt      = noteBackup.updatedAt,
                             isPinned       = noteBackup.isPinned,
                             isArchived     = noteBackup.isArchived,
                             isTrashed      = noteBackup.isTrashed,
-                            tags           = noteBackup.tags,    // encrypted as-is
+                            tags           = noteBackup.tags,
                             folderId       = noteBackup.folderId
                         )
                     )
                     notesImported++
-
-                    for (blockBackup in noteBackup.inlineBlocks) {
-                        if (blockBackup.id !in existingBlockIds) {
-                            inlineBlockDao.insertBlock(
-                                InlineBlockEntity(
-                                    id        = blockBackup.id,
-                                    noteId    = blockBackup.noteId,
-                                    type      = blockBackup.type,
-                                    payload   = blockBackup.payload,
-                                    createdAt = blockBackup.createdAt
-                                )
-                            )
-                            blocksImported++
-                        }
-                    }
                 } else {
                     skipped++
                 }
+
+                // ── ALWAYS import blocks, regardless of whether the note was new ──
+                // If the note existed but blocks were lost (fresh install, migration),
+                // we still want to restore the blocks. Per-block ID check prevents duplicates.
+                for (blockBackup in noteBackup.inlineBlocks) {
+                    if (blockBackup.id !in existingBlockIds) {
+                        inlineBlockDao.insertBlock(
+                            InlineBlockEntity(
+                                id        = blockBackup.id,
+                                noteId    = blockBackup.noteId,
+                                type      = blockBackup.type,
+                                payload   = blockBackup.payload,
+                                createdAt = blockBackup.createdAt
+                            )
+                        )
+                        blocksImported++
+                        android.util.Log.d("VoidNoteImport",
+                            "  Inserted block ${blockBackup.id} type=${blockBackup.type}")
+                    } else {
+                        android.util.Log.d("VoidNoteImport",
+                            "  Skipped block ${blockBackup.id} (already exists)")
+                    }
+                }
             }
+
+            android.util.Log.d("VoidNoteImport",
+                "Import done: $notesImported notes, $blocksImported blocks inserted, $skipped skipped")
 
             // ── 8c. Restore media files ───────────────────────────────────────
             val imageDir = File(context.filesDir, "images").also { it.mkdirs() }
@@ -519,6 +526,150 @@ class ImportExportManager @Inject constructor(
                 skippedDuplicates  = skipped
             )
 
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    // ─── FLOW B: Import into existing vault (Settings → Import Backup) ───────────
+
+    /**
+     * Merge a .vnbackup into an already-unlocked vault.
+     * K1 = current session key (stays active). K2 = derived from backup password (in-memory only).
+     * Notes: decrypt(K2) → encrypt(K1) → insert. K1 is NEVER replaced.
+     */
+    suspend fun importIntoExistingVault(
+        contentResolver: ContentResolver,
+        uri: Uri,
+        enteredPassword: String
+    ): ImportResult {
+        val tempDir = File(context.cacheDir, "import_b_${System.currentTimeMillis()}")
+        tempDir.mkdirs()
+        try {
+            var backupJson: String? = null
+            val mediaFiles = mutableMapOf<String, File>()
+
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                java.util.zip.ZipInputStream(inputStream).use { zip ->
+                    var entry = zip.nextEntry
+                    while (entry != null) {
+                        when {
+                            entry.name == "backup.json" ->
+                                backupJson = zip.readBytes().toString(Charsets.UTF_8)
+                            entry.name.startsWith("media/") && entry.name.endsWith(".enc") -> {
+                                val fileName = entry.name.removePrefix("media/")
+                                val tempFile = File(tempDir, fileName)
+                                FileOutputStream(tempFile).use { zip.copyTo(it) }
+                                mediaFiles[fileName] = tempFile
+                            }
+                        }
+                        zip.closeEntry(); entry = zip.nextEntry
+                    }
+                }
+            } ?: return ImportResult(0, 0, 0, 0, 0, error = "Could not open backup file")
+
+            if (backupJson == null)
+                return ImportResult(0, 0, 0, 0, 0, error = "Invalid backup: backup.json missing")
+
+            val backup = try {
+                json.decodeFromString(VoidNoteBackup.serializer(), backupJson!!)
+            } catch (e: Exception) {
+                return ImportResult(0, 0, 0, 0, 0, error = "Corrupted backup.json: ${e.message}")
+            }
+
+            // Derive K2 in-memory — NEVER set as session key
+            val backupSalt = encryption.decodeSalt(backup.salt)
+            val k2         = encryption.deriveKey(enteredPassword, backupSalt)
+
+            val existingNotes     = noteDao.getAllNotesWithTrash()
+            val existingNoteIds   = existingNotes.mapTo(HashSet()) { it.id }
+            val existingFolderIds = folderDao.getAllFoldersOnce().mapTo(HashSet()) { it.id }
+            val existingBlockIds  = inlineBlockDao.getAllBlocksOnce().mapTo(HashSet()) { it.id }
+            val existingContentById = existingNotes.associate { it.id to it.content }
+
+            var notesImported = 0; var foldersImported = 0
+            var blocksImported = 0; var mediaRestored = 0; var skipped = 0
+
+            for (folder in backup.folders) {
+                if (folder.id !in existingFolderIds) {
+                    folderDao.insertFolder(FolderEntity(
+                        id = folder.id, name = folder.name,
+                        parentFolderId = folder.parentFolderId,
+                        createdAt = folder.createdAt, updatedAt = folder.createdAt
+                    ))
+                    foldersImported++
+                }
+            }
+
+            for (noteBackup in backup.notes) {
+                val targetNoteId: String
+                when {
+                    noteBackup.id !in existingNoteIds -> {
+                        val plainTitle   = encryption.decryptWithKey(noteBackup.title, k2)
+                        val plainContent = encryption.decryptWithKey(noteBackup.content, k2)
+                        val plainTags    = noteBackup.tags.map { encryption.decryptWithKey(it, k2) }
+                        noteDao.insertNote(NoteEntity(
+                            id = noteBackup.id,
+                            title          = encryption.encrypt(plainTitle),
+                            content        = encryption.encrypt(plainContent),
+                            contentFormats = emptyList<FormatRange>(),
+                            createdAt = noteBackup.createdAt, updatedAt = noteBackup.updatedAt,
+                            isPinned = noteBackup.isPinned, isArchived = noteBackup.isArchived,
+                            isTrashed = noteBackup.isTrashed,
+                            tags = plainTags.map { encryption.encrypt(it) },
+                            folderId = noteBackup.folderId
+                        ))
+                        notesImported++; targetNoteId = noteBackup.id
+                    }
+                    existingContentById[noteBackup.id] != noteBackup.content -> {
+                        val newId = java.util.UUID.randomUUID().toString()
+                        val plainTitle   = encryption.decryptWithKey(noteBackup.title, k2)
+                        val plainContent = encryption.decryptWithKey(noteBackup.content, k2)
+                        val plainTags    = noteBackup.tags.map { encryption.decryptWithKey(it, k2) }
+                        noteDao.insertNote(NoteEntity(
+                            id = newId,
+                            title          = encryption.encrypt("$plainTitle (Restored)"),
+                            content        = encryption.encrypt(plainContent),
+                            contentFormats = emptyList<FormatRange>(),
+                            createdAt = noteBackup.createdAt, updatedAt = System.currentTimeMillis(),
+                            isPinned = false, isArchived = false, isTrashed = false,
+                            tags = plainTags.map { encryption.encrypt(it) },
+                            folderId = noteBackup.folderId
+                        ))
+                        notesImported++; targetNoteId = newId
+                    }
+                    else -> { skipped++; targetNoteId = noteBackup.id }
+                }
+
+                for (blockBackup in noteBackup.inlineBlocks) {
+                    if (blockBackup.id !in existingBlockIds) {
+                        inlineBlockDao.insertBlock(InlineBlockEntity(
+                            id = blockBackup.id, noteId = targetNoteId,
+                            type = blockBackup.type, payload = blockBackup.payload,
+                            createdAt = blockBackup.createdAt
+                        ))
+                        blocksImported++
+                    }
+                }
+            }
+
+            val imageDir = File(context.filesDir, "images").also { it.mkdirs() }
+            val audioDir = File(context.filesDir, "audio").also  { it.mkdirs() }
+            for ((fileName, tempFile) in mediaFiles) {
+                val isAudio = backup.notes.any { n -> n.inlineBlocks.any { b -> b.type == "AUDIO" && b.payload.contains(fileName) } }
+                val targetFile = File(if (isAudio) audioDir else imageDir, fileName)
+                if (!targetFile.exists()) {
+                    try {
+                        val plain = encryption.decryptBytesWithKey(tempFile.readBytes(), k2) ?: continue
+                        targetFile.writeBytes(encryption.encryptBytes(plain))
+                        mediaRestored++
+                    } catch (e: Exception) {
+                        android.util.Log.e("VoidNoteImport", "Media re-encrypt failed: $fileName", e)
+                    }
+                }
+            }
+
+            return ImportResult(notesImported, foldersImported, blocksImported, mediaRestored, skipped)
         } finally {
             tempDir.deleteRecursively()
         }

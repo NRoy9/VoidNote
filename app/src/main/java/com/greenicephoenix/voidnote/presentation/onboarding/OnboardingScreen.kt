@@ -76,25 +76,6 @@ fun OnboardingScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
 
-        // ── Skip button — top-right, hidden on the last page ──────────────────
-        // Skipping always completes onboarding and routes to VaultSetup.
-        AnimatedVisibility(
-            visible  = !isLastPage,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(Spacing.medium),
-            enter = fadeIn(),
-            exit  = fadeOut()
-        ) {
-            TextButton(onClick = { viewModel.markOnboardingComplete(onCompleted) }) {
-                Text(
-                    text  = "Skip",
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
-
         // ── Pager ──────────────────────────────────────────────────────────────
         // HorizontalPager handles swipe gestures between pages automatically.
         // The button below is the tap-based navigation alternative.
