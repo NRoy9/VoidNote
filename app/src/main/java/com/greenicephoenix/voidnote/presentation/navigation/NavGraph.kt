@@ -21,6 +21,7 @@ import com.greenicephoenix.voidnote.presentation.trash.TrashScreen
 import com.greenicephoenix.voidnote.presentation.vault.VaultSetupScreen
 import com.greenicephoenix.voidnote.presentation.vault.VaultUnlockScreen
 import com.greenicephoenix.voidnote.presentation.vault.RestoreBackupScreen
+import com.greenicephoenix.voidnote.presentation.tags.TagsScreen
 
 /**
  * SetupNavGraph — the complete navigation map for Void Note.
@@ -194,7 +195,8 @@ fun SetupNavGraph(navController: NavHostController) {
                 onNavigateToFolders     = { navController.navigate(Screen.Folders.route) },
                 onNavigateToFolderNotes = { folderId ->
                     navController.navigate(Screen.FolderNotes.createRoute(folderId))
-                }
+                },
+                onNavigateToTags        = { navController.navigate(Screen.Tags.route) }
             )
         }
 
@@ -272,7 +274,12 @@ fun SetupNavGraph(navController: NavHostController) {
 
         // ── Tags ──────────────────────────────────────────────────────────────
         composable(Screen.Tags.route) {
-            // TODO: TagsScreen — future sprint
+            TagsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNoteClick    = { noteId ->
+                    navController.navigate(Screen.NoteEditor.createRoute(noteId))
+                }
+            )
         }
 
         // ── Trash ─────────────────────────────────────────────────────────────
