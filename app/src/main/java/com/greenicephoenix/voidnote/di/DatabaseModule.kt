@@ -2,8 +2,11 @@ package com.greenicephoenix.voidnote.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.greenicephoenix.voidnote.data.local.PreferencesManager
 import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase
+import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRATION_5_6
 import com.greenicephoenix.voidnote.data.local.dao.FolderDao
 import com.greenicephoenix.voidnote.data.local.dao.InlineBlockDao
 import com.greenicephoenix.voidnote.data.local.dao.NoteDao
@@ -18,19 +21,40 @@ import javax.inject.Singleton
 /**
  * DatabaseModule — Hilt DI module for all data-layer singletons.
  *
- * SPRINT 4: NoteEncryptionManager added.
+ * SPRINT 4 CHANGES:
+ * 1. fallbackToDestructiveMigration() REMOVED → replaced with addMigrations().
+ *    User data is now safe across app updates.
  *
- * It is provided explicitly (rather than relying on @Inject constructor auto-binding)
- * so it appears alongside all other data-layer singletons in one visible place,
- * and so future constructor parameters (if any) are easy to add here.
+ * 2. Foreign key enforcement ADDED via addCallback().
+ *    SQLite ignores foreign key constraints by default. The PRAGMA foreign_keys = ON
+ *    command must be run on every new database connection. The callback fires
+ *    once per connection open, which is the correct place to do this.
  *
- * CRITICAL: NoteEncryptionManager must be @Singleton.
- * It holds the session key in memory. Multiple instances = multiple separate
- * in-memory key references = one instance encrypted data the other can't decrypt.
+ * WHY FOREIGN KEYS MATTER FOR VOID NOTE:
+ * notes.folderId references folders.id. Without FK enforcement, deleting a
+ * folder leaves notes with a folderId pointing to nothing (orphan notes).
+ * With FK enforcement + CASCADE rules on the DAO, Room enforces referential
+ * integrity at the SQLite level — not just in application logic.
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
+
+    /**
+     * Callback that enables SQLite foreign key enforcement on every connection.
+     *
+     * WHY onOpen() and not onCreate()?
+     * PRAGMA foreign_keys is a per-connection setting — it resets to OFF every
+     * time SQLite opens a new connection to the database file. onOpen() fires
+     * on every open (including the very first), so FK enforcement is always on.
+     * onCreate() only fires when the DB file is first created — useless here.
+     */
+    private val foreignKeyCallback = object : RoomDatabase.Callback() {
+        override fun onOpen(db: SupportSQLiteDatabase) {
+            super.onOpen(db)
+            db.execSQL("PRAGMA foreign_keys = ON")
+        }
+    }
 
     @Provides
     @Singleton
@@ -42,7 +66,14 @@ object DatabaseModule {
             VoidNoteDatabase::class.java,
             VoidNoteDatabase.DATABASE_NAME
         )
-            .fallbackToDestructiveMigration()
+            // ── SPRINT 4: Migration chain replaces destructive fallback ──
+            // Add new migrations here as you create them in VoidNoteDatabase.kt.
+            // Order doesn't matter — Room picks the right one automatically.
+            .addMigrations(MIGRATION_5_6)
+
+            // ── SPRINT 4: Enable SQLite foreign key enforcement ──
+            .addCallback(foreignKeyCallback)
+
             .build()
     }
 
