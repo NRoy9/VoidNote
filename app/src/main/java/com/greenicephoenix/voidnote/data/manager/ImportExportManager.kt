@@ -148,9 +148,11 @@ class ImportExportManager @Inject constructor(
                 // trashedAt not referenced — NoteEntity may or may not have this
                 // field depending on which DB version is installed. It defaults
                 // to null on import, which is the correct behaviour for restored notes.
-                tags         = entity.tags,     // ← already encrypted Base64 list
-                folderId     = entity.folderId,
-                inlineBlocks = (blocksByNote[entity.id] ?: emptyList()).map { block ->
+                tags           = entity.tags,           // ← already encrypted Base64 list
+                folderId       = entity.folderId,
+                // contentFormats: indices + enum only, no sensitive content, not encrypted
+                contentFormats = entity.contentFormats,
+                inlineBlocks   = (blocksByNote[entity.id] ?: emptyList()).map { block ->
                     InlineBlockBackup(
                         id        = block.id,
                         noteId    = block.noteId,
@@ -444,7 +446,9 @@ class ImportExportManager @Inject constructor(
                             id             = noteBackup.id,
                             title          = noteBackup.title,
                             content        = noteBackup.content,
-                            contentFormats = emptyList<FormatRange>(),
+                            // Restored from backup — pre-Sprint 4 backups default to
+                            // emptyList() via the NoteBackup field default, correct behaviour.
+                            contentFormats = noteBackup.contentFormats,
                             createdAt      = noteBackup.createdAt,
                             updatedAt      = noteBackup.updatedAt,
                             isPinned       = noteBackup.isPinned,
@@ -612,7 +616,8 @@ class ImportExportManager @Inject constructor(
                             id = noteBackup.id,
                             title          = encryption.encrypt(plainTitle),
                             content        = encryption.encrypt(plainContent),
-                            contentFormats = emptyList<FormatRange>(),
+                            // Flow B: formats are plain indices, no decryption needed
+                            contentFormats = noteBackup.contentFormats,
                             createdAt = noteBackup.createdAt, updatedAt = noteBackup.updatedAt,
                             isPinned = noteBackup.isPinned, isArchived = noteBackup.isArchived,
                             isTrashed = noteBackup.isTrashed,
@@ -630,7 +635,7 @@ class ImportExportManager @Inject constructor(
                             id = newId,
                             title          = encryption.encrypt("$plainTitle (Restored)"),
                             content        = encryption.encrypt(plainContent),
-                            contentFormats = emptyList<FormatRange>(),
+                            contentFormats = noteBackup.contentFormats,
                             createdAt = noteBackup.createdAt, updatedAt = System.currentTimeMillis(),
                             isPinned = false, isArchived = false, isTrashed = false,
                             tags = plainTags.map { encryption.encrypt(it) },

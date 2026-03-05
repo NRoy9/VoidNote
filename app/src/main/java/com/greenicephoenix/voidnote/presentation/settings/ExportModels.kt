@@ -1,5 +1,6 @@
 package com.greenicephoenix.voidnote.presentation.settings
 
+import com.greenicephoenix.voidnote.domain.model.FormatRange
 import kotlinx.serialization.Serializable
 
 /**
@@ -83,7 +84,21 @@ data class NoteBackup(
     val trashedAt: Long? = null,
     val tags: List<String> = emptyList(),  // each tag is encrypted Base64
     val folderId: String? = null,
-    val inlineBlocks: List<InlineBlockBackup> = emptyList()
+    val inlineBlocks: List<InlineBlockBackup> = emptyList(),
+    /**
+     * Bold/italic/heading format ranges for this note's content.
+     *
+     * WHY DEFAULT emptyList():
+     * Old backups (pre-Sprint 4) don't have this field. The Json parser is
+     * configured with coerceInputValues = true, so missing fields fall back
+     * to their declared default. Old backups restore with no formatting —
+     * which is exactly what was happening before, just now intentionally.
+     * New backups will carry formatting through correctly.
+     *
+     * NOT ENCRYPTED: format ranges contain only character indices and a
+     * FormatType enum value. No user content, nothing sensitive.
+     */
+    val contentFormats: List<FormatRange> = emptyList()
 )
 
 /**
