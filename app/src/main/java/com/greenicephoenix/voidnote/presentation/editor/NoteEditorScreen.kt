@@ -42,6 +42,7 @@ import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.FlowRow
 import com.greenicephoenix.voidnote.domain.model.FormatRange
 import com.greenicephoenix.voidnote.domain.model.FormatType
@@ -88,6 +89,10 @@ fun NoteEditorScreen(
     viewModel: NoteEditorViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // SPRINT 5: collect the folder list for the MoveToFolderDialog
+    // collectAsState() turns the StateFlow<List<Folder>> into a Compose State —
+    // the dialog will recompose whenever folders change.
+    val folders by viewModel.folders.collectAsState()
     val context = LocalContext.current
 
     // ── Singletons via Hilt EntryPoints ───────────────────────────────────────
@@ -176,9 +181,11 @@ fun NoteEditorScreen(
         }
     }
 
-    var showDeleteDialog  by remember { mutableStateOf(false) }
-    var showHeadingMenu   by remember { mutableStateOf(false) }
-    var showInsertSheet   by remember { mutableStateOf(false) }
+    var showDeleteDialog       by remember { mutableStateOf(false) }
+    var showHeadingMenu        by remember { mutableStateOf(false) }
+    var showInsertSheet        by remember { mutableStateOf(false) }
+    // SPRINT 5: controls visibility of the "Move to folder" folder picker dialog
+    var showMoveToFolderDialog by remember { mutableStateOf(false) }
 
     // Declared here — ABOVE onNumberedListClick — because that lambda
     // captures contentFieldValue by reference and Kotlin does not hoist vars.
@@ -252,16 +259,19 @@ fun NoteEditorScreen(
     Scaffold(
         topBar = {
             TopBar(
-                onBackClick    = onNavigateBack,
-                isPinned       = uiState.isPinned,
-                isArchived     = uiState.isArchived,
-                onPinClick     = { viewModel.togglePin() },
-                onArchiveClick = { viewModel.archiveNote(); onNavigateBack() },
-                onDeleteClick  = { showDeleteDialog = true },
-                onShareClick   = {
+                onBackClick         = onNavigateBack,
+                isPinned            = uiState.isPinned,
+                isArchived          = uiState.isArchived,
+                onPinClick          = { viewModel.togglePin() },
+                onArchiveClick      = { viewModel.archiveNote(); onNavigateBack() },
+                onDeleteClick       = { showDeleteDialog = true },
+                onShareClick        = {
                     shareNote(context, uiState.title.ifBlank { "Untitled" }, uiState.content, uiState.tags)
                 },
-                lastSaved      = uiState.lastSaved
+                lastSaved           = uiState.lastSaved,
+                // SPRINT 5: pass the folder name for display and the callback to open the dialog
+                currentFolderName   = uiState.currentFolderName,
+                onMoveToFolderClick = { showMoveToFolderDialog = true }
             )
         },
         bottomBar = {
@@ -395,7 +405,7 @@ fun NoteEditorScreen(
                                 val finalText = newText.substring(0, cursor) + prefix + newText.substring(cursor)
                                 contentFieldValue = TextFieldValue(
                                     text      = finalText,
-                                    selection = androidx.compose.ui.text.TextRange(cursor + prefix.length)
+                                    selection = TextRange(cursor + prefix.length)
                                 )
                                 viewModel.onContentChange(finalText)
                                 true
@@ -519,6 +529,20 @@ fun NoteEditorScreen(
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") }
             },
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    // Shows a list of all folders. Tapping a folder moves the note there.
+    // "No folder" option at the top removes the note from any folder → root level.
+    if (showMoveToFolderDialog) {
+        MoveToFolderDialog(
+            folders           = folders,
+            currentFolderName = uiState.currentFolderName,
+            onFolderSelected  = { folderId ->
+                viewModel.moveToFolder(folderId)
+                showMoveToFolderDialog = false
+            },
+            onDismiss = { showMoveToFolderDialog = false }
         )
     }
 
@@ -668,25 +692,68 @@ private fun FormattingToolbar(
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.small, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 // Formatting buttons hidden in preview mode — nothing to format
                 if (!showPreview) {
-                    FormatButton(isBoldActive, onBoldClick) { Icon(Icons.Default.FormatBold, "Bold", Modifier.size(18.dp), tint = if (isBoldActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
-                    FormatButton(isItalicActive, onItalicClick) { Icon(Icons.Default.FormatItalic, "Italic", Modifier.size(18.dp), tint = if (isItalicActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
-                    FormatButton(isUnderlineActive, onUnderlineClick) { Icon(Icons.Default.FormatUnderlined, "Underline", Modifier.size(18.dp), tint = if (isUnderlineActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
-                    FormatButton(isStrikethroughActive, onStrikethroughClick) { Icon(Icons.Default.FormatStrikethrough, "Strikethrough", Modifier.size(18.dp), tint = if (isStrikethroughActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                    // ── Group 1: Basic formatting (B / I / U / S) ──────────────────────
+                    // Wrapped in a Row with spacedBy(3.dp) so the icons breathe a little.
+                    // Without this they were flush against each other — hard to tap precisely.
+                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        FormatButton(isBoldActive, onBoldClick) { Icon(Icons.Default.FormatBold, "Bold", Modifier.size(18.dp), tint = if (isBoldActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                        FormatButton(isItalicActive, onItalicClick) { Icon(Icons.Default.FormatItalic, "Italic", Modifier.size(18.dp), tint = if (isItalicActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                        FormatButton(isUnderlineActive, onUnderlineClick) { Icon(Icons.Default.FormatUnderlined, "Underline", Modifier.size(18.dp), tint = if (isUnderlineActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                        FormatButton(isStrikethroughActive, onStrikethroughClick) { Icon(Icons.Default.FormatStrikethrough, "Strikethrough", Modifier.size(18.dp), tint = if (isStrikethroughActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                    }
                     ToolbarSeparator()
-                    FormatButton(activeHeading != null, onHeadingClick) { Icon(Icons.Default.FormatSize, "Text size", Modifier.size(18.dp), tint = if (activeHeading != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
-                    // Numbered list button — inserts "N. " prefix on current line
-                    FormatButton(false, onNumberedListClick) { Icon(Icons.Default.FormatListNumbered, "Numbered list", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface) }
-                    if (hasSelection) { FormatButton(false, onClearClick) { Icon(Icons.Default.FormatClear, "Clear", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface) } }
+                    // ── Group 2: Heading / Numbered list / Clear ────────────────────────
+                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        FormatButton(activeHeading != null, onHeadingClick) { Icon(Icons.Default.FormatSize, "Text size", Modifier.size(18.dp), tint = if (activeHeading != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+                        // Numbered list button — inserts "N. " prefix on current line
+                        FormatButton(false, onNumberedListClick) { Icon(Icons.Default.FormatListNumbered, "Numbered list", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface) }
+                        if (hasSelection) { FormatButton(false, onClearClick) { Icon(Icons.Default.FormatClear, "Clear", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface) } }
+                    }
                     ToolbarSeparator()
-                    FilledTonalIconButton(onClick = onInsertClick, modifier = Modifier.size(36.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = if (showInsertSheet) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)) {
-                        Icon(Icons.Default.Add, "Insert", Modifier.size(18.dp), tint = if (showInsertSheet) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                    // ── Insert block button ─────────────────────────────────────────────
+                    FilledTonalIconButton(
+                        onClick = onInsertClick,
+                        modifier = Modifier.size(36.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = if (showInsertSheet) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Icon(Icons.Default.Add, "Insert", Modifier.size(18.dp),
+                            tint = if (showInsertSheet) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface)
                     }
                 }
                 Spacer(Modifier.weight(1f))
                 // Word/char count hidden in preview mode
+                // Stats: word/char count top line, reading time below.
+                // Both are labelSmall (~11sp), so two lines ≈ 24sp — well within the
+                // 36dp button height that already drives the Row's height. No bar growth.
+                //
+                // Reading time formula: average adult reads ~200 words per minute.
+                // coerceAtLeast(1) means a blank note shows "~1m" not "~0m".
                 if (!showPreview) {
-                    Text("${wordCount}w  ${charCount}c", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), modifier = Modifier.padding(end = 4.dp))
+                    val readTimeMin = (wordCount / 200.0).let {
+                        if (it < 1.0) 1 else kotlin.math.ceil(it).toInt()
+                    }
+                    Column(
+                        modifier              = Modifier.padding(end = 4.dp),
+                        horizontalAlignment   = Alignment.End,
+                        verticalArrangement   = Arrangement.Center
+                    ) {
+                        // Line 1 — word count · character count
+                        Text(
+                            text  = "${wordCount}w · ${charCount}c",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.40f)
+                        )
+                        // Line 2 — estimated reading time
+                        Text(
+                            text  = "~${readTimeMin} min read",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
+                        )
+                    }
                 }
                 // Preview toggle — always visible so user can enter/exit preview
                 IconButton(onClick = onPreviewClick, modifier = Modifier.size(36.dp)) {
@@ -709,32 +776,136 @@ private fun FormattingToolbar(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TopBar(
-    onBackClick: () -> Unit, isPinned: Boolean, isArchived: Boolean,
-    onPinClick: () -> Unit, onArchiveClick: () -> Unit, onDeleteClick: () -> Unit,
-    onShareClick: () -> Unit, lastSaved: Long
+    onBackClick: () -> Unit,
+    isPinned: Boolean,
+    isArchived: Boolean,
+    onPinClick: () -> Unit,
+    onArchiveClick: () -> Unit,
+    onDeleteClick: () -> Unit,
+    onShareClick: () -> Unit,
+    lastSaved: Long,
+    // SPRINT 5: folder info for display + callback to open the dialog
+    currentFolderName: String? = null,
+    onMoveToFolderClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     TopAppBar(
         title = {
             Column {
-                Text(if (lastSaved > 0) "Saved" else "Not saved", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f))
-                if (lastSaved > 0) Text(formatTime(lastSaved), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
+                Text(
+                    if (lastSaved > 0) "Saved" else "Not saved",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                )
+                if (lastSaved > 0) Text(
+                    formatTime(lastSaved),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                )
             }
         },
-        navigationIcon = { IconButton(onClick = onBackClick) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+        navigationIcon = {
+            IconButton(onClick = onBackClick) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+            }
+        },
         actions = {
             Box {
-                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "More") }
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Default.MoreVert, "More")
+                }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    DropdownMenuItem(text = { Row(horizontalArrangement = Arrangement.spacedBy(Spacing.small), verticalAlignment = Alignment.CenterVertically) { Icon(if (isPinned) Icons.Filled.PushPin else Icons.Default.PushPin, null, tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp)); Text(if (isPinned) "Unpin" else "Pin to top") } }, onClick = { showMenu = false; onPinClick() })
-                    DropdownMenuItem(text = { Row(horizontalArrangement = Arrangement.spacedBy(Spacing.small), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Share, null, modifier = Modifier.size(20.dp)); Text("Share") } }, onClick = { showMenu = false; onShareClick() })
-                    DropdownMenuItem(text = { Row(horizontalArrangement = Arrangement.spacedBy(Spacing.small), verticalAlignment = Alignment.CenterVertically) { Icon(if (isArchived) Icons.Default.Unarchive else Icons.Default.Archive, null, modifier = Modifier.size(20.dp)); Text(if (isArchived) "Unarchive" else "Archive") } }, onClick = { showMenu = false; onArchiveClick() })
+
+                    // Pin / Unpin
+                    DropdownMenuItem(
+                        text = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.small),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (isPinned) Icons.Filled.PushPin else Icons.Default.PushPin,
+                                    null,
+                                    tint = if (isPinned) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(if (isPinned) "Unpin" else "Pin to top")
+                            }
+                        },
+                        onClick = { showMenu = false; onPinClick() }
+                    )
+
+                    // Share
+                    DropdownMenuItem(
+                        text = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.small),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Share, null, modifier = Modifier.size(20.dp))
+                                Text("Share")
+                            }
+                        },
+                        onClick = { showMenu = false; onShareClick() }
+                    )
+
+                    // Archive / Unarchive
+                    DropdownMenuItem(
+                        text = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.small),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (isArchived) Icons.Default.Unarchive else Icons.Default.Archive,
+                                    null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(if (isArchived) "Unarchive" else "Archive")
+                            }
+                        },
+                        onClick = { showMenu = false; onArchiveClick() }
+                    )
+
+                    // SPRINT 5: Move to folder
+                    // Shows the current folder name as a subtitle so the user knows
+                    // where the note currently lives before tapping.
+                    DropdownMenuItem(
+                        text = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.small),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Folder, null, modifier = Modifier.size(20.dp))
+                                Column {
+                                    Text("Move to folder")
+                                    // Show current location as a subtle hint
+                                    Text(
+                                        text  = if (currentFolderName != null) "In: $currentFolderName"
+                                        else "Not in a folder",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                }
+                            }
+                        },
+                        onClick = { showMenu = false; onMoveToFolderClick() }
+                    )
+
                     HorizontalDivider()
-                    DropdownMenuItem(text = { Row(horizontalArrangement = Arrangement.spacedBy(Spacing.small), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)); Text("Delete", color = MaterialTheme.colorScheme.error) } }, onClick = { showMenu = false; onDeleteClick() })
+
+                    // Delete (destructive — shown in error color)
+                    DropdownMenuItem(
+                        text = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.small),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Delete, null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(20.dp))
+                                Text("Delete", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        onClick = { showMenu = false; onDeleteClick() }
+                    )
                 }
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background
+        )
     )
 }
 
@@ -751,13 +922,36 @@ private fun TagsSection(tags: List<String>, onAddTag: (String) -> Unit, onRemove
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
             FlowRow(modifier = Modifier.fillMaxWidth().padding(Spacing.medium), horizontalArrangement = Arrangement.spacedBy(Spacing.small), verticalArrangement = Arrangement.spacedBy(Spacing.small)) {
                 tags.forEach { EditableTagChip(tag = it, onRemove = { onRemoveTag(it) }) }
+                // Show "Add tag" button when under the limit.
+                // When AT the limit (5 tags), show a subtle "Max 5" label instead
+                // so the user understands WHY the button is gone.
                 if (tags.size < 5) {
-                    Surface(onClick = { showAddDialog = true }, modifier = Modifier.height(32.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))) {
-                        Row(modifier = Modifier.padding(horizontal = Spacing.medium, vertical = Spacing.extraSmall), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                            Text("Add tag", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    Surface(
+                        onClick        = { showAddDialog = true },
+                        modifier       = Modifier.height(32.dp),
+                        shape          = RoundedCornerShape(16.dp),
+                        color          = MaterialTheme.colorScheme.surfaceVariant,
+                        border         = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier              = Modifier.padding(horizontal = Spacing.medium, vertical = Spacing.extraSmall),
+                            verticalAlignment     = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text("Add tag", style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                     }
+                } else {
+                    // Max tags reached — show a quiet indicator instead of disappearing
+                    Text(
+                        text     = "Max 5 tags",
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                        modifier = Modifier.padding(vertical = Spacing.extraSmall)
+                    )
                 }
             }
         }
@@ -862,5 +1056,132 @@ private fun formatTime(timestamp: Long): String {
         diff < 3_600_000 -> "${diff / 60_000}m ago"
         diff < 86_400_000 -> SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
         else -> SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(timestamp))
+    }
+}
+
+/**
+ * MoveToFolderDialog — lets the user move the current note to a folder.
+ *
+ * ─── HOW IT WORKS ─────────────────────────────────────────────────────────
+ * Shows an AlertDialog with a scrollable list of all folders.
+ * The first item is always "No folder" — selecting it removes the note from
+ * any folder and puts it at root level (folderId = null).
+ * The remaining items are the user's actual folders.
+ *
+ * The currently assigned folder is highlighted with a checkmark icon.
+ *
+ * ─── DATA FLOW ───────────────────────────────────────────────────────────
+ * onFolderSelected(folderId: String?) is called with:
+ *   null  → user tapped "No folder"
+ *   id    → user tapped a specific folder
+ *
+ * The ViewModel's moveToFolder() receives this value, calls
+ * noteRepository.moveNoteToFolder(), and updates currentFolderName in uiState.
+ *
+ * @param folders           All available folders (from viewModel.folders StateFlow)
+ * @param currentFolderName Name of the folder the note is currently in (null = root)
+ * @param onFolderSelected  Called with the chosen folderId (null = root)
+ * @param onDismiss         Called when dialog is dismissed without selection
+ */
+@Composable
+private fun MoveToFolderDialog(
+    folders: List<com.greenicephoenix.voidnote.domain.model.Folder>,
+    currentFolderName: String?,
+    onFolderSelected: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Move to folder") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Constrain height so the dialog doesn't grow taller than the screen
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // ── "No folder" option — always first ────────────────────────
+                FolderPickerRow(
+                    name      = "No folder",
+                    isSelected = currentFolderName == null,
+                    onClick   = { onFolderSelected(null) }
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color    = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                )
+
+                if (folders.isEmpty()) {
+                    // Edge case: user has no folders yet
+                    Text(
+                        text     = "No folders created yet.\nCreate one from the main screen.",
+                        style    = MaterialTheme.typography.bodySmall,
+                        color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    folders.forEach { folder ->
+                        FolderPickerRow(
+                            name      = folder.name,
+                            isSelected = currentFolderName == folder.name,
+                            onClick   = { onFolderSelected(folder.id) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+/**
+ * Single row inside MoveToFolderDialog.
+ * Shows a folder icon, name, and a checkmark if currently selected.
+ */
+@Composable
+private fun FolderPickerRow(
+    name: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment     = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector        = Icons.Default.Folder,
+                contentDescription = null,
+                modifier           = Modifier.size(20.dp),
+                tint               = if (isSelected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+            Text(
+                text  = name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isSelected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface
+            )
+        }
+        // Checkmark on the currently selected folder
+        if (isSelected) {
+            Icon(
+                imageVector        = Icons.Default.Check,
+                contentDescription = "Current folder",
+                modifier           = Modifier.size(18.dp),
+                tint               = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
