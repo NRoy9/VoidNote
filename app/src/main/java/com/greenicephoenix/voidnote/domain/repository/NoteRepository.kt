@@ -1,6 +1,7 @@
 package com.greenicephoenix.voidnote.domain.repository
 
 import com.greenicephoenix.voidnote.domain.model.Note
+import com.greenicephoenix.voidnote.domain.model.NoteColor
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -12,6 +13,9 @@ import kotlinx.coroutines.flow.Flow
  * SPRINT 3 FIX:
  * Added trashNotesByFolder() so folder deletion sends notes to trash
  * (recoverable) instead of permanently deleting them.
+ *
+ * SPRINT 6 ADDITION:
+ * Added updateNoteColor() — sets or clears the color accent on a note.
  */
 interface NoteRepository {
 
@@ -94,4 +98,15 @@ interface NoteRepository {
      * @param folderId The folder whose notes should all be trashed.
      */
     suspend fun trashNotesByFolder(folderId: String)
+
+    /**
+     * Sprint 6 — Update the color accent of a single note.
+     *
+     * @param noteId  The note to update.
+     * @param color   The new NoteColor, or null to remove the color accent.
+     *
+     * This is a FLAG-ONLY update — does not touch encrypted content fields
+     * (title, content, tags). Operates directly on the NoteEntity row.
+     */
+    suspend fun updateNoteColor(noteId: String, color: NoteColor?)
 }

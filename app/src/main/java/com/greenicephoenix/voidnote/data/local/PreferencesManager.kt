@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.greenicephoenix.voidnote.domain.model.NoteSort
 import com.greenicephoenix.voidnote.presentation.settings.AppTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -18,28 +19,17 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 /**
  * PreferencesManager — DataStore wrapper for all user preferences and app state.
  *
- * ─── NEW: VAULT_VERIFICATION_BLOB ────────────────────────────────────────────
+ * SPRINT 6 ADDITIONS:
  *
- * WHAT IS IT?
- * At vault creation, we encrypt the known string "void_note_verify_v1" with
- * the master key → store the Base64 ciphertext in this key.
+ * ─── NOTE_SORT ────────────────────────────────────────────────────────────────
+ * Persists the user's chosen sort order for the notes list.
+ * Default is UPDATED_DESC (most recently modified first).
+ * The sort is applied in-memory in NotesListViewModel after the DB read.
  *
- * WHY?
- * PBKDF2 never fails — it always produces a key, even from a wrong password
- * (it just produces a *different* key). Without the blob, we can't know if
- * the password is correct until notes silently show blank. Bad UX.
- *
- * HOW USED?
- * Export: user re-types password → we derive candidate key from (password +
- * stored salt) → try to decrypt blob → GCM auth tag passes = correct password,
- * fails = wrong password. Check happens before the file picker opens.
- *
- * Vault unlock (reinstall): same check, prevents silent decrypt failures.
- *
- * SECURITY:
- * The plaintext "void_note_verify_v1" is not secret. AES-256-GCM makes it
- * safe: without the exact key, no one can forge a ciphertext that passes
- * the authentication tag check, so the blob reveals nothing.
+ * ─── DISMISSED_UPDATE_VERSION ────────────────────────────────────────────────
+ * When the GitHub update checker finds a new version and the user taps "Dismiss",
+ * we store that version string here. The banner will not re-appear for that
+ * same version — but WILL re-appear if an even newer version is detected later.
  */
 @Singleton
 class PreferencesManager @Inject constructor(
@@ -53,7 +43,11 @@ class PreferencesManager @Inject constructor(
         private val VAULT_SETUP_COMPLETE_KEY    = booleanPreferencesKey("vault_setup_complete")
         private val VAULT_SALT_KEY              = stringPreferencesKey("vault_salt")
         private val VAULT_WRAPPED_KEY           = stringPreferencesKey("vault_wrapped_key")
-        private val VAULT_VERIFICATION_BLOB_KEY = stringPreferencesKey("vault_verification_blob") // NEW
+        private val VAULT_VERIFICATION_BLOB_KEY = stringPreferencesKey("vault_verification_blob")
+
+        // ── Sprint 6 ──────────────────────────────────────────────────────
+        private val NOTE_SORT_KEY               = stringPreferencesKey("note_sort")
+        private val DISMISSED_UPDATE_VERSION_KEY = stringPreferencesKey("dismissed_update_version")
     }
 
     // ─── Theme ────────────────────────────────────────────────────────────────
@@ -123,7 +117,7 @@ class PreferencesManager @Inject constructor(
         context.dataStore.edit { it[VAULT_WRAPPED_KEY] = wrappedKeyBase64 }
     }
 
-    // ─── Vault verification blob (NEW) ────────────────────────────────────────
+    // ─── Vault verification blob ───────────────────────────────────────────────
 
     /** Empty string = vault created before this feature (old install). */
     val vaultVerificationBlobFlow: Flow<String> = context.dataStore.data.map { prefs ->
@@ -132,5 +126,41 @@ class PreferencesManager @Inject constructor(
 
     suspend fun setVaultVerificationBlob(blobBase64: String) {
         context.dataStore.edit { it[VAULT_VERIFICATION_BLOB_KEY] = blobBase64 }
+    }
+
+    // ─── Note sort (Sprint 6) ─────────────────────────────────────────────────
+
+    /**
+     * The user's chosen sort order for the notes list.
+     * Emits NoteSort.UPDATED_DESC if no preference has been saved yet.
+     */
+    val noteSortFlow: Flow<NoteSort> = context.dataStore.data.map { prefs ->
+        NoteSort.fromString(prefs[NOTE_SORT_KEY])
+    }
+
+    /**
+     * Persist the chosen sort order.
+     * Called by NotesListViewModel when the user picks a sort from the menu.
+     */
+    suspend fun setNoteSort(sort: NoteSort) {
+        context.dataStore.edit { it[NOTE_SORT_KEY] = sort.name }
+    }
+
+    // ─── Dismissed update version (Sprint 6) ─────────────────────────────────
+
+    /**
+     * The version string the user last dismissed from the update banner.
+     * Empty string = never dismissed.
+     *
+     * If UpdateCheckerManager detects version "v0.2.0-alpha" and
+     * dismissedUpdateVersion is also "v0.2.0-alpha", the banner stays hidden.
+     * If a newer "v0.3.0-alpha" is detected, the banner shows again.
+     */
+    val dismissedUpdateVersionFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[DISMISSED_UPDATE_VERSION_KEY] ?: ""
+    }
+
+    suspend fun setDismissedUpdateVersion(version: String) {
+        context.dataStore.edit { it[DISMISSED_UPDATE_VERSION_KEY] = version }
     }
 }

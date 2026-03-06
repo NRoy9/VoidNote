@@ -20,6 +20,9 @@ package com.greenicephoenix.voidnote.domain.model
  *
  * VERSION 5 CHANGE: Added trashedAt field to track when a note was trashed.
  * Used by TrashCleanupWorker to auto-delete notes after 30 days.
+ *
+ * VERSION 7 (Sprint 6): Added color field for note color coding.
+ * null = default card appearance (no tint applied).
  */
 data class Note(
     val id: String,
@@ -40,7 +43,14 @@ data class Note(
     val trashedAt: Long? = null,
 
     val tags: List<String> = emptyList(),
-    val folderId: String? = null
+    val folderId: String? = null,
+
+    /**
+     * Sprint 6: optional color accent for this note.
+     * null = no color (default card appearance).
+     * Set via the color picker in the note editor's settings panel.
+     */
+    val color: NoteColor? = null
 ) {
 
     // ─── Marker parsing ───────────────────────────────────────────────────

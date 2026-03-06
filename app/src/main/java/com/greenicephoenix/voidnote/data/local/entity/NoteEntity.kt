@@ -10,23 +10,20 @@ import com.greenicephoenix.voidnote.domain.model.FormatRange
  * NoteEntity — Room database row for the notes table.
  *
  * VERSION 5 CHANGE: Added trashedAt field.
+ * VERSION 7 (Sprint 6): Added color column for note color coding.
  *
- * WHY IS trashedAt NULLABLE (Long?)?
- * Notes that existed before version 5 have no trash timestamp — Room will
- * give them NULL for this column automatically when the DB is migrated
- * (or wiped via fallbackToDestructiveMigration during alpha).
- * A non-nullable field with no default would require a migration DEFAULT value.
- * Nullable is simpler and correct: NULL means "not in trash" or "trashed
- * before we started tracking timestamps".
+ * WHY IS color A NULLABLE STRING?
+ * We store the NoteColor enum name (e.g. "RED", "BLUE") as plain text.
+ * - null = no color assigned (default appearance)
+ * - Storing enum names (not ordinals) means we can safely add/reorder variants
+ *   without corrupting old data.
+ * - NoteColor.fromString() handles unrecognised names gracefully (returns null).
  *
- * HOW TrashCleanupWorker uses it:
- *   DELETE FROM notes
- *   WHERE isTrashed = 1
- *   AND trashedAt IS NOT NULL
- *   AND trashedAt < (now - 30 days)
- *
- * Notes with trashedAt = NULL are never auto-deleted — they were trashed
- * before this feature shipped and we give the user the benefit of the doubt.
+ * DB MIGRATION:
+ * This column was added in MIGRATION_6_7 using:
+ *   ALTER TABLE notes ADD COLUMN color TEXT
+ * SQLite adds NULL for all existing rows — which correctly maps to "no color".
+ * No existing data is affected.
  */
 @Entity(tableName = "notes")
 @TypeConverters(StringListConverter::class)
@@ -61,5 +58,11 @@ data class NoteEntity(
 
     val folderId: String? = null,
 
-    val contentFormats: List<FormatRange>
+    val contentFormats: List<FormatRange>,
+
+    /**
+     * Sprint 6: The NoteColor enum name (e.g. "RED") or null for no color.
+     * Added via MIGRATION_6_7 — existing rows get NULL automatically.
+     */
+    val color: String? = null
 )

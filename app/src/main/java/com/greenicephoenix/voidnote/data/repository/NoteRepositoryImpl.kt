@@ -7,6 +7,7 @@ import com.greenicephoenix.voidnote.data.mapper.toDomainModels
 import com.greenicephoenix.voidnote.data.mapper.toEntity
 import com.greenicephoenix.voidnote.data.security.NoteEncryptionManager
 import com.greenicephoenix.voidnote.domain.model.Note
+import com.greenicephoenix.voidnote.domain.model.NoteColor
 import com.greenicephoenix.voidnote.domain.repository.NoteRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -24,22 +25,24 @@ import javax.inject.Inject
  * ViewModels, screens, the editor — all work with plain text Note objects.
  *
  * ENCRYPTED FIELDS: title, content, tags (each tag individually)
- * NOT ENCRYPTED: id, folderId, timestamps, flags — metadata, not sensitive
+ * NOT ENCRYPTED: id, folderId, timestamps, flags, color — metadata, not sensitive
  *
  * ─── VERSION 5 CHANGE ────────────────────────────────────────────────────────
  *
  * moveToTrash() now records the current timestamp in trashedAt.
  * restoreFromTrash() now clears trashedAt back to null.
  *
- * This feeds TrashCleanupWorker, which runs daily and permanently deletes
- * notes where trashedAt is older than 30 days.
+ * ─── VERSION 7 (Sprint 6) CHANGE ─────────────────────────────────────────────
+ *
+ * updateNoteColor() added — a flag-only update that sets or clears the color
+ * column on a note row without touching any encrypted content.
  *
  * ─── FLAG-ONLY UPDATES ───────────────────────────────────────────────────────
  *
- * togglePin, toggleArchive, moveToTrash, restoreFromTrash, moveNoteToFolder
- * all update only boolean flags or timestamps — not encrypted content.
- * They work directly on NoteEntity from the DAO, bypassing decrypt → re-encrypt.
- * This is both faster and correct — the ciphertext in the DB is untouched.
+ * togglePin, toggleArchive, moveToTrash, restoreFromTrash, moveNoteToFolder,
+ * updateNoteColor — all update only boolean flags, timestamps, or simple
+ * metadata. They work directly on NoteEntity from the DAO, bypassing the
+ * decrypt → re-encrypt cycle. This is both faster and correct.
  */
 class NoteRepositoryImpl @Inject constructor(
     private val noteDao: NoteDao,
@@ -119,6 +122,26 @@ class NoteRepositoryImpl @Inject constructor(
         )
     }
 
+    /**
+     * Sprint 6 — Set or clear the color accent on a note.
+     *
+     * FLAG-ONLY update: reads the raw NoteEntity, updates only the `color`
+     * column, writes it back. The encrypted title/content/tags bytes in the
+     * entity are preserved exactly as they were — no decrypt/re-encrypt needed.
+     *
+     * color?.name converts NoteColor enum (e.g. GREEN) to its DB string ("GREEN").
+     * Passing null clears the color (stores NULL in the column).
+     */
+    override suspend fun updateNoteColor(noteId: String, color: NoteColor?) {
+        val note = noteDao.getNoteById(noteId) ?: return
+        noteDao.updateNote(
+            note.copy(
+                color     = color?.name,                       // store enum name or null
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
     // ─── Trash ────────────────────────────────────────────────────────────────
 
     /**
@@ -135,7 +158,7 @@ class NoteRepositoryImpl @Inject constructor(
         noteDao.updateNote(
             note.copy(
                 isTrashed  = true,
-                trashedAt  = System.currentTimeMillis(),   // ← v5: record when trashed
+                trashedAt  = System.currentTimeMillis(),   // v5: record when trashed
                 folderId   = null,
                 isArchived = false,
                 updatedAt  = System.currentTimeMillis()
@@ -147,15 +170,14 @@ class NoteRepositoryImpl @Inject constructor(
      * Restore a note from trash.
      *
      * VERSION 5: trashedAt is cleared back to null.
-     * This ensures a re-trashed note gets a fresh 30-day timer if it
-     * is moved to trash again in the future.
+     * This ensures a re-trashed note gets a fresh 30-day timer.
      */
     override suspend fun restoreFromTrash(noteId: String) {
         val note = noteDao.getNoteById(noteId) ?: return
         noteDao.updateNote(
             note.copy(
                 isTrashed = false,
-                trashedAt = null,                          // ← v5: clear the trash timestamp
+                trashedAt = null,                          // v5: clear the trash timestamp
                 updatedAt = System.currentTimeMillis()
             )
         )

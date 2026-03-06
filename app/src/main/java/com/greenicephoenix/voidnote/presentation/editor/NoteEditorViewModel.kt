@@ -18,6 +18,7 @@ import com.greenicephoenix.voidnote.domain.model.TodoItem
 import com.greenicephoenix.voidnote.domain.repository.FolderRepository
 import com.greenicephoenix.voidnote.domain.repository.InlineBlockRepository
 import com.greenicephoenix.voidnote.domain.repository.NoteRepository
+import com.greenicephoenix.voidnote.domain.model.NoteColor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -541,7 +542,8 @@ class NoteEditorViewModel @Inject constructor(
             isArchived     = state.isArchived,
             isTrashed      = false,
             tags           = state.tags,
-            folderId       = currentFolderId
+            folderId       = currentFolderId,
+            color    = _uiState.value.noteColor
         )
 
         if (state.isNewNote) {
@@ -714,6 +716,28 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Sprint 6 — update the color accent on this note.
+     *
+     * Uses currentNoteId (the ViewModel's in-memory note ID) — NOT a field
+     * from uiState. Updates the DB immediately (flag-only, no re-encryption).
+     * Also updates uiState.noteColor instantly for immediate visual feedback.
+     *
+     * @param color  The chosen NoteColor, or null to remove the accent.
+     */
+    fun updateNoteColor(color: NoteColor?) {
+        // Update UI immediately — no need to wait for DB round-trip
+        _uiState.value = _uiState.value.copy(noteColor = color)
+
+        // Persist to DB in background (skip if note hasn't been saved yet —
+        // saveNote() will pick up noteColor from uiState on first save)
+        if (!_uiState.value.isNewNote) {
+            viewModelScope.launch {
+                noteRepository.updateNoteColor(currentNoteId, color)
+            }
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // TAG MANAGEMENT
     // ─────────────────────────────────────────────────────────────────────────
@@ -816,5 +840,6 @@ data class NoteEditorUiState(
     // The name of the folder this note currently lives in.
     // Null means the note is at root level (no folder).
     // Used by TopBar to show "In: My Notes" in the overflow menu.
-    val currentFolderName: String? = null
+    val currentFolderName: String? = null,
+    val noteColor: NoteColor? = null    // Sprint 6: current note color
 )

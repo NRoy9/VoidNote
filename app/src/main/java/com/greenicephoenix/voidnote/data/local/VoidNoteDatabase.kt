@@ -23,8 +23,8 @@ import com.greenicephoenix.voidnote.data.local.entity.NoteEntity
  * v3 → Block experiment (rolled back, version number kept)
  * v4 → Added inline_blocks table
  * v5 → Added trashedAt column to notes (nullable Long)
- * v6 → No schema change. Establishes the migration chain.
- *       fallbackToDestructiveMigration() removed — data is now safe on upgrades.
+ * v6 → No schema change. Established the migration chain; removed fallbackToDestructiveMigration.
+ * v7 → Added color column to notes (nullable String — stores NoteColor enum name)
  *
  * HOW ROOM MIGRATIONS WORK:
  * Room stores the current schema version inside the database file itself.
@@ -35,16 +35,9 @@ import com.greenicephoenix.voidnote.data.local.entity.NoteEntity
  *
  * ADDING A MIGRATION IN A FUTURE SPRINT:
  * 1. Make your schema change in the relevant @Entity class.
- * 2. Bump `version` here (e.g. 6 → 7).
- * 3. Write a MIGRATION_6_7 val below with the SQL to apply the change.
- * 4. Add it to DatabaseModule.kt → .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
- *
- * EXAMPLE — adding a new column in a future sprint:
- *   val MIGRATION_6_7 = object : Migration(6, 7) {
- *       override fun migrate(db: SupportSQLiteDatabase) {
- *           db.execSQL("ALTER TABLE notes ADD COLUMN color TEXT")
- *       }
- *   }
+ * 2. Bump `version` here (e.g. 7 → 8).
+ * 3. Write a MIGRATION_7_8 val below with the SQL to apply the change.
+ * 4. Add it to DatabaseModule.kt → .addMigrations(..., MIGRATION_7_8)
  */
 @Database(
     entities = [
@@ -52,7 +45,7 @@ import com.greenicephoenix.voidnote.data.local.entity.NoteEntity
         FolderEntity::class,
         InlineBlockEntity::class
     ],
-    version = 6,            // ← BUMPED from 5 to 6
+    version = 7,            // ← BUMPED from 6 to 7 (color column added)
     exportSchema = false
 )
 @TypeConverters(
@@ -73,15 +66,36 @@ abstract class VoidNoteDatabase : RoomDatabase() {
          *
          * This migration exists purely to establish the migration chain.
          * All previous versions used fallbackToDestructiveMigration(), so
-         * every alpha tester is already on v5. This brings them to v6 safely.
-         *
-         * From Sprint 4 onwards, every schema change MUST have a Migration
-         * object here. Never use fallbackToDestructiveMigration() again.
+         * every alpha tester was on v5. This brought them to v6 safely.
          */
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // No SQL needed — schema is identical to v5.
                 // Room just updates the user_version pragma in the DB file.
+            }
+        }
+
+        /**
+         * MIGRATION_6_7 — Adds the `color` column to the notes table.
+         *
+         * WHY TEXT (not INTEGER)?
+         * We store the NoteColor enum NAME (e.g. "RED", "BLUE") rather than
+         * an ordinal. This is safer: adding or reordering enum values in future
+         * sprints won't corrupt old data. An integer ordinal would shift if we
+         * insert a new color variant between existing ones.
+         *
+         * WHY DEFAULT NULL?
+         * SQLite's ALTER TABLE ... ADD COLUMN only supports adding nullable columns
+         * (or columns with a constant literal default). NULL is the correct default:
+         * existing notes have no color assigned, which is exactly what null means.
+         *
+         * ALL EXISTING ROWS:
+         * Room/SQLite sets color = NULL for every existing note row automatically.
+         * NoteColor.fromString(null) returns null (no color). No data loss.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN color TEXT")
             }
         }
     }

@@ -42,6 +42,7 @@ import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.FlowRow
 import com.greenicephoenix.voidnote.domain.model.FormatRange
@@ -63,6 +64,10 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import com.greenicephoenix.voidnote.domain.model.NoteColor
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 
 /**
  * Note Editor Screen.
@@ -93,6 +98,7 @@ fun NoteEditorScreen(
     // collectAsState() turns the StateFlow<List<Folder>> into a Compose State —
     // the dialog will recompose whenever folders change.
     val folders by viewModel.folders.collectAsState()
+    val noteColor = uiState.noteColor   // Sprint 6 — current color accent
     val context = LocalContext.current
 
     // ── Singletons via Hilt EntryPoints ───────────────────────────────────────
@@ -287,6 +293,26 @@ fun NoteEditorScreen(
                     onAddTag   = { viewModel.addTag(it) },
                     onRemoveTag = { viewModel.removeTag(it) }
                 )
+
+                // Sprint 6 — color accent picker strip
+                // Shown between the tags row and the formatting toolbar.
+                // Wrapped in a Surface so it has the same background as the toolbar.
+                Surface(
+                    modifier  = Modifier.fillMaxWidth(),
+                    color     = MaterialTheme.colorScheme.surfaceVariant,
+                    tonalElevation = 0.dp
+                ) {
+                    Column {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                        NoteColorPicker(
+                            currentColor    = noteColor,
+                            onColorSelected = { viewModel.updateNoteColor(it) },
+                            modifier        = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = Spacing.medium, vertical = Spacing.small)
+                        )
+                    }
+                }
 
                 FormattingToolbar(
                     isBoldActive = if (hasSelection) hasFormat(uiState.contentFormats, contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.BOLD) else uiState.activeBold,
@@ -1182,6 +1208,92 @@ private fun FolderPickerRow(
                 modifier           = Modifier.size(18.dp),
                 tint               = MaterialTheme.colorScheme.primary
             )
+        }
+    }
+}
+
+/**
+ * NoteColorPicker — a horizontal row of colored dots the user can tap to
+ * assign a color accent to the current note.
+ *
+ * DESIGN (Nothing aesthetic):
+ * - 7 dots: one "none" (clear) + 6 NoteColor options
+ * - Selected dot has a white ring border; unselected dots have no border
+ * - The "none" dot is a small outlined circle (○) — minimal, clear
+ * - Dots are 28dp each with 12dp spacing
+ *
+ * @param currentColor    The currently assigned color, or null for none.
+ * @param onColorSelected Called when the user taps a dot. null = clear color.
+ */
+@Composable
+fun NoteColorPicker(
+    currentColor: NoteColor?,
+    onColorSelected: (NoteColor?) -> Unit,
+    modifier: Modifier = Modifier   // Sprint 6: allow callers to pass layout constraints
+) {
+    val isDark = isSystemInDarkTheme()
+
+    Column(modifier = modifier) {
+        // Section label
+        Text(
+            text     = "COLOR",
+            style    = MaterialTheme.typography.labelSmall,
+            color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            // ── "No color" dot ────────────────────────────────────────────────
+            // Shown as an outlined circle (ring) — tapping it clears the color
+            val noneSelected = currentColor == null
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .border(
+                        width  = if (noneSelected) 2.dp else 1.dp,
+                        color  = if (noneSelected)
+                            MaterialTheme.colorScheme.onSurface
+                        else
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        shape  = CircleShape
+                    )
+                    .clickable { onColorSelected(null) },
+                contentAlignment = Alignment.Center
+            ) {
+                // "X" mark inside the no-color circle so it's clearly "remove color"
+                if (noneSelected) {
+                    Icon(
+                        imageVector        = Icons.Default.Close,
+                        contentDescription = "No color",
+                        modifier           = Modifier.size(12.dp),
+                        tint               = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            // ── Color dots ────────────────────────────────────────────────────
+            NoteColor.entries.forEach { color ->
+                val isSelected = currentColor == color
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        // White selection ring around the active color dot
+                        .border(
+                            width = if (isSelected) 2.dp else 0.dp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            shape = CircleShape
+                        )
+                        .padding(if (isSelected) 3.dp else 0.dp)  // Inset so ring doesn't clip
+                        .clip(CircleShape)
+                        .background(color.pickerColor)
+                        .clickable { onColorSelected(color) }
+                )
+            }
         }
     }
 }

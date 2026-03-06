@@ -7,6 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.greenicephoenix.voidnote.data.local.PreferencesManager
 import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase
 import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRATION_5_6
+import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRATION_6_7
 import com.greenicephoenix.voidnote.data.local.dao.FolderDao
 import com.greenicephoenix.voidnote.data.local.dao.InlineBlockDao
 import com.greenicephoenix.voidnote.data.local.dao.NoteDao
@@ -27,14 +28,14 @@ import javax.inject.Singleton
  *
  * 2. Foreign key enforcement ADDED via addCallback().
  *    SQLite ignores foreign key constraints by default. The PRAGMA foreign_keys = ON
- *    command must be run on every new database connection. The callback fires
- *    once per connection open, which is the correct place to do this.
+ *    command must be run on every new database connection.
+ *
+ * SPRINT 6 CHANGES:
+ * 3. MIGRATION_6_7 added — adds the `color` TEXT column to notes table.
  *
  * WHY FOREIGN KEYS MATTER FOR VOID NOTE:
  * notes.folderId references folders.id. Without FK enforcement, deleting a
  * folder leaves notes with a folderId pointing to nothing (orphan notes).
- * With FK enforcement + CASCADE rules on the DAO, Room enforces referential
- * integrity at the SQLite level — not just in application logic.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -66,12 +67,15 @@ object DatabaseModule {
             VoidNoteDatabase::class.java,
             VoidNoteDatabase.DATABASE_NAME
         )
-            // ── SPRINT 4: Migration chain replaces destructive fallback ──
+            // ── Migration chain ───────────────────────────────────────────────
+            // Room applies these automatically in order when upgrading.
             // Add new migrations here as you create them in VoidNoteDatabase.kt.
-            // Order doesn't matter — Room picks the right one automatically.
-            .addMigrations(MIGRATION_5_6)
+            .addMigrations(
+                MIGRATION_5_6,   // v5 → v6: no schema change (chain establishment)
+                MIGRATION_6_7    // v6 → v7: adds color TEXT column to notes
+            )
 
-            // ── SPRINT 4: Enable SQLite foreign key enforcement ──
+            // ── SQLite foreign key enforcement ────────────────────────────────
             .addCallback(foreignKeyCallback)
 
             .build()

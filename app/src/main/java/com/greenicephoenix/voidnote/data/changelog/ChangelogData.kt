@@ -50,6 +50,22 @@ object ChangelogData {
      * ADD NEW ENTRIES AT THE TOP.
      */
     val entries: List<VersionEntry> = listOf(
+        //Sprint 6
+        VersionEntry(
+            version     = "0.2.0-alpha",
+            releaseDate = "06 Mar 2026",
+            tagline     = "Colour, order, and always up to date.",
+            changes     = listOf(
+                ChangeItem(ChangeType.NEW,      "Color accents — tag any note with one of 6 colors, visible in the list"),
+                ChangeItem(ChangeType.NEW,      "Sort notes — by last modified, date created, or title A→Z / Z→A"),
+                ChangeItem(ChangeType.NEW,      "Update checker — get notified when a new release is available on GitHub"),
+                ChangeItem(ChangeType.NEW,      "Move to folder — reassign a note to any folder from inside the editor"),
+                ChangeItem(ChangeType.NEW,      "Fullscreen image viewer — tap any image block to view it full screen"),
+                ChangeItem(ChangeType.IMPROVED, "Reading time estimate shown alongside word and character count"),
+                ChangeItem(ChangeType.IMPROVED, "Tag limit raised and enforced — max 5 tags per note with clear indicator"),
+                ChangeItem(ChangeType.FIXED,    "Vault unlock screen no longer loops — navigates correctly after unlock"),
+            )
+        ),
 
         // ── Sprint 4 + Sprint 5 ───────────────────────────────────────────────
         VersionEntry(
