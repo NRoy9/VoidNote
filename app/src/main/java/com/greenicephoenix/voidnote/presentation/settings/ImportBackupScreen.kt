@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -430,6 +431,28 @@ private fun FileReadyContent(
                 }
             }
         )
+
+        // ── Vault password notice ─────────────────────────────────────────────
+        // Flow B: the backup is decrypted with the backup password, then
+        // re-encrypted with the CURRENT vault key. The vault password does NOT change.
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(Spacing.medium),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.small)
+            ) {
+                Text("ℹ", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = "Your current vault password is not changed. Notes from this backup will be decrypted and securely re-encrypted for your existing vault.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    lineHeight = 18.sp
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(Spacing.small))
 

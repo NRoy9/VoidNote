@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.greenicephoenix.voidnote.data.storage.AudioStorageManager
 import com.greenicephoenix.voidnote.data.storage.ImageStorageManager
 import com.greenicephoenix.voidnote.data.storage.VoiceRecorderManager
+import com.greenicephoenix.voidnote.domain.model.Folder
 import com.greenicephoenix.voidnote.domain.model.FormatRange
 import com.greenicephoenix.voidnote.domain.model.FormatType
 import com.greenicephoenix.voidnote.domain.model.InlineBlock
@@ -14,15 +15,18 @@ import com.greenicephoenix.voidnote.domain.model.InlineBlockPayload
 import com.greenicephoenix.voidnote.domain.model.InlineBlockType
 import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.domain.model.TodoItem
+import com.greenicephoenix.voidnote.domain.repository.FolderRepository
 import com.greenicephoenix.voidnote.domain.repository.InlineBlockRepository
 import com.greenicephoenix.voidnote.domain.repository.NoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -42,9 +46,21 @@ import javax.inject.Inject
  *
  * FILE CLEANUP:
  *   deleteBlock() checks block type:
- *     IMAGE → AudioStorageManager.deleteEncFile(filePath)
+ *     IMAGE → ImageStorageManager.deleteEncFile(filePath)
  *     AUDIO → AudioStorageManager.deleteEncFile(filePath)
  *     TODO  → no file cleanup needed
+ *
+ * ─── SPRINT 5 ADDITIONS ───────────────────────────────────────────────────────
+ *
+ * 1. MOVE TO FOLDER (P1-5)
+ *    FolderRepository is now injected. `folders` exposes all folders as a
+ *    StateFlow so the MoveToFolderDialog in the Screen can show the list.
+ *    `moveToFolder(folderId)` calls noteRepository.moveNoteToFolder() and
+ *    updates `currentFolderId` so subsequent saves use the right folder.
+ *
+ * 2. CURRENT FOLDER NAME (for UI display)
+ *    `currentFolderName` is added to NoteEditorUiState so the TopBar overflow
+ *    menu can show "In: FolderName" or "Not in a folder".
  */
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
@@ -53,7 +69,12 @@ class NoteEditorViewModel @Inject constructor(
     private val inlineBlockRepository: InlineBlockRepository,
     private val imageStorage: ImageStorageManager,
     private val audioStorage: AudioStorageManager,
-    private val voiceRecorder: VoiceRecorderManager
+    private val voiceRecorder: VoiceRecorderManager,
+    // ── SPRINT 5 ADDITION ─────────────────────────────────────────────────────
+    // FolderRepository is needed to:
+    //   a) Expose the full folder list for the MoveToFolderDialog
+    //   b) Look up the current folder's name to display in the TopBar
+    private val folderRepository: FolderRepository
 ) : ViewModel() {
 
     private val noteId: String = savedStateHandle.get<String>("noteId") ?: "new"
@@ -66,6 +87,18 @@ class NoteEditorViewModel @Inject constructor(
     private var currentNoteId: String = noteId
     private var currentFolderId: String? = null
     private var isDeleting = false
+
+    // ── SPRINT 5: Expose folder list ──────────────────────────────────────────
+    // Converted to StateFlow with WhileSubscribed so it stops collecting when
+    // no UI is observing (e.g. when the screen is in the background).
+    // SharingStarted.WhileSubscribed(5_000) means: keep the upstream Flow alive
+    // for 5 seconds after the last subscriber disappears — handles config changes.
+    val folders: StateFlow<List<Folder>> = folderRepository.getAllFolders()
+        .stateIn(
+            scope            = viewModelScope,
+            started          = SharingStarted.WhileSubscribed(5_000),
+            initialValue     = emptyList()
+        )
 
     init {
         loadNote()
@@ -96,18 +129,28 @@ class NoteEditorViewModel @Inject constructor(
             viewModelScope.launch {
                 val note = noteRepository.getNoteById(noteId)
                 if (note != null) {
-                    currentNoteId  = note.id
+                    currentNoteId   = note.id
                     currentFolderId = note.folderId
+
                     val logicalContent = DocumentParser.extractLogicalContent(note.content)
+
+                    // ── SPRINT 5: Resolve folder name for display ──────────────
+                    // Look up the folder name once. Cheap: one DB hit, not a stream.
+                    // The name is only needed for display in the overflow menu.
+                    val folderName = note.folderId?.let { id ->
+                        folderRepository.getFolderById(id)?.name
+                    }
+
                     _uiState.value = _uiState.value.copy(
-                        title          = note.title,
-                        content        = logicalContent,
-                        contentFormats = note.contentFormats,
-                        isPinned       = note.isPinned,
-                        isArchived     = note.isArchived,
-                        tags           = note.tags,
-                        isNewNote      = false,
-                        isLoading      = false
+                        title             = note.title,
+                        content           = logicalContent,
+                        contentFormats    = note.contentFormats,
+                        isPinned          = note.isPinned,
+                        isArchived        = note.isArchived,
+                        tags              = note.tags,
+                        isNewNote         = false,
+                        isLoading         = false,
+                        currentFolderName = folderName      // ← SPRINT 5
                     )
                 } else {
                     currentNoteId = UUID.randomUUID().toString()
@@ -349,7 +392,7 @@ class NoteEditorViewModel @Inject constructor(
      * Called when user taps the Stop button in RecordingSheet.
      */
     fun stopRecording() {
-        val tempPath  = _uiState.value.recordingTempPath ?: return
+        val tempPath   = _uiState.value.recordingTempPath ?: return
         val durationMs = _uiState.value.recordingElapsedMs
 
         // Stop the timer first
@@ -594,6 +637,21 @@ class NoteEditorViewModel @Inject constructor(
         scheduleAutoSave()
     }
 
+    /**
+     * Toggle between edit mode and format preview mode.
+     *
+     * PREVIEW MODE:
+     * Shows a read-only styled view of the note content with all FormatRanges
+     * rendered visually (bold is bold, headings are large, etc.).
+     * Uses the existing applyFormatting() — no new library needed.
+     *
+     * The toolbar simplifies in preview mode — only the toggle button is shown
+     * so the user can return to editing.
+     */
+    fun togglePreview() {
+        _uiState.value = _uiState.value.copy(showPreview = !_uiState.value.showPreview)
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // NOTE ACTIONS
     // ─────────────────────────────────────────────────────────────────────────
@@ -620,6 +678,40 @@ class NoteEditorViewModel @Inject constructor(
 
     fun archiveNote() {
         viewModelScope.launch { noteRepository.toggleArchive(currentNoteId) }
+    }
+
+    // ── SPRINT 5: Move note to folder ─────────────────────────────────────────
+    /**
+     * Move this note to a different folder, or remove it from any folder (null = root).
+     *
+     * HOW IT WORKS:
+     * 1. Call noteRepository.moveNoteToFolder() — this updates the folderId in the DB.
+     *    This is a flag-only update (not re-encrypt) so it's fast.
+     * 2. Update `currentFolderId` in memory so future auto-saves preserve the new folder.
+     * 3. Update `currentFolderName` in uiState so the TopBar overflow shows the new folder name.
+     *    We look up the folder name here rather than making the Screen do an extra DB call.
+     *
+     * @param folderId Null = "No folder" (root level). String = the target folder's ID.
+     */
+    fun moveToFolder(folderId: String?) {
+        viewModelScope.launch {
+            // Persist the note first if it hasn't been saved yet
+            // (can't move a note that doesn't exist in the DB)
+            ensureNotePersisted()
+
+            // Update the DB
+            noteRepository.moveNoteToFolder(currentNoteId, folderId)
+
+            // Update in-memory folder tracking
+            currentFolderId = folderId
+
+            // Resolve the folder name for the UI
+            val folderName = folderId?.let { id ->
+                folderRepository.getFolderById(id)?.name
+            }
+
+            _uiState.value = _uiState.value.copy(currentFolderName = folderName)
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -715,5 +807,14 @@ data class NoteEditorUiState(
     // Voice recording state
     val isRecording: Boolean = false,            // true while MediaRecorder is active
     val recordingElapsedMs: Long = 0L,           // elapsed recording time, updated every 100ms
-    val recordingTempPath: String? = null        // path of plain .aac during active recording
+    val recordingTempPath: String? = null,       // path of plain .aac during active recording
+
+    // Preview toggle — shows rendered formatted text instead of the editor
+    val showPreview: Boolean = false,
+
+    // ── SPRINT 5 ADDITION ─────────────────────────────────────────────────────
+    // The name of the folder this note currently lives in.
+    // Null means the note is at root level (no folder).
+    // Used by TopBar to show "In: My Notes" in the overflow menu.
+    val currentFolderName: String? = null
 )

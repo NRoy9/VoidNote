@@ -1,5 +1,6 @@
 package com.greenicephoenix.voidnote.presentation.settings
 
+import com.greenicephoenix.voidnote.domain.model.FormatRange
 import kotlinx.serialization.Serializable
 
 /**
@@ -83,7 +84,21 @@ data class NoteBackup(
     val trashedAt: Long? = null,
     val tags: List<String> = emptyList(),  // each tag is encrypted Base64
     val folderId: String? = null,
-    val inlineBlocks: List<InlineBlockBackup> = emptyList()
+    val inlineBlocks: List<InlineBlockBackup> = emptyList(),
+    /**
+     * Bold/italic/heading format ranges for this note's content.
+     *
+     * WHY DEFAULT emptyList():
+     * Old backups (pre-Sprint 4) don't have this field. The Json parser is
+     * configured with coerceInputValues = true, so missing fields fall back
+     * to their declared default. Old backups restore with no formatting —
+     * which is exactly what was happening before, just now intentionally.
+     * New backups will carry formatting through correctly.
+     *
+     * NOT ENCRYPTED: format ranges contain only character indices and a
+     * FormatType enum value. No user content, nothing sensitive.
+     */
+    val contentFormats: List<FormatRange> = emptyList()
 )
 
 /**
@@ -154,3 +169,31 @@ data class BackupHeader(
     val folderCount: Int,
     val appVersion: String
 )
+
+// ─── Export UI state machine ───────────────────────────────────────────────────
+//
+// Moved here from SettingsViewModel so ExportNotesViewModel and
+// ExportNotesScreen can reference them without depending on SettingsViewModel.
+//
+// Flow for SECURE BACKUP:
+//   Idle → ConfirmingPassword → PasswordVerifying → PasswordError OR ReadyToExport
+//   → (screen launches file picker) → Exporting → ExportSuccess OR ExportError
+//
+// Flow for PLAIN TEXT ZIP:
+//   Idle → ReadyToExport (no password step) → Exporting → ExportSuccess OR ExportError
+
+enum class ExportFormat {
+    SECURE_BACKUP,    // .vnbackup — encrypted ZIP, importable back into Void Note
+    PLAIN_TEXT_ZIP    // .zip — Markdown files, human-readable, export-only
+}
+
+sealed class ExportState {
+    object Idle : ExportState()
+    data class ConfirmingPassword(val format: ExportFormat) : ExportState()
+    object PasswordVerifying : ExportState()
+    data class PasswordError(val message: String) : ExportState()
+    data class ReadyToExport(val format: ExportFormat) : ExportState()
+    object Exporting : ExportState()
+    data class ExportSuccess(val noteCount: Int, val format: ExportFormat) : ExportState()
+    data class ExportError(val message: String) : ExportState()
+}

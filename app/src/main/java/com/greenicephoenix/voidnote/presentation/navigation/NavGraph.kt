@@ -21,6 +21,8 @@ import com.greenicephoenix.voidnote.presentation.trash.TrashScreen
 import com.greenicephoenix.voidnote.presentation.vault.VaultSetupScreen
 import com.greenicephoenix.voidnote.presentation.vault.VaultUnlockScreen
 import com.greenicephoenix.voidnote.presentation.vault.RestoreBackupScreen
+import com.greenicephoenix.voidnote.presentation.tags.TagsScreen
+import com.greenicephoenix.voidnote.presentation.settings.ExportNotesScreen
 
 /**
  * SetupNavGraph — the complete navigation map for Void Note.
@@ -194,7 +196,8 @@ fun SetupNavGraph(navController: NavHostController) {
                 onNavigateToFolders     = { navController.navigate(Screen.Folders.route) },
                 onNavigateToFolderNotes = { folderId ->
                     navController.navigate(Screen.FolderNotes.createRoute(folderId))
-                }
+                },
+                onNavigateToTags        = { navController.navigate(Screen.Tags.route) }
             )
         }
 
@@ -228,8 +231,16 @@ fun SetupNavGraph(navController: NavHostController) {
                 onNavigateToTrash         = { navController.navigate(Screen.Trash.route) },
                 onNavigateToArchive       = { navController.navigate(Screen.Archive.route) },
                 onNavigateToChangelog     = { navController.navigate(Screen.Changelog.route) },
+                onNavigateToExport         = { navController.navigate(Screen.ExportNotes.route) },
                 onNavigateToImport        = { navController.navigate(Screen.ImportBackup.route) },
                 onNavigateToChangePassword = { navController.navigate(Screen.ChangeVaultPassword.route) }
+            )
+        }
+
+        // ── Export Notes (Settings → Data Management → Export Notes) ──────────
+        composable(Screen.ExportNotes.route) {
+            ExportNotesScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
@@ -272,7 +283,12 @@ fun SetupNavGraph(navController: NavHostController) {
 
         // ── Tags ──────────────────────────────────────────────────────────────
         composable(Screen.Tags.route) {
-            // TODO: TagsScreen — future sprint
+            TagsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNoteClick    = { noteId ->
+                    navController.navigate(Screen.NoteEditor.createRoute(noteId))
+                }
+            )
         }
 
         // ── Trash ─────────────────────────────────────────────────────────────

@@ -51,6 +51,39 @@ object ChangelogData {
      */
     val entries: List<VersionEntry> = listOf(
 
+        // ── Sprint 4 + Sprint 5 ───────────────────────────────────────────────
+        VersionEntry(
+            version     = "0.1.0-alpha",
+            releaseDate = "06 Mar 2026",
+            tagline     = "Stability, polish, and a few long-overdue quality-of-life improvements.",
+            changes     = listOf(
+                // Sprint 5 new features
+                ChangeItem(ChangeType.NEW,      "Move to folder — reassign any note to a different folder from the editor"),
+                ChangeItem(ChangeType.NEW,      "Fullscreen image viewer — tap any image block to open it fullscreen with pinch-to-zoom"),
+                ChangeItem(ChangeType.NEW,      "Reading time — estimated read time now shown alongside word and character count"),
+                ChangeItem(ChangeType.NEW,      "Tags browser — dedicated screen to browse and filter notes by tag"),
+
+                // Sprint 4 features (carried forward)
+                ChangeItem(ChangeType.NEW,      "Numbered lists — insert numbered list items with auto-continuing numbering"),
+                ChangeItem(ChangeType.NEW,      "Format preview — toggle between edit mode and a styled read-only preview"),
+                ChangeItem(ChangeType.NEW,      "Export screen — dedicated export screen with format picker (Secure Backup / Plain Text)"),
+
+                // Improvements
+                ChangeItem(ChangeType.IMPROVED, "Tag limit feedback — toolbar shows 'Max 5 tags' clearly instead of silently hiding the Add button"),
+                ChangeItem(ChangeType.IMPROVED, "Vault unlock now correctly rejects wrong passwords before loading notes"),
+                ChangeItem(ChangeType.IMPROVED, "Export and import flows are now separate dedicated screens for clarity"),
+
+                // Fixes
+                ChangeItem(ChangeType.FIXED,    "Note formatting (bold, italic etc.) now correctly survives export and re-import"),
+                ChangeItem(ChangeType.FIXED,    "Folder notes page title now updates live when folder is renamed"),
+                ChangeItem(ChangeType.FIXED,    "Back navigation from main screen now backgrounds the app instead of re-triggering the lock screen"),
+
+                // Security
+                ChangeItem(ChangeType.SECURITY, "Vault unlock now verifies password against a verification blob before activating the key"),
+                ChangeItem(ChangeType.SECURITY, "ProGuard rules hardened for Room, Hilt, Keystore and serialization classes in release builds"),
+            )
+        ),
+
         VersionEntry(
             version     = "0.0.2-alpha",
             releaseDate = "05 Mar 2026",

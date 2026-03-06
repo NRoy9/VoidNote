@@ -234,7 +234,7 @@ fun RestoreBackupScreen(
                         ) {
                             Text("ℹ", style = MaterialTheme.typography.bodySmall)
                             Text(
-                                text = "After restore, this backup password becomes your vault password on this device. You can change it later in Settings → Security.",
+                                text = "The password you enter here will become your vault password on this device — you'll use it every time you open the app. You can change it later in Settings → Security.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 lineHeight = 18.sp

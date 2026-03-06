@@ -3,10 +3,12 @@ package com.greenicephoenix.voidnote.presentation.notes
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -50,6 +52,7 @@ fun NotesListScreen(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToFolders: () -> Unit = {},
     onNavigateToFolderNotes: (String) -> Unit = {},
+    onNavigateToTags: () -> Unit = {},      // ← ADD
     onCreateFolder: () -> Unit = {},
     viewModel: NotesListViewModel = hiltViewModel()
 ) {
@@ -100,10 +103,11 @@ fun NotesListScreen(
 
                 else -> {
                     NotesAndFoldersContent(
-                        uiState      = uiState,
-                        onNoteClick  = { note -> onNavigateToEditor(note.id) },
-                        onFolderClick = { folder -> onNavigateToFolderNotes(folder.id) },
-                        onTogglePin  = { noteId -> viewModel.onTogglePin(noteId) }
+                        uiState         = uiState,
+                        onNoteClick     = { note -> onNavigateToEditor(note.id) },
+                        onFolderClick   = { folder -> onNavigateToFolderNotes(folder.id) },
+                        onTogglePin     = { noteId -> viewModel.onTogglePin(noteId) },
+                        onNavigateToTags = onNavigateToTags   // ← ADD
                     )
                 }
             }
@@ -163,7 +167,8 @@ private fun NotesAndFoldersContent(
     uiState: NotesListUiState,
     onNoteClick: (com.greenicephoenix.voidnote.domain.model.Note) -> Unit,
     onFolderClick: (com.greenicephoenix.voidnote.domain.model.Folder) -> Unit,
-    onTogglePin: (String) -> Unit
+    onTogglePin: (String) -> Unit,
+    onNavigateToTags: () -> Unit = {}   // ← ADD
 ) {
     // uiState.notes already excludes archived (filtered in ViewModel).
     // We still guard against trashed here as a safety net.
@@ -194,6 +199,15 @@ private fun NotesAndFoldersContent(
             }
             item { Spacer(Modifier.height(Spacing.small)) }
         }
+
+        // Tags entry point — always shown so the user can always find it
+        item {
+            SectionHeader("TAGS")
+        }
+        item {
+            TagsEntryRow(onClick = onNavigateToTags)
+        }
+        item { Spacer(Modifier.height(Spacing.small)) }
 
         if (regularNotes.isNotEmpty()) {
             if (pinnedNotes.isNotEmpty() || uiState.folders.isNotEmpty()) {
@@ -239,6 +253,38 @@ private fun EmptyState(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
         )
+    }
+}
+
+@Composable
+private fun TagsEntryRow(onClick: () -> Unit) {
+    Surface(
+        modifier       = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape          = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        color          = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp
+    ) {
+        Row(
+            modifier              = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.medium, vertical = Spacing.medium),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            Text(
+                text  = "Browse all tags",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Icon(
+                imageVector        = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint               = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier           = Modifier.size(16.dp)
+            )
+        }
     }
 }
 
