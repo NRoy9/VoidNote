@@ -89,13 +89,6 @@ Thumbs.db
 *~
 *.swp
 *.bak
-# Signing keystore ï¿½ NEVER commit this
+# Signing keystore — NEVER commit this
 app/voidnote-release.jks
 keystore.properties
-
-# wrangler files
-.wrangler
-.dev.vars*
-!.dev.vars.example
-.env*
-!.env.example
