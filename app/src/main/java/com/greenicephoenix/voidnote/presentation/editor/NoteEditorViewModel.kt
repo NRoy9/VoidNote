@@ -151,7 +151,8 @@ class NoteEditorViewModel @Inject constructor(
                         tags              = note.tags,
                         isNewNote         = false,
                         isLoading         = false,
-                        currentFolderName = folderName      // ← SPRINT 5
+                        currentFolderName = folderName,      // ← SPRINT 5
+                        noteColor         = note.color      // ← SPRINT 7 FIX: load saved color into UI state
                     )
                 } else {
                     currentNoteId = UUID.randomUUID().toString()

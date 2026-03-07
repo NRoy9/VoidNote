@@ -298,6 +298,36 @@ fun SettingsScreen(
                 )
             }
 
+            // Website — primary destination for APK downloads and release info
+            item {
+                SettingsItem(
+                    icon     = Icons.Default.Language,
+                    title    = "Website",
+                    subtitle = "voidnote.pages.dev",
+                    onClick  = {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW,
+                                "https://voidnote.pages.dev".toUri())
+                        )
+                    }
+                )
+            }
+
+            // Privacy Policy — required by Play Store; hosted on our website
+            item {
+                SettingsItem(
+                    icon     = Icons.Default.PrivacyTip,
+                    title    = "Privacy Policy",
+                    subtitle = "How we handle your data",
+                    onClick  = {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW,
+                                "https://voidnote.pages.dev/privacy-policy.html".toUri())
+                        )
+                    }
+                )
+            }
+
             item {
                 SettingsItem(
                     icon     = Icons.Default.Code,

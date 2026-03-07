@@ -192,6 +192,8 @@ fun NoteEditorScreen(
     var showInsertSheet        by remember { mutableStateOf(false) }
     // SPRINT 5: controls visibility of the "Move to folder" folder picker dialog
     var showMoveToFolderDialog by remember { mutableStateOf(false) }
+    // SPRINT 7: controls visibility of the color picker dialog (moved from bottom bar)
+    var showColorDialog        by remember { mutableStateOf(false) }
 
     // Declared here — ABOVE onNumberedListClick — because that lambda
     // captures contentFieldValue by reference and Kotlin does not hoist vars.
@@ -277,7 +279,10 @@ fun NoteEditorScreen(
                 lastSaved           = uiState.lastSaved,
                 // SPRINT 5: pass the folder name for display and the callback to open the dialog
                 currentFolderName   = uiState.currentFolderName,
-                onMoveToFolderClick = { showMoveToFolderDialog = true }
+                onMoveToFolderClick = { showMoveToFolderDialog = true },
+                // SPRINT 7: color moved from bottom bar to overflow menu
+                currentColor        = noteColor,
+                onColorClick        = { showColorDialog = true }
             )
         },
         bottomBar = {
@@ -294,25 +299,6 @@ fun NoteEditorScreen(
                     onRemoveTag = { viewModel.removeTag(it) }
                 )
 
-                // Sprint 6 — color accent picker strip
-                // Shown between the tags row and the formatting toolbar.
-                // Wrapped in a Surface so it has the same background as the toolbar.
-                Surface(
-                    modifier  = Modifier.fillMaxWidth(),
-                    color     = MaterialTheme.colorScheme.surfaceVariant,
-                    tonalElevation = 0.dp
-                ) {
-                    Column {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                        NoteColorPicker(
-                            currentColor    = noteColor,
-                            onColorSelected = { viewModel.updateNoteColor(it) },
-                            modifier        = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = Spacing.medium, vertical = Spacing.small)
-                        )
-                    }
-                }
 
                 FormattingToolbar(
                     isBoldActive = if (hasSelection) hasFormat(uiState.contentFormats, contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.BOLD) else uiState.activeBold,
@@ -572,6 +558,48 @@ fun NoteEditorScreen(
         )
     }
 
+    // SPRINT 7: Color picker — shown when user taps "Color" in the overflow menu.
+    // A simple AlertDialog wrapping the existing NoteColorPicker composable.
+    // The picker is unchanged — it just lives in a dialog now instead of the bottom bar.
+    if (showColorDialog) {
+        AlertDialog(
+            onDismissRequest = { showColorDialog = false },
+            title = {
+                Text(
+                    text  = "Note Color",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                // NoteColorPicker is the same composable as before — reused here unchanged.
+                NoteColorPicker(
+                    currentColor    = noteColor,
+                    onColorSelected = { color ->
+                        viewModel.updateNoteColor(color)
+                        // Auto-dismiss after selection — single-tap UX, no "confirm" needed
+                        showColorDialog = false
+                    }
+                )
+            },
+            confirmButton = {
+                // "None" clear button — removes color and closes
+                TextButton(
+                    onClick = {
+                        viewModel.updateNoteColor(null)
+                        showColorDialog = false
+                    }
+                ) {
+                    Text("Clear color")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showColorDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // ── Camera rationale dialog ───────────────────────────────────────────────
     if (showCameraRationale) {
         AlertDialog(
@@ -812,7 +840,9 @@ private fun TopBar(
     lastSaved: Long,
     // SPRINT 5: folder info for display + callback to open the dialog
     currentFolderName: String? = null,
-    onMoveToFolderClick: () -> Unit = {}
+    onMoveToFolderClick: () -> Unit = {},
+    currentColor: NoteColor? = null,
+    onColorClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     TopAppBar(
@@ -909,6 +939,44 @@ private fun TopBar(
                             }
                         },
                         onClick = { showMenu = false; onMoveToFolderClick() }
+                    )
+
+                    // SPRINT 7: Color / category — opens the color picker dialog
+                    // Shows a small colored dot (or empty ring for "none") next to the label
+                    // so the user can see at a glance what color is currently set.
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.small),
+                                verticalAlignment     = Alignment.CenterVertically
+                            ) {
+                                // Dot preview — filled circle if color set, outlined ring if none
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .then(
+                                            if (currentColor != null)
+                                                Modifier.background(currentColor.pickerColor)
+                                            else
+                                                Modifier.border(
+                                                    1.5.dp,
+                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                                    CircleShape
+                                                )
+                                        )
+                                )
+                                Column {
+                                    Text("Color")
+                                    Text(
+                                        text  = currentColor?.label ?: "None",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                }
+                            }
+                        },
+                        onClick = { showMenu = false; onColorClick() }
                     )
 
                     HorizontalDivider()

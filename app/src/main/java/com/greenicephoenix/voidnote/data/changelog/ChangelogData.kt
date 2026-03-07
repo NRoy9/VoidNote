@@ -50,6 +50,25 @@ object ChangelogData {
      * ADD NEW ENTRIES AT THE TOP.
      */
     val entries: List<VersionEntry> = listOf(
+        // ── v1.0.0 — First production release ────────────────────────────────
+        // Free-tier feature set is complete. No longer alpha.
+        VersionEntry(
+            version     = "1.0.0",
+            releaseDate = "07 Mar 2026",
+            tagline     = "Into the void. The first full release.",
+            changes     = listOf(
+                ChangeItem(ChangeType.NEW,      "Official launch — Void Note is no longer alpha. All free-tier features are complete and stable"),
+                ChangeItem(ChangeType.NEW,      "Website — visit voidnote.pages.dev for the latest APK, privacy policy and release notes"),
+                ChangeItem(ChangeType.NEW,      "App icon — document shape with red fold accent, consistent across splash screen and website"),
+                ChangeItem(ChangeType.IMPROVED, "Color category picker moved to the ⋮ overflow menu — editor is now clutter-free"),
+                ChangeItem(ChangeType.IMPROVED, "Overflow menu color item shows the current color as a small dot — visible at a glance"),
+                ChangeItem(ChangeType.IMPROVED, "Splash screen logo is now visible in both light and dark mode"),
+                ChangeItem(ChangeType.IMPROVED, "Note cards show a clean left accent strip for color — no more tinted backgrounds"),
+                ChangeItem(ChangeType.FIXED,    "Selected note color was reset to None every time a note was re-opened — now persists correctly"),
+                ChangeItem(ChangeType.FIXED,    "Color accent strip on note cards now renders at full card height"),
+            )
+        ),
+
         //Sprint 6
         VersionEntry(
             version     = "0.2.0-alpha",

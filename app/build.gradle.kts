@@ -17,8 +17,8 @@ android {
         applicationId = "com.greenicephoenix.voidnote"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.2.0-alpha"
+        versionCode = 5
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
