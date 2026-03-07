@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Void Note — Logo Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --black:   #000000;
+      --surface: #0D0D0D;
+      --border:  #222222;
+      --white:   #FFFFFF;
+      --muted:   #888888;
+      --accent:  #FF3B30;
+      --font-mono: 'Share Tech Mono', monospace;
+      --font-body: 'DM Sans', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0D0D0D;
+      color: #fff;
+      font-family: var(--font-body);
+      padding: 40px;
+      /* Dot grid background — matches the website */
+      background-image: radial-gradient(circle, #1a1a1a 1px, transparent 1px);
+      background-size: 24px 24px;
+      background-color: #000;
+    }
+
+    h1 {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      margin-bottom: 40px;
+    }
+
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 20px;
+      margin-top: 48px;
+    }
+
+    /* ── LOGO SHOWCASE GRID ─────────────────────────── */
+    .showcase {
+      display: flex;
+      gap: 24px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .showcase-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .showcase-label {
+      font-family: var(--font-mono);
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    /* ── DARK BACKGROUND SWATCH ─────────────────────── */
+    .swatch-dark {
+      background: #000;
+      padding: 24px;
+      border: 1px solid #222;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .swatch-light {
+      background: #F5F5F5;
+      padding: 24px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── NAV CONTEXT PREVIEW ────────────────────────── */
+    .nav-preview {
+      background: rgba(0,0,0,0.85);
+      border: 1px solid #222;
+      border-radius: 8px;
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: fit-content;
+      backdrop-filter: blur(12px);
+    }
+
+    .nav-preview__text {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      letter-spacing: 0.15em;
+      color: #fff;
+    }
+
+    /* ── APP ICON CONTEXT ───────────────────────────── */
+    .app-icon-frame {
+      border-radius: 22.5%;   /* Android adaptive icon squircle */
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+
+    /* ── DIVIDER ────────────────────────────────────── */
+    .divider {
+      width: 100%;
+      height: 1px;
+      background: #1a1a1a;
+      margin: 40px 0;
+    }
+
+    /* ── COLOR CHIPS ────────────────────────────────── */
+    .color-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .color-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .color-chip__swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      border: 1px solid #333;
+    }
+
+    /* ── NOTES ──────────────────────────────────────── */
+    .note-box {
+      border: 1px solid #222;
+      border-left: 2px solid var(--accent);
+      border-radius: 4px;
+      padding: 16px 20px;
+      margin-top: 40px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 600px;
+    }
+
+    .note-box strong {
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>VOID NOTE — LOGO SYSTEM PREVIEW</h1>
+
+  <!-- ================================================================
+       THE CORE SVG LOGO
+       
+       Design rationale:
+       - A document/page shape (the "note") with a folded top-right corner
+         → instantly readable as "notes app" at any size
+       - The fold corner is filled with the red accent (#FF3B30)
+         → the one consistent pop of color across the whole Nothing palette
+       - Three horizontal lines inside represent text/content
+         → reinforces "notes" meaning
+       - A small circle (○) sits bottom-right inside the document
+         → the "void" signature, keeps brand continuity with the website
+       - Everything is geometric and grid-aligned
+         → Nothing design language: no softness, no gradients, no shadows
+       
+       SIZES: The SVG scales perfectly from 16px (favicon) to 1024px (Play Store)
+  ================================================================ -->
+
+  <p class="section-label">01 — ICON AT ALL SIZES</p>
+
+  <div class="showcase">
+
+    <!-- 512px — Play Store -->
+    <div class="showcase-item">
+      <div class="swatch-dark">
+        <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Void Note logo">
+          <!-- Document body -->
+          <rect x="14" y="10" width="58" height="72" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+          <!-- Fold cut-out: white triangle covers top-right corner -->
+          <polygon points="56,10 72,10 72,26" fill="#000000"/>
+          <!-- Fold lines: the crease of the folded corner -->
+          <polyline points="56,10 56,26 72,26" fill="none" stroke="#FF3B30" stroke-width="2.5"/>
+          <!-- Text lines — representing note content -->
+          <line x1="24" y1="42" x2="58" y2="42" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="52" x2="58" y2="52" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="62" x2="46" y2="62" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <!-- Void circle — brand signature, bottom-right of document -->
+          <circle cx="57" cy="66" r="7" fill="none" stroke="#FF3B30" stroke-width="2"/>
+        </svg>
+      </div>
+      <span class="showcase-label">ICON ONLY · 120px</span>
+    </div>
+
+    <!-- 64px — App drawer size -->
+    <div class="showcase-item">
+      <div class="swatch-dark">
+        <svg width="64" height="64" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="14" y="10" width="58" height="72" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+          <polygon points="56,10 72,10 72,26" fill="#000000"/>
+          <polyline points="56,10 56,26 72,26" fill="none" stroke="#FF3B30" stroke-width="2.5"/>
+          <line x1="24" y1="42" x2="58" y2="42" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="52" x2="58" y2="52" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="62" x2="46" y2="62" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="57" cy="66" r="7" fill="none" stroke="#FF3B30" stroke-width="2"/>
+        </svg>
+      </div>
+      <span class="showcase-label">64px</span>
+    </div>
+
+    <!-- 48px — Notification / toolbar -->
+    <div class="showcase-item">
+      <div class="swatch-dark">
+        <svg width="48" height="48" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="14" y="10" width="58" height="72" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+          <polygon points="56,10 72,10 72,26" fill="#000000"/>
+          <polyline points="56,10 56,26 72,26" fill="none" stroke="#FF3B30" stroke-width="2.5"/>
+          <line x1="24" y1="42" x2="58" y2="42" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="52" x2="58" y2="52" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="62" x2="46" y2="62" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="57" cy="66" r="7" fill="none" stroke="#FF3B30" stroke-width="2"/>
+        </svg>
+      </div>
+      <span class="showcase-label">48px</span>
+    </div>
+
+    <!-- 32px -->
+    <div class="showcase-item">
+      <div class="swatch-dark">
+        <svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="14" y="10" width="58" height="72" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+          <polygon points="56,10 72,10 72,26" fill="#000000"/>
+          <polyline points="56,10 56,26 72,26" fill="none" stroke="#FF3B30" stroke-width="2.5"/>
+          <line x1="24" y1="42" x2="58" y2="42" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="52" x2="58" y2="52" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="62" x2="46" y2="62" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="57" cy="66" r="7" fill="none" stroke="#FF3B30" stroke-width="2"/>
+        </svg>
+      </div>
+      <span class="showcase-label">32px</span>
+    </div>
+
+    <!-- 20px — Favicon size -->
+    <div class="showcase-item">
+      <div class="swatch-dark">
+        <svg width="20" height="20" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="14" y="10" width="58" height="72" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+          <polygon points="56,10 72,10 72,26" fill="#000000"/>
+          <polyline points="56,10 56,26 72,26" fill="none" stroke="#FF3B30" stroke-width="2.5"/>
+          <line x1="24" y1="42" x2="58" y2="42" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="52" x2="58" y2="52" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="62" x2="46" y2="62" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="57" cy="66" r="7" fill="none" stroke="#FF3B30" stroke-width="2"/>
+        </svg>
+      </div>
+      <span class="showcase-label">20px · favicon</span>
+    </div>
+
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ================================================================
+       ANDROID APP ICON — with squircle frame (how it looks on device)
+  ================================================================ -->
+  <p class="section-label">02 — ANDROID APP ICON (SQUIRCLE FRAME)</p>
+  <p style="font-size:0.8rem; color:#666; margin-bottom: 20px; font-family: var(--font-mono); letter-spacing:0.05em;">
+    Android wraps app icons in a squircle shape. This is how it looks on the home screen.
+  </p>
+
+  <div class="showcase">
+
+    <!-- 108dp launcher icon -->
+    <div class="showcase-item">
+      <div class="app-icon-frame" style="width:96px;height:96px;">
+        <svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Black background fill -->
+          <rect width="96" height="96" fill="#000000"/>
+          <!-- Document -->
+          <rect x="16" y="10" width="52" height="66" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+          <!-- Fold -->
+          <polygon points="52,10 68,10 68,26" fill="#000000"/>
+          <polyline points="52,10 52,26 68,26" fill="none" stroke="#FF3B30" stroke-width="2.5"/>
+          <!-- Lines -->
+          <line x1="24" y1="38" x2="54" y2="38" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="47" x2="54" y2="47" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="56" x2="42" y2="56" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <!-- Void circle -->
+          <circle cx="54" cy="60" r="7" fill="none" stroke="#FF3B30" stroke-width="2"/>
+          <!-- Dot matrix texture at bottom — subtle branding -->
+          <rect x="16" y="82" width="3" height="3" fill="#222"/>
+          <rect x="22" y="82" width="3" height="3" fill="#222"/>
+          <rect x="28" y="82" width="3" height="3" fill="#222"/>
+          <rect x="34" y="82" width="3" height="3" fill="#1a1a1a"/>
+        </svg>
+      </div>
+      <span class="showcase-label">LAUNCHER · 96dp</span>
+    </div>
+
+    <!-- Small icon -->
+    <div class="showcase-item">
+      <div class="app-icon-frame" style="width:56px;height:56px;">
+        <svg width="56" height="56" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="96" height="96" fill="#000000"/>
+          <rect x="16" y="10" width="52" height="66" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+          <polygon points="52,10 68,10 68,26" fill="#000000"/>
+          <polyline points="52,10 52,26 68,26" fill="none" stroke="#FF3B30" stroke-width="2.5"/>
+          <line x1="24" y1="38" x2="54" y2="38" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="47" x2="54" y2="47" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="56" x2="42" y2="56" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="54" cy="60" r="7" fill="none" stroke="#FF3B30" stroke-width="2"/>
+        </svg>
+      </div>
+      <span class="showcase-label">56dp</span>
+    </div>
+
+    <!-- Notification bar (monochrome) -->
+    <div class="showcase-item">
+      <div style="background:#111; padding:16px; border:1px solid #222; border-radius:6px; display:flex; align-items:center; gap:10px;">
+        <!-- Android notification bar icons must be single-colour white -->
+        <svg width="24" height="24" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="14" y="8" width="58" height="76" rx="4" fill="none" stroke="#FFFFFF" stroke-width="6"/>
+          <polygon points="56,8 72,8 72,28" fill="#121212"/>
+          <polyline points="56,8 56,28 72,28" fill="none" stroke="#FFFFFF" stroke-width="6"/>
+          <line x1="24" y1="44" x2="58" y2="44" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+          <line x1="24" y1="56" x2="58" y2="56" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+          <line x1="24" y1="68" x2="44" y2="68" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+        </svg>
+        <span style="font-family:var(--font-mono);font-size:0.65rem;color:#666;letter-spacing:0.1em;">NOTIFICATION BAR</span>
+      </div>
+      <span class="showcase-label">MONO · 24dp</span>
+    </div>
+
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ================================================================
+       WEBSITE NAV CONTEXT
+  ================================================================ -->
+  <p class="section-label">03 — WEBSITE NAV LOCKUP</p>
+
+  <div class="nav-preview">
+    <!-- The nav uses the SVG inline, scaled to 28px -->
+    <svg width="28" height="28" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="96" height="96" fill="transparent"/>
+      <rect x="16" y="10" width="52" height="66" rx="3" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+      <polygon points="52,10 68,10 68,26" fill="#000000"/>
+      <polyline points="52,10 52,26 68,26" fill="none" stroke="#FF3B30" stroke-width="3"/>
+      <line x1="24" y1="38" x2="54" y2="38" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="24" y1="47" x2="54" y2="47" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="24" y1="56" x2="42" y2="56" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="54" cy="60" r="7" fill="none" stroke="#FF3B30" stroke-width="2.5"/>
+    </svg>
+    <span class="nav-preview__text">VOID NOTE</span>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ================================================================
+       LIGHT BACKGROUND TEST
+       Always test logos on light backgrounds — some apps/browsers
+       will show the icon on white (e.g. Play Store listing).
+  ================================================================ -->
+  <p class="section-label">04 — ON LIGHT BACKGROUND (PLAY STORE / BROWSER)</p>
+
+  <div class="showcase">
+    <div class="showcase-item">
+      <div class="swatch-light">
+        <!-- On light background, we need a black background behind the icon -->
+        <div style="background:#000; border-radius:16px; padding:12px; display:flex;">
+          <svg width="80" height="80" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="96" height="96" fill="#000000"/>
+            <rect x="16" y="10" width="52" height="66" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+            <polygon points="52,10 68,10 68,26" fill="#000000"/>
+            <polyline points="52,10 52,26 68,26" fill="none" stroke="#FF3B30" stroke-width="2.5"/>
+            <line x1="24" y1="38" x2="54" y2="38" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+            <line x1="24" y1="47" x2="54" y2="47" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+            <line x1="24" y1="56" x2="42" y2="56" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="54" cy="60" r="7" fill="none" stroke="#FF3B30" stroke-width="2"/>
+          </svg>
+        </div>
+      </div>
+      <span class="showcase-label">ON WHITE · APP ICON CONTAINER</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ================================================================
+       COLOR SYSTEM
+  ================================================================ -->
+  <p class="section-label">05 — COLOR SYSTEM</p>
+
+  <div class="color-row">
+    <div class="color-chip">
+      <div class="color-chip__swatch" style="background:#000000;"></div>
+      <span>#000000 · Background</span>
+    </div>
+    <div class="color-chip">
+      <div class="color-chip__swatch" style="background:#FFFFFF;"></div>
+      <span>#FFFFFF · Document / Text</span>
+    </div>
+    <div class="color-chip">
+      <div class="color-chip__swatch" style="background:#FF3B30;"></div>
+      <span>#FF3B30 · Accent (fold + void circle)</span>
+    </div>
+    <div class="color-chip">
+      <div class="color-chip__swatch" style="background:#222222;"></div>
+      <span>#222222 · Dot matrix texture</span>
+    </div>
+  </div>
+
+  <!-- Design notes -->
+  <div class="note-box">
+    <strong>DESIGN RATIONALE</strong><br><br>
+    The logo has three layers of meaning stacked in one mark:<br><br>
+    <strong>Document shape</strong> — the folded-corner page is universally understood as "notes/document" at a glance, even at 20px.<br><br>
+    <strong>Red fold</strong> — the only red element besides the void circle. The fold is where a physical note gets "dog-eared." The red makes it immediately eye-catching and matches <code>VoidAccent = Color(0xFFFF3B30)</code> exactly from your app's Color.kt.<br><br>
+    <strong>Void circle</strong> — the ○ from the website is preserved inside the document, bottom-right. It ties the brand together across website and app. "The void is inside the note."<br><br>
+    <strong>Consistency:</strong> This exact SVG code goes into the website nav, Android XML drawable, and Play Store 512×512 PNG export — one source of truth.
+  </div>
+
+</body>
+</html>

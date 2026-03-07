@@ -1,0 +1,75 @@
+<!--
+  VOID NOTE — Master Logo SVG
+  
+  This is the single source of truth for the logo.
+  Export this file at the following sizes for Android + Play Store:
+  
+  ANDROID APP ICONS (put in res/mipmap-* folders):
+    - 48×48px   → mipmap-mdpi/ic_launcher.png
+    - 72×72px   → mipmap-hdpi/ic_launcher.png
+    - 96×96px   → mipmap-xhdpi/ic_launcher.png
+    - 144×144px → mipmap-xxhdpi/ic_launcher.png
+    - 192×192px → mipmap-xxxhdpi/ic_launcher.png
+  
+  PLAY STORE:
+    - 512×512px → High-res icon (required)
+  
+  HOW TO EXPORT TO PNG:
+  Option 1 (easiest): Open this file in a browser, right-click → "Save as image"
+  Option 2: Use Inkscape (free) → File → Export PNG
+  Option 3: Use Android Studio → File → New → Image Asset (paste the SVG)
+  
+  FAVICON:
+  Export at 32×32px and save as favicon.ico using https://favicon.io/favicon-converter/
+  
+  COLOR REFERENCE (matches Color.kt in the Android app):
+    Background:  #000000  (VoidBlack)
+    Document:    #FFFFFF  (VoidWhite)
+    Accent:      #FF3B30  (VoidAccent)
+-->
+<svg 
+  width="512" 
+  height="512" 
+  viewBox="0 0 96 96" 
+  fill="none" 
+  xmlns="http://www.w3.org/2000/svg"
+  aria-label="Void Note app icon">
+
+  <!-- Black background — required for Android adaptive icon -->
+  <rect width="96" height="96" fill="#000000"/>
+
+  <!-- ── DOCUMENT BODY ──────────────────────────────────────────
+       A rectangle with a folded top-right corner.
+       This is the universally understood "document/note" shape.
+       rx="3" gives it the same minimal corner radius as the app's cards.
+  ──────────────────────────────────────────────────────────── -->
+  <rect x="16" y="10" width="52" height="66" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+
+  <!-- ── FOLDED CORNER ──────────────────────────────────────────
+       The black triangle covers the top-right corner of the document rect,
+       creating the illusion of a folded page corner.
+       The red polyline draws the fold crease itself.
+  ──────────────────────────────────────────────────────────── -->
+  <!-- Black fill to "cut" the corner -->
+  <polygon points="52,10 68,10 68,26" fill="#000000"/>
+  <!-- Red fold crease — the signature accent element -->
+  <polyline points="52,10 52,26 68,26" fill="none" stroke="#FF3B30" stroke-width="2.5"/>
+
+  <!-- ── TEXT LINES ─────────────────────────────────────────────
+       Three horizontal lines representing note content.
+       Third line is shorter — looks natural, like a real paragraph.
+       stroke-linecap="round" softens the ends without being "soft" overall.
+  ──────────────────────────────────────────────────────────── -->
+  <line x1="24" y1="38" x2="54" y2="38" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+  <line x1="24" y1="47" x2="54" y2="47" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+  <line x1="24" y1="56" x2="42" y2="56" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- ── VOID CIRCLE ────────────────────────────────────────────
+       The ○ void symbol — carried over from the website.
+       Sits bottom-right inside the document, overlapping the last text line.
+       "The void is inside the note."
+       Uses the same red accent to tie it to the fold — one accent, two uses.
+  ──────────────────────────────────────────────────────────── -->
+  <circle cx="54" cy="60" r="7" fill="none" stroke="#FF3B30" stroke-width="2"/>
+
+</svg>
