@@ -3,13 +3,16 @@ package com.greenicephoenix.voidnote.presentation.splash
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -137,7 +140,7 @@ fun SplashScreen(
 
         // ── Version number — bottom of screen ─────────────────────────────────
         Text(
-            text     = "v0.2.0-alpha",   // Keep in sync with versionName in build.gradle.kts
+            text     = "@string/app_name",   // Keep in sync with versionName in build.gradle.kts
             style    = MaterialTheme.typography.labelSmall,
             color    = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
             modifier = Modifier
@@ -164,7 +167,7 @@ fun SplashScreen(
  *
  * COORDINATE SYSTEM:
  * All coordinates are based on a 96×96 unit viewbox (matching the SVG source).
- * The [scale] factor converts those units to actual pixels based on [size].
+ * The scale factor converts those units to actual pixels based on [size].
  * This makes the logo crisp at any dp size.
  *
  * COLORS:
@@ -183,127 +186,143 @@ fun VoidNoteLogo(
     // Do NOT use MaterialTheme colors here — the logo must be consistent everywhere.
     val white = Color(0xFFFFFFFF)
     val red   = Color(0xFFFF3B30)    // VoidAccent — matches Color.kt
+    val black = Color(0xFF000000)
 
-    Canvas(modifier = modifier.size(size)) {
-
-        // scale converts our 96-unit coordinate system to actual canvas pixels.
-        // e.g. at size=96.dp on a 2x screen: canvasSize=192px, scale=192/96=2.0
-        val scale = this.size.width / 96f
-
-        // Helper lambdas — convert design coordinates to canvas coordinates.
-        // 's' = scale. Using inline lambdas avoids allocating lambda objects per frame.
-        fun sx(x: Float) = x * scale
-        fun sy(y: Float) = y * scale
-
-        // ── 1. DOCUMENT OUTLINE ───────────────────────────────────────────────
-        //
-        // A rectangle with the top-right corner "notched" for the fold effect.
-        // Drawn as a single Path going clockwise from the top-left corner:
-        //   top-left → top edge → fold-start point → diagonal cut → right edge
-        //   → bottom-right corner (rounded) → bottom edge
-        //   → bottom-left corner (rounded) → left edge → back to top-left
-        //
-        // quadraticBezierTo() creates the rounded corners (equivalent to rx="3" in SVG).
-        // The control point is at the actual corner; the end point is where the straight
-        // edge begins/ends — this creates a smooth curve matching RoundedCornerShape(3.dp).
-        val documentPath = Path().apply {
-            moveTo(sx(25f), sy(16f))             // top-left, after corner
-            lineTo(sx(58f), sy(16f))             // top edge → fold start
-            lineTo(sx(74f), sy(32f))             // diagonal cut (the folded corner)
-            lineTo(sx(74f), sy(79f))             // right edge down
-            quadraticBezierTo(                   // bottom-right rounded corner
-                sx(74f), sy(82f),
-                sx(71f), sy(82f)
+    Box(
+        modifier = modifier
+            .size(size)
+            .aspectRatio(1f) // Ensures it stays a perfect circle
+            .border(
+                width = 2.dp,   // Adjust this for thickness (thin = 1.dp to 2.dp)
+                color = red,
+                shape = CircleShape
             )
-            lineTo(sx(25f), sy(82f))             // bottom edge
-            quadraticBezierTo(                   // bottom-left rounded corner
-                sx(22f), sy(82f),
-                sx(22f), sy(79f)
+            .clip(CircleShape)
+            .background(black)
+            .padding(size * 0.12f), // Slightly increased padding to avoid the red border
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+
+            // scale converts our 96-unit coordinate system to actual canvas pixels.
+            // e.g. at size=96.dp on a 2x screen: canvasSize=192px, scale=192/96=2.0
+            val scale = this.size.width / 96f
+
+            // Helper lambdas — convert design coordinates to canvas coordinates.
+            // 's' = scale. Using inline lambdas avoids allocating lambda objects per frame.
+            fun sx(x: Float) = x * scale
+            fun sy(y: Float) = y * scale
+
+            // ── 1. DOCUMENT OUTLINE ───────────────────────────────────────────────
+            //
+            // A rectangle with the top-right corner "notched" for the fold effect.
+            // Drawn as a single Path going clockwise from the top-left corner:
+            //   top-left → top edge → fold-start point → diagonal cut → right edge
+            //   → bottom-right corner (rounded) → bottom edge
+            //   → bottom-left corner (rounded) → left edge → back to top-left
+            //
+            // quadraticBezierTo() creates the rounded corners (equivalent to rx="3" in SVG).
+            // The control point is at the actual corner; the end point is where the straight
+            // edge begins/ends — this creates a smooth curve matching RoundedCornerShape(3.dp).
+            val documentPath = Path().apply {
+                moveTo(sx(25f), sy(16f))             // top-left, after corner
+                lineTo(sx(58f), sy(16f))             // top edge → fold start
+                lineTo(sx(74f), sy(32f))             // diagonal cut (the folded corner)
+                lineTo(sx(74f), sy(79f))             // right edge down
+                quadraticBezierTo(                   // bottom-right rounded corner
+                    sx(74f), sy(82f),
+                    sx(71f), sy(82f)
+                )
+                lineTo(sx(25f), sy(82f))             // bottom edge
+                quadraticBezierTo(                   // bottom-left rounded corner
+                    sx(22f), sy(82f),
+                    sx(22f), sy(79f)
+                )
+                lineTo(sx(22f), sy(19f))             // left edge up
+                quadraticBezierTo(                   // top-left rounded corner
+                    sx(22f), sy(16f),
+                    sx(25f), sy(16f)
+                )
+                close()
+            }
+            drawPath(
+                path = documentPath,
+                color = white,
+                style = Stroke(
+                    width = sx(2.5f),
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
             )
-            lineTo(sx(22f), sy(19f))             // left edge up
-            quadraticBezierTo(                   // top-left rounded corner
-                sx(22f), sy(16f),
-                sx(25f), sy(16f)
+
+            // ── 2. RED FOLD CREASE ────────────────────────────────────────────────
+            //
+            // Two connected lines forming an L-shape at the top-right corner:
+            //   - Vertical: from fold-start (58,16) down to (58,32)
+            //   - Horizontal: from (58,32) right to fold-end (74,32)
+            //
+            // This is the "dog-ear" fold. The red colour makes it the most eye-catching
+            // element of the icon — it anchors the brand identity.
+            val foldPath = Path().apply {
+                moveTo(sx(58f), sy(16f))
+                lineTo(sx(58f), sy(32f))
+                lineTo(sx(74f), sy(32f))
+            }
+            drawPath(
+                path = foldPath,
+                color = red,
+                style = Stroke(
+                    width = sx(2.5f),
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
             )
-            close()
+
+            // ── 3. TEXT LINES ─────────────────────────────────────────────────────
+            //
+            // Three horizontal lines representing the note content.
+            // The third line is intentionally shorter (ends at x=48 instead of x=60)
+            // — it looks like a paragraph that doesn't fill the full width. More natural.
+            //
+            // strokeWidth is scaled so lines stay proportionally thin at any size.
+            val lineStroke = sx(2f)
+
+            drawLine(                                // First line — full width
+                color = white,
+                start = Offset(sx(30f), sy(44f)),
+                end = Offset(sx(60f), sy(44f)),
+                strokeWidth = lineStroke,
+                cap = StrokeCap.Round
+            )
+            drawLine(                                // Second line — full width
+                color = white,
+                start = Offset(sx(30f), sy(53f)),
+                end = Offset(sx(60f), sy(53f)),
+                strokeWidth = lineStroke,
+                cap = StrokeCap.Round
+            )
+            drawLine(                                // Third line — shorter (paragraph end)
+                color = white,
+                start = Offset(sx(30f), sy(62f)),
+                end = Offset(sx(48f), sy(62f)),
+                strokeWidth = lineStroke,
+                cap = StrokeCap.Round
+            )
+
+            // ── 4. VOID CIRCLE ────────────────────────────────────────────────────
+            //
+            // The ○ brand mark. Sits inside the document at bottom-right.
+            // "The void is inside the note."
+            //
+            // Positioned at (60, 66) in the 96-unit space — overlapping the last text
+            // line slightly. Radius=7, no fill, red stroke.
+            // The same red as the fold ties both elements together visually.
+            drawCircle(
+                color = red,
+                radius = sx(7f),
+                center = Offset(sx(60f), sy(66f)),
+                style = Stroke(width = sx(2f))
+            )
         }
-        drawPath(
-            path  = documentPath,
-            color = white,
-            style = Stroke(
-                width = sx(2.5f),
-                cap   = StrokeCap.Round,
-                join  = StrokeJoin.Round
-            )
-        )
-
-        // ── 2. RED FOLD CREASE ────────────────────────────────────────────────
-        //
-        // Two connected lines forming an L-shape at the top-right corner:
-        //   - Vertical: from fold-start (58,16) down to (58,32)
-        //   - Horizontal: from (58,32) right to fold-end (74,32)
-        //
-        // This is the "dog-ear" fold. The red colour makes it the most eye-catching
-        // element of the icon — it anchors the brand identity.
-        val foldPath = Path().apply {
-            moveTo(sx(58f), sy(16f))
-            lineTo(sx(58f), sy(32f))
-            lineTo(sx(74f), sy(32f))
-        }
-        drawPath(
-            path  = foldPath,
-            color = red,
-            style = Stroke(
-                width = sx(2.5f),
-                cap   = StrokeCap.Round,
-                join  = StrokeJoin.Round
-            )
-        )
-
-        // ── 3. TEXT LINES ─────────────────────────────────────────────────────
-        //
-        // Three horizontal lines representing the note content.
-        // The third line is intentionally shorter (ends at x=48 instead of x=60)
-        // — it looks like a paragraph that doesn't fill the full width. More natural.
-        //
-        // strokeWidth is scaled so lines stay proportionally thin at any size.
-        val lineStroke = sx(2f)
-
-        drawLine(                                // First line — full width
-            color       = white,
-            start       = Offset(sx(30f), sy(44f)),
-            end         = Offset(sx(60f), sy(44f)),
-            strokeWidth = lineStroke,
-            cap         = StrokeCap.Round
-        )
-        drawLine(                                // Second line — full width
-            color       = white,
-            start       = Offset(sx(30f), sy(53f)),
-            end         = Offset(sx(60f), sy(53f)),
-            strokeWidth = lineStroke,
-            cap         = StrokeCap.Round
-        )
-        drawLine(                                // Third line — shorter (paragraph end)
-            color       = white,
-            start       = Offset(sx(30f), sy(62f)),
-            end         = Offset(sx(48f), sy(62f)),
-            strokeWidth = lineStroke,
-            cap         = StrokeCap.Round
-        )
-
-        // ── 4. VOID CIRCLE ────────────────────────────────────────────────────
-        //
-        // The ○ brand mark. Sits inside the document at bottom-right.
-        // "The void is inside the note."
-        //
-        // Positioned at (60, 66) in the 96-unit space — overlapping the last text
-        // line slightly. Radius=7, no fill, red stroke.
-        // The same red as the fold ties both elements together visually.
-        drawCircle(
-            color  = red,
-            radius = sx(7f),
-            center = Offset(sx(60f), sy(66f)),
-            style  = Stroke(width = sx(2f))
-        )
     }
 }
