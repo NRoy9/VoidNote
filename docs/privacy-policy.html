@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    VOID NOTE — Privacy Policy
+    
+    WHY THIS PAGE EXISTS:
+    Google Play Store requires every app to have a publicly accessible
+    Privacy Policy URL before the app can be published. This page is that URL.
+    
+    It must be honest, clear, and complete.
+    
+    IMPORTANT: Update the "Last Updated" date and any contact details
+    before submitting to the Play Store.
+  -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Void Note</title>
+  <meta name="description" content="Void Note privacy policy. We collect no data. Period. Here's the full explanation.">
+  <!-- Tell search engines not to index the privacy policy page — it's not useful in search results -->
+  <meta name="robots" content="noindex, follow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <meta name="theme-color" content="#000000">
+</head>
+<body>
+
+  <!-- Navigation — same as main page -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="nav__inner">
+      <a href="index.html" class="nav__logo" aria-label="Void Note home">
+        <div class="nav__logo-mark" aria-hidden="true"></div>
+        <span class="nav__logo-text">VOID NOTE</span>
+      </a>
+      <ul class="nav__links" id="nav-links" role="list">
+        <li><a href="index.html#features" class="nav__link">FEATURES</a></li>
+        <li><a href="index.html#security" class="nav__link">SECURITY</a></li>
+        <li><a href="index.html#download" class="nav__link">DOWNLOAD</a></li>
+        <li><a href="https://github.com/NRoy9/VoidNote" class="nav__link" target="_blank" rel="noopener noreferrer">GITHUB</a></li>
+      </ul>
+      <button class="nav__hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+
+  <!-- ================================================================
+       PRIVACY POLICY CONTENT
+       ================================================================ -->
+  <main class="policy-page" id="main-content">
+    <div class="container">
+
+      <!-- Page header -->
+      <header class="policy-header">
+        <p class="label policy-header__label">LEGAL DOCUMENT</p>
+        <h1 class="policy-header__title">Privacy Policy</h1>
+        <p class="policy-header__meta">
+          Effective date: 7 March 2026 &nbsp;·&nbsp; Last updated: 7 March 2026<br>
+          Developer: GreenIcePhoenix &nbsp;·&nbsp; Package: com.greenicephoenix.voidnote
+        </p>
+      </header>
+
+      <!-- The most important statement — lead with it -->
+      <div class="policy-highlight">
+        <p>
+          <strong>Short version:</strong> Void Note does not collect, transmit, sell, or share any of your personal data.
+          All notes, media, and vault contents stay on your device. We have no servers receiving your data.
+          We have no analytics. We have no crash reporters. Zero.
+        </p>
+      </div>
+
+
+      <!-- 1. Introduction -->
+      <section class="policy-section" aria-labelledby="section-intro">
+        <h2 class="policy-section__title" id="section-intro">1. Introduction</h2>
+        <p>
+          Void Note ("the App", "we", "our") is a privacy-focused note-taking application developed by GreenIcePhoenix
+          ("Developer", "I"). This Privacy Policy explains what data the App accesses, what it does with that data,
+          and what data it never touches.
+        </p>
+        <p>
+          This policy applies to the Void Note Android application (package <code>com.greenicephoenix.voidnote</code>)
+          and this website (voidnote.app). It does not apply to third-party services you may link to from the App or website.
+        </p>
+        <p>
+          By using the App, you agree to this Privacy Policy. If you disagree with any part of this policy,
+          please uninstall the App. You can also delete all App data via Android Settings → Apps → Void Note → Clear Data.
+        </p>
+      </section>
+
+
+      <!-- 2. Data We Do NOT Collect -->
+      <section class="policy-section" aria-labelledby="section-no-collect">
+        <h2 class="policy-section__title" id="section-no-collect">2. Data We Do Not Collect</h2>
+        <p>The following categories of data are never collected, transmitted, or processed outside your device:</p>
+        <ul>
+          <li><strong>Note content</strong> — your note titles, text, checklists, tags, and formatting</li>
+          <li><strong>Media files</strong> — images and voice recordings attached to notes</li>
+          <li><strong>Personal identifiers</strong> — name, email address, phone number, device ID</li>
+          <li><strong>Location data</strong> — the App does not request or access location at any time</li>
+          <li><strong>Usage analytics</strong> — which features you use, how often, or for how long</li>
+          <li><strong>Crash data</strong> — crash reports, error logs, or diagnostics</li>
+          <li><strong>Advertising identifiers</strong> — AAID or any advertising-related identifier</li>
+          <li><strong>Contacts, calendar, or other device data</strong> — the App does not access these</li>
+          <li><strong>Biometric data</strong> — fingerprint and face recognition is handled entirely by Android's BiometricPrompt API. The App never receives or stores the biometric data itself.</li>
+        </ul>
+        <p>
+          We have no backend server. There is no Void Note API. There is no account system (for core features).
+          Your data physically cannot leave your device through Void Note unless you explicitly use the export feature.
+        </p>
+      </section>
+
+
+      <!-- 3. Data Stored Locally -->
+      <section class="policy-section" aria-labelledby="section-local-data">
+        <h2 class="policy-section__title" id="section-local-data">3. Data Stored Locally On Your Device</h2>
+        <p>
+          The App stores the following data locally on your device. This data is encrypted and never
+          transmitted to any server:
+        </p>
+        <ul>
+          <li>
+            <strong>Note database</strong> — stored in a Room (SQLite) database. All note titles and content
+            are encrypted with AES-256-GCM before being written to the database. The database file itself
+            is stored in the App's private data directory, which Android prevents other apps from accessing.
+          </li>
+          <li>
+            <strong>Encrypted media files</strong> — images and audio recordings attached to notes are
+            encrypted as .enc files stored in the App's private file directory. They are never written to
+            shared storage (Downloads, DCIM, etc.).
+          </li>
+          <li>
+            <strong>App preferences</strong> — theme selection, sort order, biometric lock preference, and
+            vault salt are stored in Android DataStore (encrypted). No personally identifiable information
+            is stored in preferences.
+          </li>
+          <li>
+            <strong>Encryption keys</strong> — the master encryption key is stored in Android Keystore
+            (hardware-backed on supported devices). This key is protected by your vault password or biometric.
+            It cannot be extracted from the device.
+          </li>
+        </ul>
+      </section>
+
+
+      <!-- 4. Permissions -->
+      <section class="policy-section" aria-labelledby="section-permissions">
+        <h2 class="policy-section__title" id="section-permissions">4. Android Permissions</h2>
+        <p>The App requests the following permissions. Each is explained below:</p>
+        <ul>
+          <li>
+            <strong>USE_BIOMETRIC / USE_FINGERPRINT</strong> — allows the App to show Android's
+            biometric authentication prompt. The App receives only a success/failure result;
+            your biometric data is never accessible to the App.
+          </li>
+          <li>
+            <strong>CAMERA</strong> — allows capturing photos to attach to notes. Photos are immediately
+            encrypted and stored privately. This permission is only requested when you tap "Take Photo"
+            inside a note. You can decline it and still use gallery images.
+          </li>
+          <li>
+            <strong>RECORD_AUDIO</strong> — allows recording voice memos to attach to notes.
+            Recordings are immediately encrypted and stored privately. This permission is only requested
+            when you tap the voice recording button inside a note. You can decline it and still use all
+            other features.
+          </li>
+          <li>
+            <strong>READ_MEDIA_IMAGES (Android 13+) / READ_EXTERNAL_STORAGE (Android 12 and below)</strong> —
+            allows selecting images from your photo gallery to attach to notes. No images are copied
+            to permanent storage unless you explicitly add them to a note.
+          </li>
+          <li>
+            <strong>INTERNET</strong> — used solely to check for App updates on GitHub
+            (api.github.com/repos/NRoy9/VoidNote/releases/latest). This request includes no personal data.
+            No note data is ever sent over the internet.
+          </li>
+          <li>
+            <strong>RECEIVE_BOOT_COMPLETED</strong> — allows WorkManager to schedule the daily trash
+            cleanup job that runs after device restart. No data is transmitted; this runs entirely locally.
+          </li>
+        </ul>
+      </section>
+
+
+      <!-- 5. Update Checker -->
+      <section class="policy-section" aria-labelledby="section-update">
+        <h2 class="policy-section__title" id="section-update">5. GitHub Update Checker</h2>
+        <p>
+          The App contacts the GitHub API once at startup to check whether a newer version is available.
+          The request is: <code>GET https://api.github.com/repos/NRoy9/VoidNote/releases/latest</code>
+        </p>
+        <p>
+          This request contains no personal data from your device. GitHub's own privacy policy governs
+          their handling of your IP address for this request. The dismissed-version preference is stored
+          locally in DataStore and is never sent anywhere.
+        </p>
+        <p>
+          When the App is published to Google Play, the update checker will be replaced by the
+          Play In-App Update library, which operates under Google Play's privacy policy.
+        </p>
+      </section>
+
+
+      <!-- 6. Google Drive (Future Premium Feature) -->
+      <section class="policy-section" aria-labelledby="section-drive">
+        <h2 class="policy-section__title" id="section-drive">6. Google Drive Backup (Future Feature)</h2>
+        <p>
+          A future premium version of Void Note will offer optional Google Drive backup.
+          This section documents how that feature will work when it is released:
+        </p>
+        <ul>
+          <li>Cloud backup will be entirely optional and requires explicit opt-in.</li>
+          <li>Note data will be encrypted on your device before being uploaded. The encryption key
+              never leaves your device. Google cannot read your notes.</li>
+          <li>Google Sign-In and Drive access will be governed by Google's Privacy Policy.</li>
+          <li>You can revoke the App's Drive access at any time via Google Account settings.</li>
+        </ul>
+        <p>
+          This feature does not exist yet. If you are using the current version of Void Note,
+          no Google Drive connection is active.
+        </p>
+      </section>
+
+
+      <!-- 7. Children's Privacy -->
+      <section class="policy-section" aria-labelledby="section-children">
+        <h2 class="policy-section__title" id="section-children">7. Children's Privacy</h2>
+        <p>
+          Void Note does not knowingly collect personal information from children under the age of 13
+          (or the applicable age of digital consent in your jurisdiction). The App does not collect
+          any personal data at all, as described in Section 2.
+        </p>
+        <p>
+          The App is rated for Everyone on Google Play and is suitable for all ages.
+        </p>
+      </section>
+
+
+      <!-- 8. Data Security -->
+      <section class="policy-section" aria-labelledby="section-security">
+        <h2 class="policy-section__title" id="section-security">8. Data Security</h2>
+        <p>
+          The App takes significant measures to protect your note data:
+        </p>
+        <ul>
+          <li>AES-256-GCM authenticated encryption for all note content</li>
+          <li>Hardware-backed Android Keystore for master key storage</li>
+          <li>PBKDF2 key derivation — your vault password is never stored</li>
+          <li>App-private file storage — other apps cannot access your notes</li>
+          <li>Biometric/PIN authentication before decryption</li>
+        </ul>
+        <p>
+          Because all data is stored locally, the security of your notes ultimately depends on
+          the security of your physical device. We recommend enabling device screen lock and
+          a strong vault password.
+        </p>
+      </section>
+
+
+      <!-- 9. Your Rights -->
+      <section class="policy-section" aria-labelledby="section-rights">
+        <h2 class="policy-section__title" id="section-rights">9. Your Data Rights</h2>
+        <p>
+          Because all your data is stored locally on your device, you have complete control:
+        </p>
+        <ul>
+          <li><strong>Access:</strong> Your notes are in the App. Open it and read them.</li>
+          <li><strong>Export:</strong> Settings → Data Management → Export Backup. You receive a complete encrypted backup.</li>
+          <li><strong>Deletion:</strong> Settings → Data Management → or Android Settings → Apps → Void Note → Clear Data. This is permanent and irreversible.</li>
+          <li><strong>Portability:</strong> Exported notes can be decrypted and read. The backup format is documented on GitHub.</li>
+        </ul>
+        <p>
+          Since we hold no personal data on any server, we cannot provide data access requests in the
+          traditional sense — there is nothing on our end to provide.
+        </p>
+      </section>
+
+
+      <!-- 10. Changes to Policy -->
+      <section class="policy-section" aria-labelledby="section-changes">
+        <h2 class="policy-section__title" id="section-changes">10. Changes to This Policy</h2>
+        <p>
+          This Privacy Policy may be updated when new features are added (particularly cloud backup).
+          Changes will be:
+        </p>
+        <ul>
+          <li>Posted on this page with an updated "Last Updated" date</li>
+          <li>Announced in the App's changelog (visible in Settings → About → Changelog)</li>
+          <li>Tagged in the GitHub repository releases</li>
+        </ul>
+        <p>
+          Continued use of the App after a policy update constitutes acceptance of the new policy.
+          If you disagree with any change, you may stop using the App and delete all App data.
+        </p>
+      </section>
+
+
+      <!-- 11. Open Source -->
+      <section class="policy-section" aria-labelledby="section-oss">
+        <h2 class="policy-section__title" id="section-oss">11. Open Source Transparency</h2>
+        <p>
+          Void Note's source code is publicly available on GitHub at
+          <a href="https://github.com/NRoy9/VoidNote" target="_blank" rel="noopener noreferrer" 
+             style="color: var(--color-accent);">github.com/NRoy9/VoidNote</a>.
+          You can audit exactly what the App does with your data by reading the code.
+          We encourage this. Transparency is the point.
+        </p>
+      </section>
+
+
+      <!-- Contact block -->
+      <div class="policy-contact">
+        <p class="policy-contact__title">QUESTIONS?</p>
+        <p>
+          If you have questions about this Privacy Policy or the App's data practices,
+          open an issue on GitHub:
+          <a href="https://github.com/NRoy9/VoidNote/issues" 
+             target="_blank" 
+             rel="noopener noreferrer"
+             style="color: var(--color-accent);">github.com/NRoy9/VoidNote/issues</a>
+        </p>
+      </div>
+
+    </div>
+  </main>
+
+
+  <!-- Footer (same as index.html) -->
+  <footer class="footer" role="contentinfo">
+    <div class="container">
+      <div class="footer__bottom">
+        <p class="footer__copy">© 2026 GREENICEPHOENIX · VOID NOTE</p>
+        <nav class="footer__legal" aria-label="Legal navigation">
+          <a href="privacy-policy.html" class="footer__legal-link">PRIVACY POLICY</a>
+          <a href="terms-of-service.html" class="footer__legal-link">TERMS OF SERVICE</a>
+          <a href="index.html" class="footer__legal-link">HOME</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile nav toggle (same pattern as index.html)
+    const hamburger = document.getElementById('hamburger');
+    const navLinks  = document.getElementById('nav-links');
+    hamburger.addEventListener('click', () => {
+      const isOpen = navLinks.classList.toggle('open');
+      hamburger.setAttribute('aria-expanded', isOpen.toString());
+    });
+  </script>
+
+</body>
+</html>

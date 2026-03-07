@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    VOID NOTE — Landing Page
+    Author: GreenIcePhoenix
+    Package: com.greenicephoenix.voidnote
+    
+    Design: Nothing-inspired — pure black, monochromatic, dot matrix headings.
+    Font strategy:
+      - Share Tech Mono (Google Fonts, free) → dot matrix heading aesthetic
+      - DM Sans (Google Fonts, free) → clean readable body text
+  -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO: These are what appear in Google results -->
+  <title>Void Note — Private, Encrypted Notes for Android</title>
+  <meta name="description" content="Notes that disappear into the void. Secure, minimal, yours. AES-256 encrypted note-taking app with Nothing-inspired design. No ads. No tracking. Ever.">
+  <meta name="keywords" content="encrypted notes, private notes, android notes app, secure notes, offline notes, void note">
+  <meta name="author" content="GreenIcePhoenix">
+
+  <!-- Open Graph: Controls how links look when shared on Twitter, WhatsApp, etc. -->
+  <meta property="og:title" content="Void Note — Private, Encrypted Notes">
+  <meta property="og:description" content="Notes that disappear into the void. AES-256 encrypted, zero tracking, minimal design.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://voidnote.app">
+  <!-- og:image — add a real screenshot later for better social sharing -->
+  <!-- <meta property="og:image" content="https://voidnote.app/assets/og-image.png"> -->
+
+  <!-- Theme color: sets the browser chrome color on Android -->
+  <meta name="theme-color" content="#000000">
+
+  <!-- Canonical URL: tells search engines the "official" URL to avoid duplicate content -->
+  <link rel="canonical" href="https://voidnote.app">
+
+  <!-- Fonts from Google Fonts — Share Tech Mono for dot matrix headings, DM Sans for body -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+
+  <!-- Our main stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ================================================================
+       NAVIGATION
+       Fixed top bar. Blurs background content behind it (glassmorphism).
+       ================================================================ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="nav__inner">
+
+      <!-- Logo: Circle mark + "VOID NOTE" text -->
+      <a href="/" class="nav__logo" aria-label="Void Note home">
+        <div class="nav__logo-mark" aria-hidden="true"></div>
+        <span class="nav__logo-text">VOID NOTE</span>
+      </a>
+
+      <!-- Desktop nav links + CTA -->
+      <ul class="nav__links" id="nav-links" role="list">
+        <li><a href="#features" class="nav__link">FEATURES</a></li>
+        <li><a href="#security" class="nav__link">SECURITY</a></li>
+        <li><a href="#download" class="nav__link">DOWNLOAD</a></li>
+        <li>
+          <a href="https://github.com/NRoy9/VoidNote" 
+             class="nav__link" 
+             target="_blank" 
+             rel="noopener noreferrer">GITHUB</a>
+        </li>
+        <li>
+          <a href="#download" class="nav__cta">
+            GET THE APP <span class="btn__arrow">↓</span>
+          </a>
+        </li>
+      </ul>
+
+      <!-- Hamburger button — visible on mobile only -->
+      <button class="nav__hamburger" 
+              id="hamburger" 
+              aria-label="Toggle menu" 
+              aria-expanded="false" 
+              aria-controls="nav-links">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+
+  <!-- ================================================================
+       HERO SECTION
+       The first thing users see. Communicates the core value proposition
+       in under 5 seconds: private, minimal, beautiful.
+       ================================================================ -->
+  <section class="hero" id="home">
+    <div class="hero__inner">
+
+      <!-- Left: Text content -->
+      <div class="hero__content">
+
+        <!-- "Alpha" status badge — honest about app maturity -->
+        <div class="hero__eyebrow">
+          <span class="badge">
+            <span class="dot" aria-hidden="true"></span>
+            V0.2.0-ALPHA — AVAILABLE ON GITHUB
+          </span>
+        </div>
+
+        <!-- Void symbol then headline -->
+        <h1 class="hero__title">
+          <span class="hero__void-symbol" aria-hidden="true">○</span>
+          Notes that<br>disappear<br><span class="text-accent">into the void.</span>
+        </h1>
+
+        <p class="hero__tagline">
+          Private, encrypted, and beautifully minimal.
+          Your thoughts stay yours — always.
+          No ads. No tracking. No cloud. Just notes.
+        </p>
+
+        <!-- Primary CTA + secondary GitHub link -->
+        <div class="hero__actions">
+          <a href="#download" class="btn btn--primary">
+            DOWNLOAD APK <span class="btn__arrow">↓</span>
+          </a>
+          <a href="https://github.com/NRoy9/VoidNote" 
+             class="btn btn--ghost" 
+             target="_blank" 
+             rel="noopener noreferrer">
+            ★ STAR ON GITHUB
+          </a>
+        </div>
+
+        <!-- Trust stats -->
+        <div class="hero__stats">
+          <div>
+            <div class="hero__stat-value">AES-256</div>
+            <div class="hero__stat-label">Encryption</div>
+          </div>
+          <div>
+            <div class="hero__stat-value">0</div>
+            <div class="hero__stat-label">Trackers</div>
+          </div>
+          <div>
+            <div class="hero__stat-value">100%</div>
+            <div class="hero__stat-label">Offline-first</div>
+          </div>
+          <div>
+            <div class="hero__stat-value">Free</div>
+            <div class="hero__stat-label">Forever core</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: CSS phone mockup — shows what the app looks like -->
+      <div class="hero__visual" aria-hidden="true">
+        <div class="phone-mockup">
+          <div class="phone-mockup__notch"></div>
+          <div class="phone-mockup__status">
+            <span>9:41</span>
+            <span>●●●</span>
+          </div>
+
+          <!-- Simulated note list in the phone -->
+          <div class="phone-mockup__content">
+            <div style="font-family: 'Share Tech Mono', monospace; font-size: 0.55rem; letter-spacing: 0.15em; color: #888; margin-bottom: 8px; padding: 4px 0;">VOID NOTE</div>
+
+            <div class="phone-note phone-note--accent">
+              <div class="phone-note__title">Weekly Goals</div>
+              <div class="phone-note__preview">Complete the security audit for Sprint 6. Review all encryption keys...</div>
+              <div class="phone-note__meta">
+                <span class="phone-note__time">Today, 09:41</span>
+              </div>
+            </div>
+
+            <div class="phone-note phone-note--blue">
+              <div class="phone-note__title">Void Note Ideas</div>
+              <div class="phone-note__preview">Widget for quick capture. Swipe gestures on note cards. Haptic...</div>
+              <div class="phone-note__meta">
+                <span class="phone-note__time">Yesterday</span>
+              </div>
+            </div>
+
+            <div class="phone-note phone-note--green">
+              <div class="phone-note__title">Shopping List</div>
+              <div class="phone-note__preview">☑ Coffee beans  ☑ Mechanical keyboard  ☐ Standing desk...</div>
+              <div class="phone-note__meta">
+                <span class="phone-note__time">2 days ago</span>
+              </div>
+            </div>
+
+            <div class="phone-note">
+              <div class="phone-note__title">Private Journal</div>
+              <div class="phone-note__preview">Encrypted. Nobody reads this but you. Not even the developer.</div>
+              <div class="phone-note__meta">
+                <span class="phone-note__time">3 days ago</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ================================================================
+       FEATURES SECTION
+       A 3-column grid of feature cards covering the main app features.
+       ================================================================ -->
+  <section class="section features" id="features">
+    <div class="container">
+
+      <div class="section__header">
+        <p class="label section__label">FEATURES</p>
+        <h2 class="section__title">Everything you need.<br>Nothing you don't.</h2>
+        <p class="section__subtitle">
+          Void Note is packed with premium features — for free.
+          No paywalls on core functionality. Ever.
+        </p>
+      </div>
+
+      <div class="features__grid">
+
+        <!-- Wide card: Rich text editor -->
+        <div class="feature-card feature-card--wide feature-card--highlighted animate-in">
+          <div class="feature-card__icon">✍</div>
+          <div class="feature-card__title">RICH TEXT EDITOR</div>
+          <p class="feature-card__desc">
+            Bold, italic, underline, strikethrough. H1/H2/H3 headings.
+            Numbered lists with auto-continue. Interactive checklists.
+            Color-coded notes. All the formatting tools you need — none of the bloat.
+          </p>
+        </div>
+
+        <!-- AES Encryption -->
+        <div class="feature-card animate-in">
+          <div class="feature-card__icon">🔐</div>
+          <div class="feature-card__title">AES-256-GCM ENCRYPTION</div>
+          <p class="feature-card__desc">
+            Every note is encrypted before it touches storage.
+            Master key lives in Android Keystore (hardware-backed).
+            Zero-knowledge by design.
+          </p>
+        </div>
+
+        <!-- Biometric -->
+        <div class="feature-card animate-in">
+          <div class="feature-card__icon">👁</div>
+          <div class="feature-card__title">BIOMETRIC LOCK</div>
+          <p class="feature-card__desc">
+            Fingerprint or face unlock. Vault password as fallback.
+            Your notes open only for you.
+          </p>
+        </div>
+
+        <!-- Folders + Tags -->
+        <div class="feature-card animate-in">
+          <div class="feature-card__icon">📁</div>
+          <div class="feature-card__title">FOLDERS + TAGS</div>
+          <p class="feature-card__desc">
+            Organise with nested folders and up to 5 tags per note.
+            Browse by tag, folder, or search everything at once.
+          </p>
+        </div>
+
+        <!-- Media blocks -->
+        <div class="feature-card animate-in">
+          <div class="feature-card__icon">🎙</div>
+          <div class="feature-card__title">MEDIA BLOCKS</div>
+          <p class="feature-card__desc">
+            Attach encrypted voice recordings and images directly to notes.
+            Captured from camera or gallery. All files encrypted at rest.
+          </p>
+        </div>
+
+        <!-- Offline-first -->
+        <div class="feature-card animate-in">
+          <div class="feature-card__icon">✈</div>
+          <div class="feature-card__title">100% OFFLINE-FIRST</div>
+          <p class="feature-card__desc">
+            No network required. Ever. Your data never leaves your device unless
+            you explicitly choose to export it. No accounts needed for core features.
+          </p>
+        </div>
+
+        <!-- Wide card: Dark modes -->
+        <div class="feature-card feature-card--wide animate-in">
+          <div class="feature-card__icon">🌑</div>
+          <div class="feature-card__title">DARK · LIGHT · EXTRA DARK (OLED)</div>
+          <p class="feature-card__desc">
+            Three carefully crafted themes. Extra Dark mode uses true #000000 black for OLED screens —
+            saves battery and looks stunning. Nothing-inspired monochromatic design throughout.
+            Note color accents (6 colours) add personal touches without breaking the aesthetic.
+          </p>
+        </div>
+
+        <!-- Backup -->
+        <div class="feature-card animate-in">
+          <div class="feature-card__icon">💾</div>
+          <div class="feature-card__title">ENCRYPTED BACKUPS</div>
+          <p class="feature-card__desc">
+            Export your entire vault as an encrypted .vnbackup file.
+            Restore on a new device. Your encryption key never leaves your device.
+          </p>
+        </div>
+
+        <!-- Trash + Archive -->
+        <div class="feature-card animate-in">
+          <div class="feature-card__icon">🗂</div>
+          <div class="feature-card__title">ARCHIVE + TRASH</div>
+          <p class="feature-card__desc">
+            Archive notes without deleting. Trash with 30-day auto-cleanup.
+            WorkManager runs the cleanup in the background — no manual purging needed.
+          </p>
+        </div>
+
+        <!-- Sort -->
+        <div class="feature-card animate-in">
+          <div class="feature-card__icon">↕</div>
+          <div class="feature-card__title">SORT &amp; FILTER</div>
+          <p class="feature-card__desc">
+            Sort by last modified, created date, or title A→Z / Z→A.
+            Filter chips for All, Pinned, Folders, and Tags.
+            Sort preference persists across sessions.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ================================================================
+       SECURITY SECTION
+       Deep dive on the encryption architecture. Builds developer trust.
+       ================================================================ -->
+  <section class="section security" id="security">
+    <div class="container">
+      <div class="security__inner">
+
+        <!-- Left: Text -->
+        <div>
+          <div class="security__badge-row">
+            <span class="security__badge">AES-256-GCM</span>
+            <span class="security__badge">ANDROID KEYSTORE</span>
+            <span class="security__badge">PBKDF2</span>
+            <span class="security__badge">ZERO-KNOWLEDGE</span>
+          </div>
+
+          <h2 class="security__title">
+            Security that's<br><span class="text-accent">not optional.</span>
+          </h2>
+
+          <p class="security__desc">
+            Privacy isn't a feature toggle. It's the foundation.
+            Void Note was designed encryption-first — your notes are
+            encrypted before they are ever written to disk.
+          </p>
+
+          <div class="security__specs">
+            <div class="security__spec">
+              <div class="security__spec-icon">🔑</div>
+              <div>
+                <div class="security__spec-title">ANDROID KEYSTORE MASTER KEY</div>
+                <p class="security__spec-desc">
+                  The master encryption key lives in Android's hardware-backed Keystore.
+                  It never exists in plain memory longer than needed.
+                </p>
+              </div>
+            </div>
+
+            <div class="security__spec">
+              <div class="security__spec-icon">🛡</div>
+              <div>
+                <div class="security__spec-title">AES-256-GCM NOTE ENCRYPTION</div>
+                <p class="security__spec-desc">
+                  Every note title, content, and tag is encrypted individually.
+                  GCM mode provides authenticated encryption — tampered data is detected.
+                </p>
+              </div>
+            </div>
+
+            <div class="security__spec">
+              <div class="security__spec-icon">🧂</div>
+              <div>
+                <div class="security__spec-title">PBKDF2 KEY DERIVATION</div>
+                <p class="security__spec-desc">
+                  Your vault password is never stored. It's run through PBKDF2
+                  to derive the encryption key. The salt is stored — the password never is.
+                </p>
+              </div>
+            </div>
+
+            <div class="security__spec">
+              <div class="security__spec-icon">📁</div>
+              <div>
+                <div class="security__spec-title">ENCRYPTED MEDIA FILES</div>
+                <p class="security__spec-desc">
+                  Images and audio recordings are encrypted as .enc files
+                  in app-private storage. No unencrypted files are ever written to disk.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Terminal visualization of encryption process -->
+        <div class="security__visual" aria-label="Encryption process visualization" role="img">
+          <div class="terminal__header">
+            <div class="terminal__dots" aria-hidden="true">
+              <div class="terminal__dot terminal__dot--red"></div>
+              <div class="terminal__dot terminal__dot--yellow"></div>
+              <div class="terminal__dot terminal__dot--green"></div>
+            </div>
+            <span class="terminal__title">VOID NOTE — ENCRYPTION PIPELINE</span>
+          </div>
+
+          <div class="terminal__line">
+            <span class="t-dim">// User creates a note</span>
+          </div>
+          <div class="terminal__line">
+            <span class="t-blue">val</span> note = Note(title = <span class="t-green">"My secret"</span>, ...)
+          </div>
+          <div class="terminal__line">&nbsp;</div>
+          <div class="terminal__line">
+            <span class="t-dim">// Fetch master key from Android Keystore</span>
+          </div>
+          <div class="terminal__line">
+            <span class="t-blue">val</span> masterKey = keystore.<span class="t-accent">getOrCreate</span>()
+          </div>
+          <div class="terminal__line">&nbsp;</div>
+          <div class="terminal__line">
+            <span class="t-dim">// Encrypt title + content with AES-256-GCM</span>
+          </div>
+          <div class="terminal__line">
+            <span class="t-blue">val</span> encrypted = aes256gcm.<span class="t-accent">encrypt</span>(
+          </div>
+          <div class="terminal__line">
+            &nbsp;&nbsp;plaintext = note.content,
+          </div>
+          <div class="terminal__line">
+            &nbsp;&nbsp;key = masterKey
+          </div>
+          <div class="terminal__line">)</div>
+          <div class="terminal__line">&nbsp;</div>
+          <div class="terminal__line">
+            <span class="t-dim">// Only the cipher text reaches Room DB</span>
+          </div>
+          <div class="terminal__line">
+            db.noteDao().<span class="t-accent">insert</span>(NoteEntity(
+          </div>
+          <div class="terminal__line">
+            &nbsp;&nbsp;content = <span class="t-green">encrypted.cipherText</span>, <span class="t-dim">// ← stored</span>
+          </div>
+          <div class="terminal__line">
+            &nbsp;&nbsp;iv = <span class="t-green">encrypted.iv</span>,      <span class="t-dim">// ← stored</span>
+          </div>
+          <div class="terminal__line">
+            &nbsp;&nbsp;<span class="t-dim">// plaintext never stored ✓</span>
+          </div>
+          <div class="terminal__line">))</div>
+          <div class="terminal__line">&nbsp;</div>
+          <div class="terminal__line">
+            <span class="t-green">✓ Note encrypted and saved.</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ================================================================
+       PROMISE SECTION
+       "Zero" promises — no ads, no tracking, no cloud, no compromise.
+       The highest-converting section for privacy-conscious users.
+       ================================================================ -->
+  <section class="section promise" id="promise">
+    <div class="container">
+      <div class="section__header">
+        <p class="label section__label">THE PROMISE</p>
+        <h2 class="section__title">Nothing hidden.<br>Nothing tracked.</h2>
+        <p class="section__subtitle">
+          We built Void Note because we were tired of note apps
+          that spy on you, show you ads, or lock features behind subscriptions.
+        </p>
+      </div>
+
+      <div class="promise__grid">
+        <div class="promise__item animate-in">
+          <div class="promise__icon" aria-hidden="true">🚫</div>
+          <div class="promise__title">ZERO ADS</div>
+          <p class="promise__desc">No advertisements. No sponsored content. Not now. Not ever.</p>
+        </div>
+
+        <div class="promise__item animate-in">
+          <div class="promise__icon" aria-hidden="true">👁‍🗨</div>
+          <div class="promise__title">ZERO TRACKING</div>
+          <p class="promise__desc">No analytics SDK. No crash reporters. No telemetry of any kind.</p>
+        </div>
+
+        <div class="promise__item animate-in">
+          <div class="promise__icon" aria-hidden="true">☁</div>
+          <div class="promise__title">ZERO FORCED CLOUD</div>
+          <p class="promise__desc">Core features work completely offline. No account required. Your data, your device.</p>
+        </div>
+
+        <div class="promise__item animate-in">
+          <div class="promise__icon" aria-hidden="true">🔒</div>
+          <div class="promise__title">ZERO COMPROMISES</div>
+          <p class="promise__desc">Encryption is not a premium feature. Privacy is not a subscription tier.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ================================================================
+       DOWNLOAD / CTA SECTION
+       The primary conversion point of the page.
+       ================================================================ -->
+  <section class="section download" id="download">
+    <div class="container">
+      <div class="download__inner">
+
+        <p class="label" style="margin-bottom: 16px;">GET VOID NOTE</p>
+
+        <h2 class="download__title">
+          Enter<br><span class="text-accent">the void.</span>
+        </h2>
+
+        <p class="download__subtitle">
+          Currently in alpha. Available as a direct APK download from GitHub.
+          Play Store release coming soon.
+        </p>
+
+        <div class="download__actions">
+          <!-- Primary: APK download from GitHub -->
+          <a href="https://github.com/NRoy9/VoidNote/releases" 
+             class="btn btn--primary"
+             target="_blank" 
+             rel="noopener noreferrer">
+            ↓ DOWNLOAD APK (GITHUB)
+          </a>
+
+          <!-- Secondary: View source -->
+          <a href="https://github.com/NRoy9/VoidNote" 
+             class="btn btn--ghost"
+             target="_blank" 
+             rel="noopener noreferrer">
+            VIEW SOURCE CODE
+          </a>
+        </div>
+
+        <!-- Installation note — important for users who don't know APK sideloading -->
+        <p class="download__note">
+          v0.2.0-alpha · Android 8.0+ · Requires "Install unknown apps" permission for direct APK
+        </p>
+
+        <!-- Play Store coming soon notice -->
+        <p style="margin-top: 12px; font-family: 'Share Tech Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em; color: #555;">
+          GOOGLE PLAY STORE — COMING SOON
+        </p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ================================================================
+       FOOTER
+       Links, legal, attribution.
+       ================================================================ -->
+  <footer class="footer" role="contentinfo">
+    <div class="container">
+      <div class="footer__inner">
+
+        <!-- Brand -->
+        <div class="footer__brand">
+          <div class="footer__logo">
+            <div class="nav__logo-mark" aria-hidden="true"></div>
+            <span class="footer__logo-text">VOID NOTE</span>
+          </div>
+          <p class="footer__tagline">"Into the void, your thoughts remain yours."</p>
+        </div>
+
+        <!-- Link columns -->
+        <div class="footer__links">
+
+          <div>
+            <p class="footer__col-title">APP</p>
+            <ul class="footer__col-links" role="list">
+              <li><a href="#features" class="footer__col-link">Features</a></li>
+              <li><a href="#security" class="footer__col-link">Security</a></li>
+              <li><a href="#download" class="footer__col-link">Download</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <p class="footer__col-title">DEVELOPER</p>
+            <ul class="footer__col-links" role="list">
+              <li>
+                <a href="https://github.com/NRoy9/VoidNote" 
+                   class="footer__col-link" 
+                   target="_blank" 
+                   rel="noopener noreferrer">GitHub</a>
+              </li>
+              <li>
+                <a href="https://github.com/NRoy9/VoidNote/releases" 
+                   class="footer__col-link"
+                   target="_blank" 
+                   rel="noopener noreferrer">Releases</a>
+              </li>
+              <li>
+                <a href="https://github.com/NRoy9/VoidNote/issues" 
+                   class="footer__col-link"
+                   target="_blank" 
+                   rel="noopener noreferrer">Report a Bug</a>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <p class="footer__col-title">LEGAL</p>
+            <ul class="footer__col-links" role="list">
+              <li><a href="privacy-policy.html" class="footer__col-link">Privacy Policy</a></li>
+              <li><a href="terms-of-service.html" class="footer__col-link">Terms of Service</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom bar: copyright + legal links -->
+      <div class="footer__bottom">
+        <p class="footer__copy">
+          © 2026 GREENICEPHOENIX · MADE WITH ○ VOID NOTE
+        </p>
+        <nav class="footer__legal" aria-label="Legal navigation">
+          <a href="privacy-policy.html" class="footer__legal-link">PRIVACY POLICY</a>
+          <a href="terms-of-service.html" class="footer__legal-link">TERMS OF SERVICE</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+
+
+  <!-- ================================================================
+       JAVASCRIPT
+       Minimal vanilla JS for:
+       1. Mobile nav hamburger toggle
+       2. Scroll animation (Intersection Observer — no library needed)
+       3. Smooth scroll for nav links
+       ================================================================ -->
+  <script>
+    // ── 1. MOBILE NAV HAMBURGER ────────────────────────────────────────
+    // When the hamburger button is clicked, toggle the nav menu open/closed.
+    const hamburger = document.getElementById('hamburger');
+    const navLinks  = document.getElementById('nav-links');
+
+    hamburger.addEventListener('click', () => {
+      // Toggle the 'open' class — CSS handles the visual transition
+      const isOpen = navLinks.classList.toggle('open');
+      // Update aria-expanded for screen readers
+      hamburger.setAttribute('aria-expanded', isOpen.toString());
+    });
+
+    // Close the nav when a link is clicked (so it doesn't stay open)
+    navLinks.querySelectorAll('.nav__link').forEach(link => {
+      link.addEventListener('click', () => {
+        navLinks.classList.remove('open');
+        hamburger.setAttribute('aria-expanded', 'false');
+      });
+    });
+
+
+    // ── 2. SCROLL ANIMATIONS (Intersection Observer) ──────────────────
+    // The Intersection Observer API fires a callback when an element enters
+    // or leaves the viewport. We use it to add the 'visible' class to cards
+    // as the user scrolls, which triggers the CSS transition.
+    //
+    // WHY NOT CSS-only animation? Because CSS animations fire on page load
+    // even for elements that are off-screen. IO only fires when the element
+    // is actually visible — much better for performance and user experience.
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry, index) => {
+          if (entry.isIntersecting) {
+            // Small stagger delay per item — creates a cascade effect
+            setTimeout(() => {
+              entry.target.classList.add('visible');
+            }, index * 80); // 80ms between each card
+            // Stop observing once it's been shown (no need to observe anymore)
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      {
+        threshold: 0.1,      // Fire when 10% of the element is visible
+        rootMargin: '0px 0px -40px 0px' // Trigger slightly before bottom edge
+      }
+    );
+
+    // Observe all elements with the 'animate-in' class
+    document.querySelectorAll('.animate-in').forEach(el => observer.observe(el));
+
+
+    // ── 3. NAV BACKGROUND ON SCROLL ───────────────────────────────────
+    // The nav starts fully transparent at the top of the page.
+    // As the user scrolls down, add a more opaque background.
+    // This is handled entirely in CSS with backdrop-filter — no JS needed.
+    // The CSS already handles this with rgba(0, 0, 0, 0.85) + backdrop-filter.
+  </script>
+
+</body>
+</html>

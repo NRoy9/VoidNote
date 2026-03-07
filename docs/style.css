@@ -1,0 +1,1274 @@
+/* ============================================================
+   VOID NOTE — Global Stylesheet
+   Nothing-inspired design: pure black, white, red accent, dot matrix typography
+   
+   FILE STRUCTURE:
+   1. CSS Custom Properties (design tokens)
+   2. Reset & Base
+   3. Typography
+   4. Layout Utilities
+   5. Navigation
+   6. Hero Section
+   7. Feature Cards
+   8. Security Section
+   9. Download CTA
+   10. Footer
+   11. Policy Pages (Privacy / Terms)
+   12. Animations
+   13. Responsive (Mobile)
+   ============================================================ */
+
+
+/* ============================================================
+   1. CSS CUSTOM PROPERTIES — Design Tokens
+   All colors, spacing, font sizes live here.
+   Change a value here → changes everywhere automatically.
+   ============================================================ */
+:root {
+  /* Colors — Nothing-inspired monochromatic palette */
+  --color-bg:           #000000;    /* True OLED black background */
+  --color-surface:      #0D0D0D;    /* Slightly lifted surface for cards */
+  --color-surface-2:    #161616;    /* Second-level surface (hover states) */
+  --color-border:       #222222;    /* Subtle borders */
+  --color-border-light: #333333;    /* Slightly more visible borders */
+  --color-text:         #FFFFFF;    /* Primary text — pure white */
+  --color-text-muted:   #888888;    /* Secondary text — muted gray */
+  --color-text-faint:   #444444;    /* Very faint text, decorative */
+  --color-accent:       #FF3B30;    /* Void Note signature red (matches app VoidAccent) */
+  --color-accent-dim:   rgba(255, 59, 48, 0.12); /* Accent as subtle glow/fill */
+
+  /* Typography */
+  --font-mono:    'Share Tech Mono', 'Courier New', monospace;  /* Dot matrix feel — used for headings, brand */
+  --font-body:    'DM Sans', 'Helvetica Neue', sans-serif;      /* Clean, readable body text */
+  
+  /* Spacing — 8px grid (matches Android app's 8dp grid) */
+  --space-xs:   4px;
+  --space-sm:   8px;
+  --space-md:   16px;
+  --space-lg:   24px;
+  --space-xl:   32px;
+  --space-xxl:  48px;
+  --space-3xl:  64px;
+  --space-4xl:  96px;
+  --space-5xl:  128px;
+
+  /* Layout */
+  --max-width:        1120px;
+  --nav-height:       64px;
+  --border-radius:    4px;          /* Minimal radius — geometric Nothing aesthetic */
+  --border-radius-lg: 8px;
+
+  /* Transitions */
+  --transition-fast:  150ms ease;
+  --transition-base:  250ms ease;
+  --transition-slow:  400ms ease;
+}
+
+
+/* ============================================================
+   2. RESET & BASE
+   Strips browser defaults for a clean slate.
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+  /* Subtle dot grid background — the signature Nothing texture */
+  background-image: radial-gradient(circle, #1a1a1a 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+ul, ol {
+  list-style: none;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
+
+/* ============================================================
+   3. TYPOGRAPHY
+   Using Share Tech Mono for the "dot matrix" heading aesthetic,
+   DM Sans for readable body text.
+   ============================================================ */
+h1, h2, h3, h4, h5 {
+  font-family: var(--font-mono);
+  font-weight: 400;               /* Mono fonts look better at regular weight */
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+h1 { font-size: clamp(2rem, 5vw, 3.5rem); }
+h2 { font-size: clamp(1.5rem, 3.5vw, 2.5rem); }
+h3 { font-size: clamp(1.1rem, 2.5vw, 1.5rem); }
+
+p {
+  color: var(--color-text-muted);
+  line-height: 1.7;
+}
+
+/* Accent text — the red highlight */
+.text-accent { color: var(--color-accent); }
+.text-muted  { color: var(--color-text-muted); }
+.text-faint  { color: var(--color-text-faint); }
+
+/* Mono label — small dot-matrix caps used for section labels */
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+
+/* ============================================================
+   4. LAYOUT UTILITIES
+   ============================================================ */
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 var(--space-xl);
+}
+
+.section {
+  padding: var(--space-5xl) 0;
+}
+
+.section--tight {
+  padding: var(--space-4xl) 0;
+}
+
+/* Divider line — used between sections */
+.divider {
+  width: 100%;
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* Badge — small pill label */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-border-light);
+  border-radius: 100px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  color: var(--color-text-muted);
+}
+
+.badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: pulse-dot 2s infinite;
+}
+
+
+/* ============================================================
+   5. NAVIGATION
+   Fixed top nav with blur effect and subtle border.
+   ============================================================ */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-height);
+  z-index: 100;
+  border-bottom: 1px solid var(--color-border);
+  /* Glassmorphism effect — subtle backdrop blur */
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.nav__inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 var(--space-xl);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Logo — dot matrix styled brand mark */
+.nav__logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.nav__logo-mark {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--color-text);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* Inner dot of the void circle */
+.nav__logo-mark::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--color-accent);
+  border-radius: 50%;
+}
+
+.nav__logo-text {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.15em;
+  color: var(--color-text);
+}
+
+.nav__links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xl);
+}
+
+.nav__link {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+  transition: color var(--transition-fast);
+}
+
+.nav__link:hover {
+  color: var(--color-text);
+}
+
+.nav__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  border-radius: var(--border-radius);
+  transition: opacity var(--transition-fast);
+}
+
+.nav__cta:hover {
+  opacity: 0.85;
+}
+
+/* Mobile hamburger — hidden on desktop */
+.nav__hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  padding: var(--space-sm);
+}
+
+.nav__hamburger span {
+  display: block;
+  width: 20px;
+  height: 1.5px;
+  background: var(--color-text);
+  transition: transform var(--transition-base);
+}
+
+
+/* ============================================================
+   6. HERO SECTION
+   Full viewport height, centered. The "first impression."
+   ============================================================ */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  padding-top: var(--nav-height);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Decorative red glow in background */
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(255, 59, 48, 0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.hero__inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 var(--space-xl);
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5xl);
+  align-items: center;
+}
+
+.hero__content {
+  /* Stagger animation applied via JS */
+}
+
+.hero__eyebrow {
+  margin-bottom: var(--space-lg);
+  opacity: 0;
+  animation: fade-up 0.6s ease forwards 0.2s;
+}
+
+.hero__title {
+  margin-bottom: var(--space-lg);
+  opacity: 0;
+  animation: fade-up 0.6s ease forwards 0.4s;
+}
+
+/* The large "○" character — the void symbol */
+.hero__void-symbol {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: clamp(4rem, 10vw, 8rem);
+  line-height: 1;
+  color: var(--color-text-faint);
+  margin-bottom: var(--space-md);
+  letter-spacing: -0.05em;
+}
+
+.hero__tagline {
+  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xl);
+  opacity: 0;
+  animation: fade-up 0.6s ease forwards 0.5s;
+  max-width: 480px;
+}
+
+.hero__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  opacity: 0;
+  animation: fade-up 0.6s ease forwards 0.65s;
+}
+
+/* Stats row under CTA */
+.hero__stats {
+  display: flex;
+  gap: var(--space-xl);
+  margin-top: var(--space-xxl);
+  padding-top: var(--space-xl);
+  border-top: 1px solid var(--color-border);
+  opacity: 0;
+  animation: fade-up 0.6s ease forwards 0.8s;
+}
+
+.hero__stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  color: var(--color-text);
+}
+
+.hero__stat-label {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-top: var(--space-xs);
+}
+
+/* Right side: Phone mockup */
+.hero__visual {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  animation: fade-in 0.8s ease forwards 0.5s;
+}
+
+/* CSS phone mockup — no images needed */
+.phone-mockup {
+  width: 240px;
+  height: 480px;
+  border: 2px solid var(--color-border-light);
+  border-radius: 32px;
+  background: var(--color-surface);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 60px rgba(255, 59, 48, 0.08), 0 40px 80px rgba(0,0,0,0.6);
+}
+
+/* Status bar */
+.phone-mockup__status {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 20px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--color-text-muted);
+}
+
+/* Simulated note list in the mockup */
+.phone-mockup__content {
+  padding: 8px 12px;
+}
+
+.phone-note {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: var(--color-surface-2);
+  border-radius: 6px;
+  border-left: 2px solid transparent;
+}
+
+.phone-note--accent { border-left-color: var(--color-accent); }
+.phone-note--blue   { border-left-color: #3B82F6; }
+.phone-note--green  { border-left-color: #22C55E; }
+
+.phone-note__title {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+
+.phone-note__preview {
+  font-size: 0.55rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.phone-note__meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.phone-note__time {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  color: var(--color-text-faint);
+}
+
+/* Notch decoration at top of phone */
+.phone-mockup__notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 20px;
+  background: var(--color-bg);
+  border-radius: 0 0 16px 16px;
+}
+
+
+/* ============================================================
+   7. BUTTONS
+   Two variants: primary (white fill) and ghost (outline).
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: 14px var(--space-xl);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  border-radius: var(--border-radius);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn--primary {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.btn--primary:hover {
+  background: #DDDDDD;
+  transform: translateY(-1px);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-light);
+}
+
+.btn--ghost:hover {
+  color: var(--color-text);
+  border-color: var(--color-text);
+}
+
+.btn--accent {
+  background: var(--color-accent);
+  color: var(--color-text);
+}
+
+.btn--accent:hover {
+  background: #E0352B;
+  transform: translateY(-1px);
+}
+
+/* Arrow icon in button */
+.btn__arrow {
+  font-size: 1rem;
+  transition: transform var(--transition-fast);
+}
+
+.btn:hover .btn__arrow {
+  transform: translateX(3px);
+}
+
+
+/* ============================================================
+   8. FEATURES SECTION
+   3-column grid of feature cards.
+   Each card has an icon, title, and description.
+   ============================================================ */
+.features {
+  background: transparent;
+}
+
+.section__header {
+  text-align: center;
+  margin-bottom: var(--space-4xl);
+}
+
+.section__label {
+  margin-bottom: var(--space-md);
+}
+
+.section__title {
+  margin-bottom: var(--space-md);
+}
+
+.section__subtitle {
+  max-width: 540px;
+  margin: 0 auto;
+  font-size: 1.05rem;
+}
+
+/* Feature grid — 3 columns on desktop */
+.features__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+}
+
+.feature-card {
+  padding: var(--space-xl);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface);
+  transition: border-color var(--transition-base), transform var(--transition-base), background var(--transition-base);
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card:hover {
+  border-color: var(--color-border-light);
+  background: var(--color-surface-2);
+  transform: translateY(-2px);
+}
+
+/* Subtle top-edge highlight on hover */
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.feature-card:hover::before {
+  opacity: 0.6;
+}
+
+/* Icon box */
+.feature-card__icon {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--border-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  margin-bottom: var(--space-lg);
+  background: var(--color-surface-2);
+}
+
+.feature-card__title {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+  letter-spacing: 0.05em;
+}
+
+.feature-card__desc {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  line-height: 1.65;
+}
+
+/* Wide feature card — spans 2 columns */
+.feature-card--wide {
+  grid-column: span 2;
+}
+
+/* Feature card with accent left border */
+.feature-card--highlighted {
+  border-left: 2px solid var(--color-accent);
+}
+
+
+/* ============================================================
+   9. SECURITY SECTION
+   Full-width dark block emphasizing encryption.
+   ============================================================ */
+.security {
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.security__inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5xl);
+  align-items: center;
+}
+
+.security__badge-row {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-xl);
+}
+
+.security__badge {
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-border-light);
+  border-radius: 100px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+}
+
+.security__title {
+  margin-bottom: var(--space-md);
+}
+
+.security__desc {
+  margin-bottom: var(--space-xl);
+  font-size: 1rem;
+}
+
+/* Encryption spec list */
+.security__specs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.security__spec {
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-start;
+}
+
+.security__spec-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--border-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  color: var(--color-accent);
+  margin-top: 2px;
+}
+
+.security__spec-title {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--color-text);
+  margin-bottom: var(--space-xs);
+}
+
+.security__spec-desc {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+/* Visual side: terminal-style encryption visualization */
+.security__visual {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-xl);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.terminal__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.terminal__dots {
+  display: flex;
+  gap: 6px;
+}
+
+.terminal__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.terminal__dot--red    { background: #FF5F57; }
+.terminal__dot--yellow { background: #FEBC2E; }
+.terminal__dot--green  { background: #28C840; }
+
+.terminal__title {
+  color: var(--color-text-faint);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+}
+
+.terminal__line {
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-sm);
+  line-height: 1.6;
+}
+
+.terminal__line .t-green  { color: #22C55E; }
+.terminal__line .t-blue   { color: #60A5FA; }
+.terminal__line .t-accent { color: var(--color-accent); }
+.terminal__line .t-dim    { color: var(--color-text-faint); }
+
+
+/* ============================================================
+   10. ZERO PROMISE SECTION
+   The "No ads, no tracking, no BS" trust builder.
+   ============================================================ */
+.promise {
+  text-align: center;
+}
+
+.promise__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-md);
+  margin-top: var(--space-4xl);
+}
+
+.promise__item {
+  padding: var(--space-xl) var(--space-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface);
+  transition: border-color var(--transition-base);
+}
+
+.promise__item:hover {
+  border-color: var(--color-accent);
+}
+
+.promise__icon {
+  font-size: 1.5rem;
+  margin-bottom: var(--space-md);
+}
+
+.promise__title {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+}
+
+.promise__desc {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+
+/* ============================================================
+   11. DOWNLOAD / CTA SECTION
+   Full-width section with the download button and app store links.
+   ============================================================ */
+.download {
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Large decorative void circle */
+.download::before {
+  content: '○';
+  font-family: var(--font-mono);
+  font-size: 40vw;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--color-border);
+  pointer-events: none;
+  line-height: 1;
+  opacity: 0.3;
+}
+
+.download__inner {
+  position: relative;
+  z-index: 1;
+}
+
+.download__title {
+  font-size: clamp(2rem, 5vw, 4rem);
+  margin-bottom: var(--space-lg);
+}
+
+.download__subtitle {
+  font-size: 1.1rem;
+  max-width: 480px;
+  margin: 0 auto var(--space-xxl);
+}
+
+.download__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-xl);
+}
+
+.download__note {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  color: var(--color-text-faint);
+}
+
+
+/* ============================================================
+   12. FOOTER
+   Minimal footer with links and legal.
+   ============================================================ */
+.footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-xxl) 0 var(--space-xl);
+}
+
+.footer__inner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-xl);
+  align-items: start;
+  margin-bottom: var(--space-xxl);
+}
+
+.footer__brand {
+  max-width: 300px;
+}
+
+.footer__logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.footer__logo-text {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  letter-spacing: 0.15em;
+}
+
+.footer__tagline {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.footer__links {
+  display: flex;
+  gap: var(--space-xxl);
+}
+
+.footer__col-title {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  margin-bottom: var(--space-md);
+}
+
+.footer__col-links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.footer__col-link {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  transition: color var(--transition-fast);
+}
+
+.footer__col-link:hover {
+  color: var(--color-text);
+}
+
+.footer__bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--space-xl);
+  border-top: 1px solid var(--color-border);
+}
+
+.footer__copy {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-text-faint);
+  letter-spacing: 0.08em;
+}
+
+.footer__legal {
+  display: flex;
+  gap: var(--space-lg);
+}
+
+.footer__legal-link {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-text-faint);
+  transition: color var(--transition-fast);
+  letter-spacing: 0.08em;
+}
+
+.footer__legal-link:hover {
+  color: var(--color-text-muted);
+}
+
+
+/* ============================================================
+   13. POLICY PAGES (Privacy Policy & Terms of Service)
+   Clean document layout for legal pages.
+   ============================================================ */
+.policy-page {
+  padding-top: calc(var(--nav-height) + var(--space-4xl));
+  padding-bottom: var(--space-5xl);
+}
+
+.policy-page .container {
+  max-width: 720px;         /* Narrower column for reading comfort */
+}
+
+.policy-header {
+  margin-bottom: var(--space-4xl);
+  padding-bottom: var(--space-xl);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.policy-header__label {
+  margin-bottom: var(--space-md);
+}
+
+.policy-header__title {
+  margin-bottom: var(--space-md);
+}
+
+.policy-header__meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.policy-section {
+  margin-bottom: var(--space-xxl);
+}
+
+.policy-section__title {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.policy-section p {
+  margin-bottom: var(--space-md);
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+.policy-section ul {
+  margin: var(--space-md) 0 var(--space-md) var(--space-xl);
+  list-style: disc;
+}
+
+.policy-section ul li {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-sm);
+  line-height: 1.65;
+}
+
+.policy-contact {
+  margin-top: var(--space-4xl);
+  padding: var(--space-xl);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface);
+}
+
+.policy-contact__title {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  margin-bottom: var(--space-sm);
+  color: var(--color-text);
+}
+
+.policy-contact p {
+  font-size: 0.85rem;
+}
+
+/* Highlight box — for important notices */
+.policy-highlight {
+  padding: var(--space-lg);
+  border-left: 2px solid var(--color-accent);
+  background: var(--color-accent-dim);
+  border-radius: 0 var(--border-radius) var(--border-radius) 0;
+  margin: var(--space-lg) 0;
+}
+
+.policy-highlight p {
+  color: var(--color-text);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+
+/* ============================================================
+   14. ANIMATIONS
+   ============================================================ */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* Stagger animation for cards — applied via JS intersection observer */
+.animate-in {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.animate-in.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+
+/* ============================================================
+   15. RESPONSIVE — Mobile
+   All breakpoints use mobile-first logic.
+   ============================================================ */
+
+/* Tablet: 768px and below */
+@media (max-width: 768px) {
+  :root {
+    --space-4xl: 64px;
+    --space-5xl: 80px;
+  }
+
+  .container {
+    padding: 0 var(--space-md);
+  }
+
+  /* Nav — hide links, show hamburger */
+  .nav__links {
+    display: none;
+  }
+
+  .nav__hamburger {
+    display: flex;
+  }
+
+  /* Mobile nav — full screen overlay */
+  .nav__links.open {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: var(--nav-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--color-bg);
+    padding: var(--space-xxl) var(--space-xl);
+    gap: var(--space-xl);
+    border-top: 1px solid var(--color-border);
+    z-index: 99;
+  }
+
+  .nav__links.open .nav__link {
+    font-size: 1.1rem;
+  }
+
+  /* Hero: stack vertically */
+  .hero__inner {
+    grid-template-columns: 1fr;
+    gap: var(--space-xxl);
+    text-align: center;
+  }
+
+  .hero__visual {
+    order: -1;     /* Phone mockup goes on top on mobile */
+  }
+
+  .phone-mockup {
+    width: 200px;
+    height: 380px;
+  }
+
+  .hero__tagline {
+    margin: 0 auto var(--space-xl);
+  }
+
+  .hero__actions {
+    justify-content: center;
+  }
+
+  .hero__stats {
+    justify-content: center;
+  }
+
+  /* Features: single column */
+  .features__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-card--wide {
+    grid-column: span 1;
+  }
+
+  /* Security: stack */
+  .security__inner {
+    grid-template-columns: 1fr;
+    gap: var(--space-xxl);
+  }
+
+  /* Promise: 2 columns */
+  .promise__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Footer: stack */
+  .footer__inner {
+    grid-template-columns: 1fr;
+  }
+
+  .footer__links {
+    flex-wrap: wrap;
+    gap: var(--space-xl);
+  }
+
+  .footer__bottom {
+    flex-direction: column;
+    gap: var(--space-md);
+    text-align: center;
+  }
+
+  .footer__legal {
+    justify-content: center;
+  }
+}
+
+/* Small mobile: 480px and below */
+@media (max-width: 480px) {
+  .promise__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .download__actions {
+    flex-direction: column;
+    align-items: center;
+  }
+}
