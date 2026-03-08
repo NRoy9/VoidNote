@@ -67,6 +67,9 @@ data class Note(
     companion object {
         private val BLOCK_MARKER_REGEX = Regex("""⟦block:[A-Z]+:[0-9a-f\-]+⟧""")
         private val TODO_MARKER_REGEX  = Regex("""⟦block:TODO:[0-9a-f\-]+⟧""")
+        // Detect IMAGE and AUDIO blocks so the NoteCard can show indicator badges
+        private val IMAGE_MARKER_REGEX = Regex("""⟦block:IMAGE:[0-9a-f\-]+⟧""")
+        private val AUDIO_MARKER_REGEX = Regex("""⟦block:AUDIO:[0-9a-f\-]+⟧""")
     }
 
     /**
@@ -116,6 +119,53 @@ data class Note(
      */
     fun checklistBlockCount(): Int {
         return TODO_MARKER_REGEX.findAll(content).count()
+    }
+
+    // ─── Word count ───────────────────────────────────────────────────────
+
+    /**
+     * Returns the number of words in the note's logical (marker-stripped) content.
+     * Used by NoteCard to show a minimal word count indicator in the card footer.
+     * Returns 0 for blank notes so callers can safely skip showing the badge.
+     */
+    fun wordCount(): Int {
+        val text = logicalContent()
+        if (text.isBlank()) return 0
+        return text.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }.size
+    }
+
+    // ─── Image helpers ────────────────────────────────────────────────────
+
+    /**
+     * Returns true if this note contains at least one image block.
+     * Used by NoteCard to show the image badge indicator.
+     */
+    fun hasImages(): Boolean {
+        return IMAGE_MARKER_REGEX.containsMatchIn(content)
+    }
+
+    /**
+     * Returns the number of image blocks embedded in this note.
+     */
+    fun imageCount(): Int {
+        return IMAGE_MARKER_REGEX.findAll(content).count()
+    }
+
+    // ─── Audio helpers ────────────────────────────────────────────────────
+
+    /**
+     * Returns true if this note contains at least one audio block.
+     * Used by NoteCard to show the audio badge indicator.
+     */
+    fun hasAudio(): Boolean {
+        return AUDIO_MARKER_REGEX.containsMatchIn(content)
+    }
+
+    /**
+     * Returns the number of audio blocks embedded in this note.
+     */
+    fun audioCount(): Int {
+        return AUDIO_MARKER_REGEX.findAll(content).count()
     }
 
     // ─── State helpers ────────────────────────────────────────────────────

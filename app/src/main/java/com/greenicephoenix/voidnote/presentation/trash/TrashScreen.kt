@@ -19,6 +19,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import com.greenicephoenix.voidnote.presentation.components.TrashEmptyState
+import androidx.compose.material.icons.automirrored.filled.Sort
+import com.greenicephoenix.voidnote.domain.model.NoteSort
 
 /**
  * Trash Screen - View and manage deleted notes
@@ -43,14 +45,17 @@ fun TrashScreen(
 
     // Dialog state for permanent delete confirmation
     var noteToDelete by remember { mutableStateOf<Note?>(null) }
+    val noteSort by viewModel.noteSort.collectAsState()
 
     Scaffold(
         topBar = {
             TrashTopBar(
-                noteCount = uiState.count,
-                onBackClick = onNavigateBack,
+                noteCount      = uiState.count,
+                onBackClick    = onNavigateBack,
                 onEmptyTrashClick = { showEmptyTrashDialog = true },
-                isEmpty = uiState.isEmpty
+                isEmpty        = uiState.isEmpty,
+                currentSort    = noteSort,
+                onSortSelected = { viewModel.onSortSelected(it) }
             )
         }
     ) { paddingValues ->
@@ -133,11 +138,14 @@ fun TrashScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrashTopBar(
-    noteCount: Int,
-    onBackClick: () -> Unit,
-    onEmptyTrashClick: () -> Unit,
-    isEmpty: Boolean
+    noteCount      : Int,
+    onBackClick    : () -> Unit,
+    onEmptyTrashClick : () -> Unit,
+    isEmpty        : Boolean,
+    currentSort    : NoteSort,
+    onSortSelected : (NoteSort) -> Unit
 ) {
+    var showSortMenu by remember { mutableStateOf(false) }
     TopAppBar(
         title = {
             Column {
@@ -165,7 +173,42 @@ private fun TrashTopBar(
             }
         },
         actions = {
-            // Empty trash button (only show if trash is not empty)
+            // Sort button (only when there are notes to sort)
+            // CORRECT — noteCount is already a parameter
+            if (noteCount > 1) {
+                Box {
+                    IconButton(onClick = { showSortMenu = true }) {
+                        Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort trash")
+                    }
+                    DropdownMenu(
+                        expanded         = showSortMenu,
+                        onDismissRequest = { showSortMenu = false }
+                    ) {
+                        Text(
+                            text     = "SORT BY",
+                            style    = MaterialTheme.typography.labelSmall,
+                            color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                        NoteSort.entries.forEach { sort ->
+                            val isSelected = sort == currentSort
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text       = sort.label,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                },
+                                trailingIcon = if (isSelected) {
+                                    { Text("✓", color = MaterialTheme.colorScheme.primary) }
+                                } else null,
+                                onClick = { onSortSelected(sort); showSortMenu = false }
+                            )
+                        }
+                    }
+                }
+            }
+            // Empty trash button (only when trash is not empty)
             if (!isEmpty) {
                 TextButton(onClick = onEmptyTrashClick) {
                     Icon(

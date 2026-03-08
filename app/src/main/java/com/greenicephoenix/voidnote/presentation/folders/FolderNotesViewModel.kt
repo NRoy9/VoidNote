@@ -168,6 +168,27 @@ class FolderNotesViewModel @Inject constructor(
         }
         dismissDeleteDialog()
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+// NOTE ACTIONS (swipe gestures from FolderNotesScreen)
+// ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Toggle the pinned state of a note inside this folder.
+     * Called by swipe-right gesture on a note card.
+     */
+    fun togglePin(noteId: String) {
+        viewModelScope.launch { noteRepository.togglePin(noteId) }
+    }
+
+    /**
+     * Archive a note from this folder.
+     * The note leaves the folder and appears in Archive screen.
+     * Called by swipe-left gesture on a note card.
+     */
+    fun archiveNote(noteId: String) {
+        viewModelScope.launch { noteRepository.toggleArchive(noteId) }
+    }
 }
 
 data class FolderNotesUiState(

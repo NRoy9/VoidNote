@@ -20,6 +20,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.presentation.components.FolderNotesEmptyState
 import com.greenicephoenix.voidnote.presentation.components.NoteCard
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
+import com.greenicephoenix.voidnote.presentation.components.SwipeableNoteCard
 
 /**
  * FolderNotesScreen — shows all notes inside a specific folder.
@@ -144,8 +145,10 @@ fun FolderNotesScreen(
                 }
                 else -> {
                     FolderNotesContent(
-                        notes = uiState.notes,
-                        onNoteClick = { note -> onNavigateToEditor(note.id) }
+                        notes       = uiState.notes,
+                        onNoteClick = { note -> onNavigateToEditor(note.id) },
+                        onTogglePin = { noteId -> viewModel.togglePin(noteId) },
+                        onArchive   = { noteId -> viewModel.archiveNote(noteId) }
                     )
                 }
             }
@@ -177,16 +180,23 @@ fun FolderNotesScreen(
 
 @Composable
 private fun FolderNotesContent(
-    notes: List<com.greenicephoenix.voidnote.domain.model.Note>,
-    onNoteClick: (com.greenicephoenix.voidnote.domain.model.Note) -> Unit
+    notes       : List<com.greenicephoenix.voidnote.domain.model.Note>,
+    onNoteClick : (com.greenicephoenix.voidnote.domain.model.Note) -> Unit,
+    onTogglePin : (String) -> Unit,
+    onArchive   : (String) -> Unit
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(Spacing.medium),
-        verticalArrangement = Arrangement.spacedBy(Spacing.medium)
+        modifier            = Modifier.fillMaxSize(),
+        contentPadding      = PaddingValues(bottom = 80.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         items(notes, key = { it.id }) { note ->
-            NoteCard(note = note, onClick = { onNoteClick(note) })
+            SwipeableNoteCard(
+                note        = note,
+                onNoteClick = { onNoteClick(note) },
+                onTogglePin = { onTogglePin(note.id) },
+                onArchive   = { onArchive(note.id) }
+            )
         }
         item { Spacer(modifier = Modifier.height(80.dp)) }
     }

@@ -27,11 +27,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.domain.model.NoteSort
 import com.greenicephoenix.voidnote.presentation.components.FolderCard
-import com.greenicephoenix.voidnote.presentation.components.NoteCard
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import com.greenicephoenix.voidnote.presentation.components.ExpandableFab
 import com.greenicephoenix.voidnote.util.UpdateInfo
 import androidx.core.net.toUri
+import com.greenicephoenix.voidnote.domain.model.Folder
+import com.greenicephoenix.voidnote.domain.model.Note
+import com.greenicephoenix.voidnote.presentation.components.SwipeableNoteCard
 
 /**
  * Notes List Screen — the app's home screen.
@@ -123,6 +125,7 @@ fun NotesListScreen(
                         onNoteClick     = { note -> onNavigateToEditor(note.id) },
                         onFolderClick   = { folder -> onNavigateToFolderNotes(folder.id) },
                         onTogglePin     = { noteId -> viewModel.onTogglePin(noteId) },
+                        onArchiveNote    = { noteId -> viewModel.onArchiveNote(noteId) },
                         onNavigateToTags = onNavigateToTags,
                         onUpdateDismiss = { viewModel.onUpdateDismissed() },
                         context         = context
@@ -333,14 +336,15 @@ private fun UpdateBanner(
 
 @Composable
 private fun NotesAndFoldersContent(
-    uiState: NotesListUiState,
-    updateInfo: UpdateInfo?,
-    onNoteClick: (com.greenicephoenix.voidnote.domain.model.Note) -> Unit,
-    onFolderClick: (com.greenicephoenix.voidnote.domain.model.Folder) -> Unit,
-    onTogglePin: (String) -> Unit,
-    onNavigateToTags: () -> Unit = {},
-    onUpdateDismiss: () -> Unit,
-    context: android.content.Context
+    uiState          : NotesListUiState,
+    updateInfo       : UpdateInfo?,
+    onNoteClick      : (Note) -> Unit,
+    onFolderClick    : (Folder) -> Unit,
+    onTogglePin      : (String) -> Unit,
+    onArchiveNote    : (String) -> Unit,   // ← NEW: swipe-left to archive
+    onNavigateToTags : () -> Unit,
+    onUpdateDismiss  : () -> Unit,
+    context          : android.content.Context
 ) {
     // Notes are pre-sorted by NotesListViewModel — pinned first within each group
     val pinnedNotes  = uiState.notes.filter {  it.isPinned && !it.isTrashed }
@@ -366,9 +370,12 @@ private fun NotesAndFoldersContent(
         if (pinnedNotes.isNotEmpty()) {
             item(key = "pinned_header") { SectionHeader("PINNED") }
             items(pinnedNotes, key = { "pin_${it.id}" }) { note ->
-                Box(modifier = Modifier.padding(horizontal = Spacing.medium, vertical = Spacing.extraSmall)) {
-                    NoteCard(note = note, onClick = { onNoteClick(note) })
-                }
+                SwipeableNoteCard(
+                    note        = note,
+                    onNoteClick = { onNoteClick(note) },
+                    onTogglePin = { onTogglePin(note.id) },
+                    onArchive   = { onArchiveNote(note.id) }
+                )
             }
             item(key = "pinned_spacer") { Spacer(Modifier.height(Spacing.small)) }
         }
@@ -401,9 +408,12 @@ private fun NotesAndFoldersContent(
                 item(key = "notes_header") { SectionHeader("NOTES") }
             }
             items(regularNotes, key = { "note_${it.id}" }) { note ->
-                Box(modifier = Modifier.padding(horizontal = Spacing.medium, vertical = Spacing.extraSmall)) {
-                    NoteCard(note = note, onClick = { onNoteClick(note) })
-                }
+                SwipeableNoteCard(
+                    note        = note,
+                    onNoteClick = { onNoteClick(note) },
+                    onTogglePin = { onTogglePin(note.id) },
+                    onArchive   = { onArchiveNote(note.id) }
+                )
             }
         }
     }

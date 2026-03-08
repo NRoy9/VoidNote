@@ -32,7 +32,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
@@ -43,6 +42,8 @@ import com.greenicephoenix.voidnote.domain.model.InlineBlock
 import com.greenicephoenix.voidnote.domain.model.InlineBlockPayload
 import com.greenicephoenix.voidnote.domain.model.TodoItem
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 
 /**
  * TodoBlockComposable — Polished interactive checklist block.
@@ -338,6 +339,9 @@ private fun TodoItemRow(
     onImeAction: () -> Unit,
     showDeleteButton: Boolean
 ) {
+    // Haptic feedback on checkbox toggle — gives physical confirmation
+    // that the item state changed, matching the feel of native Android checkboxes
+    val haptic = LocalHapticFeedback.current
     // Smooth color fade on check/uncheck — 300ms feels natural
     val textColor by animateColorAsState(
         targetValue = if (item.isChecked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
@@ -361,7 +365,10 @@ private fun TodoItemRow(
     ) {
         // Checkbox — 36dp touch target, 20dp icon (Material standard)
         IconButton(
-            onClick = onToggle,
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onToggle()
+            },
             modifier = Modifier.size(36.dp)
         ) {
             Icon(

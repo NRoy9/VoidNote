@@ -21,6 +21,8 @@ import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Mic
 
 /**
  * NoteCard — Displays a single note in the list screen.
@@ -167,9 +169,29 @@ fun NoteCard(
                         if (hasChecklists) {
                             ChecklistBadge(count = checklistCount)
                         }
+                        // Show image badge if note has embedded images
+                        if (note.hasImages()) {
+                            MediaBadge(
+                                icon        = Icons.Default.Image,
+                                count       = note.imageCount(),
+                                description = "Images"
+                            )
+                        }
+                        // Show audio badge if note has embedded voice recordings
+                        if (note.hasAudio()) {
+                            MediaBadge(
+                                icon        = Icons.Default.Mic,
+                                count       = note.audioCount(),
+                                description = "Audio"
+                            )
+                        }
                     }
+                    // Show word count alongside the timestamp — only for notes with enough
+// content to make the count meaningful (>5 words avoids "1w" on tiny notes)
+                    val words = note.wordCount()
                     Text(
-                        text  = formatTimestamp(note.updatedAt),
+                        text  = if (words > 5) "${words}w · ${formatTimestamp(note.updatedAt)}"
+                        else formatTimestamp(note.updatedAt),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
@@ -214,6 +236,50 @@ private fun ChecklistBadge(count: Int) {
     }
 }
 
+/**
+ * Generic media badge for images and audio recordings.
+ * Same visual language as ChecklistBadge — pill shape, low contrast.
+ *
+ * @param icon        The icon to display (Image, Mic, etc.)
+ * @param count       Number of blocks of this type in the note.
+ * @param description Content description for accessibility.
+ */
+@Composable
+private fun MediaBadge(
+    icon        : androidx.compose.ui.graphics.vector.ImageVector,
+    count       : Int,
+    description : String
+) {
+    Surface(
+        shape          = RoundedCornerShape(4.dp),
+        color          = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier              = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Icon(
+                imageVector        = icon,
+                contentDescription = description,
+                modifier           = Modifier.size(10.dp),
+                tint               = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+            if (count > 1) {
+                Text(
+                    text  = "$count",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize      = 9.sp,
+                        fontWeight    = FontWeight.Medium,
+                        letterSpacing = 0.8.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            }
+        }
+    }
+}
 
 /**
  * Formats a Unix timestamp into a human-readable relative string.

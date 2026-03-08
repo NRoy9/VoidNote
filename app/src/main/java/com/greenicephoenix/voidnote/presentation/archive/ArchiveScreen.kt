@@ -21,6 +21,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import com.greenicephoenix.voidnote.presentation.components.ArchiveEmptyState
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.greenicephoenix.voidnote.domain.model.NoteSort
 
 /**
  * Archive Screen — View and manage archived notes.
@@ -49,6 +53,7 @@ fun ArchiveScreen(
     viewModel: ArchiveViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val noteSort by viewModel.noteSort.collectAsState()
 
     // Confirmation dialog state — holds the note pending a "move to trash" action
     var noteToTrash by remember { mutableStateOf<Note?>(null) }
@@ -56,8 +61,10 @@ fun ArchiveScreen(
     Scaffold(
         topBar = {
             ArchiveTopBar(
-                noteCount = uiState.count,
-                onBackClick = onNavigateBack
+                noteCount      = uiState.count,
+                onBackClick    = onNavigateBack,
+                currentSort    = noteSort,
+                onSortSelected = { viewModel.onSortSelected(it) }
             )
         }
     ) { paddingValues ->
@@ -108,19 +115,23 @@ fun ArchiveScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ArchiveTopBar(
-    noteCount: Int,
-    onBackClick: () -> Unit
+    noteCount      : Int,
+    onBackClick    : () -> Unit,
+    currentSort    : NoteSort,
+    onSortSelected : (NoteSort) -> Unit
 ) {
+    var showSortMenu by remember { mutableStateOf(false) }
+
     TopAppBar(
         title = {
             Column {
                 Text(
-                    text = "Archive",
+                    text  = "Archive",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                 )
                 if (noteCount > 0) {
                     Text(
-                        text = "$noteCount ${if (noteCount == 1) "note" else "notes"}",
+                        text  = "$noteCount ${if (noteCount == 1) "note" else "notes"}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                     )
@@ -130,6 +141,48 @@ private fun ArchiveTopBar(
         navigationIcon = {
             IconButton(onClick = onBackClick) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+        },
+        actions = {
+            // Sort button — only shown when there are notes to sort
+            if (noteCount > 1) {
+                Box {
+                    IconButton(onClick = { showSortMenu = true }) {
+                        Icon(
+                            imageVector        = Icons.AutoMirrored.Filled.Sort,
+                            contentDescription = "Sort archive"
+                        )
+                    }
+                    DropdownMenu(
+                        expanded         = showSortMenu,
+                        onDismissRequest = { showSortMenu = false }
+                    ) {
+                        Text(
+                            text     = "SORT BY",
+                            style    = MaterialTheme.typography.labelSmall,
+                            color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                        NoteSort.entries.forEach { sort ->
+                            val isSelected = sort == currentSort
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text       = sort.label,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                },
+                                trailingIcon = if (isSelected) {
+                                    { Text("✓", color = MaterialTheme.colorScheme.primary) }
+                                } else null,
+                                onClick = {
+                                    onSortSelected(sort)
+                                    showSortMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
