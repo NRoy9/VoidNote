@@ -89,7 +89,7 @@ Thumbs.db
 *~
 *.swp
 *.bak
-# Signing keystore � NEVER commit this
+# Signing keystore   NEVER commit this
 app/voidnote-release.jks
 keystore.properties
 
@@ -99,3 +99,6 @@ keystore.properties
 !.dev.vars.example
 .env*
 !.env.example
+
+#secret file
+/Void Note OAuth client secret.txt
