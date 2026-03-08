@@ -99,6 +99,3 @@ keystore.properties
 !.dev.vars.example
 .env*
 !.env.example
-
-#secret file
-/Void Note OAuth client secret.txt
