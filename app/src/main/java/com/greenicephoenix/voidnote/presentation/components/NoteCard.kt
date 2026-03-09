@@ -23,6 +23,12 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Mic
 
 /**
  * NoteCard — Displays a single note in the list screen.
@@ -45,10 +51,12 @@ import androidx.compose.material.icons.filled.Mic
  * @param onClick  Called when the card is tapped.
  * @param modifier Optional modifier.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NoteCard(
     note: Note,
     onClick: () -> Unit,
+    onLongClick : (() -> Unit)? = null,   // null = no long press (e.g. archive/trash screens)
     modifier: Modifier = Modifier
 ) {
     val contentPreview = note.getContentPreview(150)
@@ -57,11 +65,21 @@ fun NoteCard(
 
     // Use the vivid pickerColor for the strip — muted tints are too subtle on a thin strip
     val accentColor: Color? = note.color?.pickerColor
+    val haptic = LocalHapticFeedback.current
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick     = onClick,
+                onLongClick = onLongClick?.let { action ->
+                    {
+                        // Haptic at the moment of long press — matches Android system behaviour
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        action()
+                    }
+                }
+            ),
         colors = CardDefaults.cardColors(
             // Always default surface — no tinted card backgrounds
             containerColor = MaterialTheme.colorScheme.surface
@@ -187,11 +205,17 @@ fun NoteCard(
                         }
                     }
                     // Show word count alongside the timestamp — only for notes with enough
-// content to make the count meaningful (>5 words avoids "1w" on tiny notes)
-                    val words = note.wordCount()
+                    // content to make the count meaningful (>5 words avoids "1w" on tiny notes)
+                    val words   = note.wordCount()
+                    val readMin = note.readingTimeMinutes()
+                    val statsText = buildString {
+                        if (words > 5)   append("${words}w")
+                        if (readMin > 0) append(" · ${readMin}m read")
+                        if (isNotEmpty()) append(" · ")
+                        append(formatTimestamp(note.updatedAt))
+                    }
                     Text(
-                        text  = if (words > 5) "${words}w · ${formatTimestamp(note.updatedAt)}"
-                        else formatTimestamp(note.updatedAt),
+                        text  = statsText,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )

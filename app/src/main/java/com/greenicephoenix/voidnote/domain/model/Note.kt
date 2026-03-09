@@ -134,6 +134,16 @@ data class Note(
         return text.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }.size
     }
 
+    /**
+     * Returns estimated reading time in minutes (200 wpm average).
+     * Returns 0 if less than 1 minute — callers should skip showing it.
+     */
+    fun readingTimeMinutes(): Int {
+        val words = wordCount()
+        if (words < 200) return 0
+        return (words / 200.0).let { kotlin.math.ceil(it).toInt() }
+    }
+
     // ─── Image helpers ────────────────────────────────────────────────────
 
     /**

@@ -18,9 +18,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.presentation.components.FolderNotesEmptyState
-import com.greenicephoenix.voidnote.presentation.components.NoteCard
-import com.greenicephoenix.voidnote.presentation.theme.Spacing
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import com.greenicephoenix.voidnote.domain.model.Note
+import com.greenicephoenix.voidnote.presentation.components.NoteQuickActionsSheet
 import com.greenicephoenix.voidnote.presentation.components.SwipeableNoteCard
+import kotlinx.coroutines.launch
 
 /**
  * FolderNotesScreen — shows all notes inside a specific folder.
@@ -44,6 +48,10 @@ fun FolderNotesScreen(
     val showRenameDialog by viewModel.showRenameDialog.collectAsState()
     val renameText by viewModel.renameText.collectAsState()
     val showDeleteDialog by viewModel.showDeleteDialog.collectAsState()
+
+    var quickActionNote   by remember { mutableStateOf<Note?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope    = rememberCoroutineScope()
 
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -125,7 +133,8 @@ fun FolderNotesScreen(
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Create note in folder")
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -148,7 +157,20 @@ fun FolderNotesScreen(
                         notes       = uiState.notes,
                         onNoteClick = { note -> onNavigateToEditor(note.id) },
                         onTogglePin = { noteId -> viewModel.togglePin(noteId) },
-                        onArchive   = { noteId -> viewModel.archiveNote(noteId) }
+                        onArchive   = { note ->
+                            viewModel.archiveNote(note.id)
+                            coroutineScope.launch {
+                                val result = snackbarHostState.showSnackbar(
+                                    message     = "\"${note.title.ifBlank { "Note" }}\" archived",
+                                    actionLabel = "Undo",
+                                    duration    = SnackbarDuration.Short
+                                )
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    viewModel.undoArchive(note.id)
+                                }
+                            }
+                        },
+                        onLongPress = { note -> quickActionNote = note }
                     )
                 }
             }
@@ -172,6 +194,29 @@ fun FolderNotesScreen(
             onDismiss = { viewModel.dismissDeleteDialog() }
         )
     }
+
+    quickActionNote?.let { note ->
+        NoteQuickActionsSheet(
+            note        = note,
+            onDismiss   = { quickActionNote = null },
+            onTogglePin = { viewModel.togglePin(note.id); quickActionNote = null },
+            onArchive   = {
+                viewModel.archiveNote(note.id)
+                quickActionNote = null
+                coroutineScope.launch {
+                    val result = snackbarHostState.showSnackbar(
+                        message     = "\"${note.title.ifBlank { "Note" }}\" archived",
+                        actionLabel = "Undo",
+                        duration    = SnackbarDuration.Short
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.undoArchive(note.id)
+                    }
+                }
+            },
+            onDelete = { viewModel.moveToTrash(note.id); quickActionNote = null }
+        )
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,10 +225,11 @@ fun FolderNotesScreen(
 
 @Composable
 private fun FolderNotesContent(
-    notes       : List<com.greenicephoenix.voidnote.domain.model.Note>,
-    onNoteClick : (com.greenicephoenix.voidnote.domain.model.Note) -> Unit,
+    notes       : List<Note>,
+    onNoteClick : (Note) -> Unit,
     onTogglePin : (String) -> Unit,
-    onArchive   : (String) -> Unit
+    onArchive   : (Note) -> Unit,
+    onLongPress : (Note) -> Unit
 ) {
     LazyColumn(
         modifier            = Modifier.fillMaxSize(),
@@ -195,7 +241,8 @@ private fun FolderNotesContent(
                 note        = note,
                 onNoteClick = { onNoteClick(note) },
                 onTogglePin = { onTogglePin(note.id) },
-                onArchive   = { onArchive(note.id) }
+                onArchive   = { onArchive(note) },
+                onLongClick = { onLongPress(note) }
             )
         }
         item { Spacer(modifier = Modifier.height(80.dp)) }

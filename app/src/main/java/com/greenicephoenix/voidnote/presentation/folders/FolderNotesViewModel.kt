@@ -189,6 +189,18 @@ class FolderNotesViewModel @Inject constructor(
     fun archiveNote(noteId: String) {
         viewModelScope.launch { noteRepository.toggleArchive(noteId) }
     }
+
+    /**
+     * Undo an archive action from within a folder.
+     * Called when user taps "Undo" in the snackbar.
+     */
+    fun undoArchive(noteId: String) {
+        viewModelScope.launch { noteRepository.toggleArchive(noteId) }
+    }
+
+    fun moveToTrash(noteId: String) {
+        viewModelScope.launch { noteRepository.moveToTrash(noteId) }
+    }
 }
 
 data class FolderNotesUiState(

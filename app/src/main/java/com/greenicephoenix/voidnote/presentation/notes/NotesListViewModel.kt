@@ -233,6 +233,15 @@ class NotesListViewModel @Inject constructor(
     fun onTogglePin(noteId: String)          { viewModelScope.launch { noteRepository.togglePin(noteId) } }
     fun onDeleteNote(noteId: String)         { viewModelScope.launch { noteRepository.moveToTrash(noteId) } }
     fun onArchiveNote(noteId: String)        { viewModelScope.launch { noteRepository.toggleArchive(noteId) } }
+
+    /**
+     * Undo an archive action — toggles the note back to active.
+     * Called when user taps "Undo" in the snackbar after a swipe-archive.
+     * toggleArchive() handles both directions (archive ↔ restore).
+     */
+    fun undoArchive(noteId: String) {
+        viewModelScope.launch { noteRepository.toggleArchive(noteId) }
+    }
     fun showCreateFolderDialog()             { _newFolderName.value = ""; _showCreateFolderDialog.value = true }
     fun hideCreateFolderDialog()             { _showCreateFolderDialog.value = false; _newFolderName.value = "" }
     fun onNewFolderNameChange(name: String)  { _newFolderName.value = name }

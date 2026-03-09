@@ -19,27 +19,20 @@ import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 
 /**
- * SwipeableNoteCard — NoteCard wrapped with swipe-to-action gestures.
- *
- * WHY THIS IS A SHARED COMPONENT (not private in one screen):
- * Both NotesListScreen and FolderNotesScreen show note cards.
- * Duplicating the swipe logic would mean two places to maintain.
- * Placing it here in `components/` means any screen can use it.
+ * SwipeableNoteCard — NoteCard with swipe gestures and long-press support.
  *
  * GESTURES:
- *   Swipe RIGHT → Pin / Unpin  (green, pin icon)
- *   Swipe LEFT  → Archive       (orange, archive icon)
+ *   Swipe RIGHT  → Pin / Unpin  (green)
+ *   Swipe LEFT   → Archive      (orange)
+ *   Long press   → Quick actions sheet (pin, archive, delete)
  *
- * HAPTIC FEEDBACK:
- * A LongPress haptic fires the moment the action threshold is crossed —
- * giving a physical confirmation that the gesture registered, before the
- * user lifts their finger. This is the same pattern used by Gmail,
- * Google Tasks, and most premium Android apps.
+ * HAPTICS:
+ *   Swipe threshold crossed → LongPress haptic
+ *   Long press              → LongPress haptic (handled inside NoteCard)
  *
- * @param note        The note to display.
- * @param onNoteClick Called on a normal tap.
- * @param onTogglePin Called when swiped right.
- * @param onArchive   Called when swiped left.
+ * UNDO:
+ *   onArchive returns the noteId to the caller so the screen can show
+ *   a snackbar with an Undo action.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,59 +40,48 @@ fun SwipeableNoteCard(
     note        : Note,
     onNoteClick : () -> Unit,
     onTogglePin : () -> Unit,
-    onArchive   : () -> Unit
+    onArchive   : () -> Unit,
+    onLongClick : (() -> Unit)? = null
 ) {
-    // Capture haptic in composable scope — safe to use inside the lambda below
     val haptic = LocalHapticFeedback.current
 
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { newValue ->
             when (newValue) {
                 SwipeToDismissBoxValue.StartToEnd -> {
-                    // Fire haptic at the moment the threshold is crossed
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onTogglePin()
-                    false   // Don't dismiss — spring back after pin toggle
+                    false
                 }
                 SwipeToDismissBoxValue.EndToStart -> {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onArchive()
-                    false   // Room removes the card from list automatically
+                    false
                 }
                 SwipeToDismissBoxValue.Settled -> false
             }
         },
-        // 40% threshold — deliberate enough to not trigger accidentally,
-        // easy enough to trigger intentionally
         positionalThreshold = { totalDistance -> totalDistance * 0.40f }
     )
 
     SwipeToDismissBox(
         state             = dismissState,
         backgroundContent = {
-            SwipeBackground(
-                dismissState = dismissState,
-                isPinned     = note.isPinned
-            )
+            SwipeBackground(dismissState = dismissState, isPinned = note.isPinned)
         },
         modifier = Modifier.padding(
             horizontal = Spacing.medium,
             vertical   = Spacing.extraSmall
         )
     ) {
-        NoteCard(note = note, onClick = onNoteClick)
+        NoteCard(
+            note        = note,
+            onClick     = onNoteClick,
+            onLongClick = onLongClick
+        )
     }
 }
 
-/**
- * The coloured background revealed behind the card during a swipe.
- *
- * StartToEnd (right) → green background, pin/unpin icon on the left
- * EndToStart (left)  → orange background, archive icon on the right
- *
- * Alpha fades from 0 → 1 as the drag progresses, giving smooth visual
- * feedback proportional to how far the user has dragged.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SwipeBackground(
@@ -110,19 +92,18 @@ private fun SwipeBackground(
 
     val (backgroundColor, icon, label) = when (direction) {
         SwipeToDismissBoxValue.StartToEnd -> Triple(
-            Color(0xFF2E7D32),          // dark green
+            Color(0xFF2E7D32),
             Icons.Default.PushPin,
             if (isPinned) "UNPIN" else "PIN"
         )
         SwipeToDismissBoxValue.EndToStart -> Triple(
-            Color(0xFFE65100),          // dark orange
+            Color(0xFFE65100),
             Icons.Default.Archive,
             "ARCHIVE"
         )
         else -> Triple(Color.Transparent, Icons.Default.PushPin, "")
     }
 
-    // Fade proportional to drag distance — full opacity at 50% drag
     val progress = dismissState.progress.coerceIn(0f, 1f)
     val alpha    = (progress * 2f).coerceIn(0f, 1f)
 

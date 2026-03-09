@@ -34,6 +34,11 @@ import androidx.core.net.toUri
 import com.greenicephoenix.voidnote.domain.model.Folder
 import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.presentation.components.SwipeableNoteCard
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import com.greenicephoenix.voidnote.presentation.components.NoteQuickActionsSheet
+import kotlinx.coroutines.launch
 
 /**
  * Notes List Screen — the app's home screen.
@@ -72,6 +77,13 @@ fun NotesListScreen(
     val updateInfo by viewModel.updateInfo.collectAsState()
     val context = LocalContext.current
 
+    // Quick actions sheet state
+    var quickActionNote by remember { mutableStateOf<com.greenicephoenix.voidnote.domain.model.Note?>(null) }
+
+    // Snackbar for undo
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope    = rememberCoroutineScope()
+
     // ── Back press: minimise app instead of finishing the Activity ────────────
     BackHandler {
         (context as? Activity)?.moveTaskToBack(true)
@@ -91,7 +103,8 @@ fun NotesListScreen(
                 onCreateNote   = { onNavigateToEditor("new") },
                 onCreateFolder = { viewModel.showCreateFolderDialog() }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }   // ← ADD THIS
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -120,15 +133,29 @@ fun NotesListScreen(
 
                 else -> {
                     NotesAndFoldersContent(
-                        uiState         = uiState,
-                        updateInfo      = updateInfo,
-                        onNoteClick     = { note -> onNavigateToEditor(note.id) },
-                        onFolderClick   = { folder -> onNavigateToFolderNotes(folder.id) },
-                        onTogglePin     = { noteId -> viewModel.onTogglePin(noteId) },
-                        onArchiveNote    = { noteId -> viewModel.onArchiveNote(noteId) },
+                        uiState          = uiState,
+                        updateInfo       = updateInfo,
+                        onNoteClick      = { note -> onNavigateToEditor(note.id) },
+                        onFolderClick    = { folder -> onNavigateToFolderNotes(folder.id) },
+                        onTogglePin      = { noteId -> viewModel.onTogglePin(noteId) },
+                        onArchiveNote    = { note ->
+                            viewModel.onArchiveNote(note.id)
+                            // Show undo snackbar — fire and forget in a coroutine
+                            coroutineScope.launch {
+                                val result = snackbarHostState.showSnackbar(
+                                    message    = "\"${note.title.ifBlank { "Note" }}\" archived",
+                                    actionLabel = "Undo",
+                                    duration   = androidx.compose.material3.SnackbarDuration.Short
+                                )
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    viewModel.undoArchive(note.id)
+                                }
+                            }
+                        },
+                        onLongPress      = { note -> quickActionNote = note },
                         onNavigateToTags = onNavigateToTags,
-                        onUpdateDismiss = { viewModel.onUpdateDismissed() },
-                        context         = context
+                        onUpdateDismiss  = { viewModel.onUpdateDismissed() },
+                        context          = context
                     )
                 }
             }
@@ -142,6 +169,33 @@ fun NotesListScreen(
         onDismiss    = { viewModel.hideCreateFolderDialog() },
         onCreate     = { viewModel.createFolder() }
     )
+
+    // Quick actions bottom sheet — shown on long-press of any note card
+    quickActionNote?.let { note ->
+        NoteQuickActionsSheet(
+            note        = note,
+            onDismiss   = { quickActionNote = null },
+            onTogglePin = {
+                viewModel.onTogglePin(note.id)
+                quickActionNote = null
+            },
+            onArchive   = {
+                viewModel.onArchiveNote(note.id)
+                quickActionNote = null
+                coroutineScope.launch {
+                    val result = snackbarHostState.showSnackbar(
+                        message     = "\"${note.title.ifBlank { "Note" }}\" archived",
+                        actionLabel = "Undo",
+                        duration    = androidx.compose.material3.SnackbarDuration.Short
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.undoArchive(note.id)
+                    }
+                }
+            },
+            onDelete    = { viewModel.onDeleteNote(note.id) }
+        )
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -341,7 +395,8 @@ private fun NotesAndFoldersContent(
     onNoteClick      : (Note) -> Unit,
     onFolderClick    : (Folder) -> Unit,
     onTogglePin      : (String) -> Unit,
-    onArchiveNote    : (String) -> Unit,   // ← NEW: swipe-left to archive
+    onArchiveNote    : (Note) -> Unit,       // ← now takes full Note for title in snackbar
+    onLongPress      : (Note) -> Unit,       // ← NEW
     onNavigateToTags : () -> Unit,
     onUpdateDismiss  : () -> Unit,
     context          : android.content.Context
@@ -374,7 +429,8 @@ private fun NotesAndFoldersContent(
                     note        = note,
                     onNoteClick = { onNoteClick(note) },
                     onTogglePin = { onTogglePin(note.id) },
-                    onArchive   = { onArchiveNote(note.id) }
+                    onArchive   = { onArchiveNote(note) },    // ← full Note now
+                    onLongClick = { onLongPress(note) }
                 )
             }
             item(key = "pinned_spacer") { Spacer(Modifier.height(Spacing.small)) }
@@ -412,7 +468,8 @@ private fun NotesAndFoldersContent(
                     note        = note,
                     onNoteClick = { onNoteClick(note) },
                     onTogglePin = { onTogglePin(note.id) },
-                    onArchive   = { onArchiveNote(note.id) }
+                    onArchive   = { onArchiveNote(note) },
+                    onLongClick = { onLongPress(note) }
                 )
             }
         }

@@ -50,6 +50,24 @@ object ChangelogData {
      * ADD NEW ENTRIES AT THE TOP.
      */
     val entries: List<VersionEntry> = listOf(
+
+        // ── v1.0.1 — Polish & UX improvements ────────────────────────────────
+        VersionEntry(
+            version     = "1.0.1",
+            releaseDate = "10 Mar 2026",
+            tagline     = "Smoother, faster, more satisfying to use.",
+            changes     = listOf(
+                ChangeItem(ChangeType.NEW,      "Long-press any note card for quick actions — pin, archive, or delete without opening the note"),
+                ChangeItem(ChangeType.NEW,      "Undo archive — a snackbar appears after archiving so you can reverse it instantly"),
+                ChangeItem(ChangeType.NEW,      "Swipe gestures on folder note lists — swipe right to pin, swipe left to archive"),
+                ChangeItem(ChangeType.NEW,      "Sort on Archive and Trash screens — same four sort options as the main list"),
+                ChangeItem(ChangeType.IMPROVED, "Note cards now show word count and estimated reading time for longer notes"),
+                ChangeItem(ChangeType.IMPROVED, "Note cards show image and audio badges when a note contains media blocks"),
+                ChangeItem(ChangeType.IMPROVED, "Haptic feedback when crossing a swipe threshold — physical confirmation before you lift your finger"),
+                ChangeItem(ChangeType.IMPROVED, "Haptic feedback on checklist item toggle — matches native Android checkbox feel"),
+            )
+        ),
+
         // ── v1.0.0 — First production release ────────────────────────────────
         // Free-tier feature set is complete. No longer alpha.
         VersionEntry(
