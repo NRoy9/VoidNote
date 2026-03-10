@@ -26,6 +26,8 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.animation.AnimatedVisibility
 
 /**
  * SettingsScreen
@@ -51,8 +53,17 @@ fun SettingsScreen(
     val isBiometricEnabled by viewModel.biometricLockEnabled.collectAsState()
     val context = LocalContext.current
 
-    var showThemeDialog     by remember { mutableStateOf(false) }
-    var showClearDataDialog by remember { mutableStateOf(false) }
+    var showThemeDialog          by remember { mutableStateOf(false) }
+    var showClearDataDialog      by remember { mutableStateOf(false) }
+    var showUpdateAvailableDialog by remember { mutableStateOf(false) }
+
+    // Show the update-available dialog whenever state transitions to Available
+    val updateState = uiState.updateCheckState
+    LaunchedEffect(updateState) {
+        if (updateState is UpdateCheckState.Available || updateState == UpdateCheckState.UpToDate || updateState == UpdateCheckState.Error) {
+            showUpdateAvailableDialog = true
+        }
+    }
 
     // ── Permission states ─────────────────────────────────────────────────────
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
@@ -82,6 +93,8 @@ fun SettingsScreen(
             )
         }
     ) { paddingValues ->
+        val appVersion = uiState.appVersion
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -284,21 +297,45 @@ fun SettingsScreen(
                 SettingsItem(
                     icon     = Icons.Default.StarOutline,
                     title    = "What's New",
-                    subtitle = "v${uiState.appVersion} release notes",
+                    subtitle = "v$appVersion release notes",
                     onClick  = onNavigateToChangelog
                 )
             }
 
+            // ── Check for Updates ─────────────────────────────────────────────
+            // Subtitle reflects live check state. While checking, a thin
+            // LinearProgressIndicator slides in below the row — the same
+            // pattern used by the Play Store. No spinning icons.
             item {
-                SettingsItem(
-                    icon     = Icons.Default.Info,
-                    title    = "Version",
-                    subtitle = uiState.appVersion,
-                    onClick  = null
-                )
+                val updateState = uiState.updateCheckState
+                val isChecking  = updateState == UpdateCheckState.Checking
+                val updateSubtitle = when (updateState) {
+                    is UpdateCheckState.Idle      -> "Installed: v$appVersion"
+                    is UpdateCheckState.Checking  -> "Checking for updates..."
+                    is UpdateCheckState.UpToDate  -> "You’re up to date — v$appVersion"
+                    is UpdateCheckState.Available -> "v${updateState.version} available — tap to download"
+                    is UpdateCheckState.Error     -> "Check failed — tap to retry"
+                }
+                Column {
+                    SettingsItem(
+                        icon     = Icons.Default.SystemUpdate,
+                        title    = "Check for Updates",
+                        subtitle = updateSubtitle,
+                        onClick  = { viewModel.checkForUpdates() }
+                    )
+                    // 2dp indeterminate bar — only visible while the network request
+                    // is in flight. AnimatedVisibility handles the fade-in/out.
+                    AnimatedVisibility(visible = isChecking) {
+                        LinearProgressIndicator(
+                            modifier   = Modifier.fillMaxWidth().padding(horizontal = Spacing.large).height(2.dp),
+                            color      = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        )
+                    }
+                }
             }
 
-            // Website — primary destination for APK downloads and release info
+            // Website
             item {
                 SettingsItem(
                     icon     = Icons.Default.Language,
@@ -313,7 +350,7 @@ fun SettingsScreen(
                 )
             }
 
-            // Privacy Policy — required by Play Store; hosted on our website
+            // Privacy Policy — required by Play Store
             item {
                 SettingsItem(
                     icon     = Icons.Default.PrivacyTip,
@@ -332,22 +369,13 @@ fun SettingsScreen(
                 SettingsItem(
                     icon     = Icons.Default.Code,
                     title    = "GitHub",
-                    subtitle = "View source code",
+                    subtitle = "Source code — by GreenIcePhoenix",
                     onClick  = {
                         context.startActivity(
                             Intent(Intent.ACTION_VIEW,
                                 "https://github.com/NRoy9/VoidNote".toUri())
                         )
                     }
-                )
-            }
-
-            item {
-                SettingsItem(
-                    icon     = Icons.Default.Person,
-                    title    = "Developer",
-                    subtitle = "GreenIcePhoenix",
-                    onClick  = null
                 )
             }
 
@@ -413,6 +441,50 @@ fun SettingsScreen(
                 TextButton(onClick = { showClearDataDialog = false }) { Text("Cancel") }
             }
         )
+    }
+
+    // ── Update result dialog ─────────────────────────────────────────────────
+    // Shown when updateState transitions to UpToDate, Available, or Error.
+    // Uses showUpdateAvailableDialog flag so we can dismiss without resetting state.
+    if (showUpdateAvailableDialog) {
+        when (val state = uiState.updateCheckState) {
+            is UpdateCheckState.Available -> AlertDialog(
+                onDismissRequest = { showUpdateAvailableDialog = false; viewModel.dismissUpdateResult() },
+                icon  = { Icon(Icons.Default.SystemUpdate, null, tint = MaterialTheme.colorScheme.primary) },
+                title = { Text("Update Available") },
+                text  = {
+                    Text("Version ${state.version} is available on GitHub. \nTap Download to open the release page.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.openDownloadUrl(state.downloadUrl)
+                        showUpdateAvailableDialog = false
+                    }) { Text("Download") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showUpdateAvailableDialog = false; viewModel.dismissUpdateResult() }) { Text("Later") }
+                }
+            )
+            is UpdateCheckState.UpToDate -> AlertDialog(
+                onDismissRequest = { showUpdateAvailableDialog = false; viewModel.dismissUpdateResult() },
+                icon  = { Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary) },
+                title = { Text("You're Up to Date") },
+                text  = { Text("v${uiState.appVersion} is the latest version.") },
+                confirmButton = {
+                    TextButton(onClick = { showUpdateAvailableDialog = false; viewModel.dismissUpdateResult() }) { Text("OK") }
+                }
+            )
+            is UpdateCheckState.Error -> AlertDialog(
+                onDismissRequest = { showUpdateAvailableDialog = false; viewModel.dismissUpdateResult() },
+                icon  = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
+                title = { Text("Check Failed") },
+                text  = { Text("Couldn't reach GitHub. Check your internet connection and try again.") },
+                confirmButton = {
+                    TextButton(onClick = { showUpdateAvailableDialog = false; viewModel.dismissUpdateResult() }) { Text("OK") }
+                }
+            )
+            else -> { showUpdateAvailableDialog = false }
+        }
     }
 
     // ── Camera rationale dialog ───────────────────────────────────────────────

@@ -140,7 +140,7 @@ fun SplashScreen(
 
         // ── Version number — bottom of screen ─────────────────────────────────
         Text(
-            text     = "@string/app_name",   // Keep in sync with versionName in build.gradle.kts
+            text     = "v1.0.1",   // Keep in sync with versionName in build.gradle.kts
             style    = MaterialTheme.typography.labelSmall,
             color    = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
             modifier = Modifier
