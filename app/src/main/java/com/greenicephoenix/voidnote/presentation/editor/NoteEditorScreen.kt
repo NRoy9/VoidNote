@@ -519,21 +519,49 @@ fun NoteEditorScreen(
             }
         }
 
-        // ── Heading dialog ────────────────────────────────────────────────────
-        if (showHeadingMenu) {
-            AlertDialog(
-                onDismissRequest = { showHeadingMenu = false },
-                title = { Text("Text Size") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Surface(onClick = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.HEADING_SMALL) else viewModel.setActiveHeading(FormatType.HEADING_SMALL); showHeadingMenu = false }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant) { Text("Small", fontSize = 16.sp, modifier = Modifier.padding(16.dp)) }
-                        Surface(onClick = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.HEADING_NORMAL) else viewModel.setActiveHeading(FormatType.HEADING_NORMAL); showHeadingMenu = false }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.primaryContainer) { Text("Normal (Default)", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
-                        Surface(onClick = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.HEADING_LARGE) else viewModel.setActiveHeading(FormatType.HEADING_LARGE); showHeadingMenu = false }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant) { Text("Large", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = { TextButton(onClick = { showHeadingMenu = false }) { Text("Cancel") } }
-            )
+    }
+
+    // ── Heading bottom sheet ──────────────────────────────────────────────────
+    if (showHeadingMenu) {
+        ModalBottomSheet(
+            onDismissRequest = { showHeadingMenu = false },
+            sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor   = MaterialTheme.colorScheme.surface,
+            dragHandle       = { SheetDragHandle() }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.large)
+                    .padding(bottom = Spacing.extraLarge)
+            ) {
+                Text(
+                    text     = "TEXT SIZE",
+                    style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                    color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    modifier = Modifier.padding(bottom = Spacing.medium)
+                )
+                Surface(
+                    onClick  = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.HEADING_SMALL) else viewModel.setActiveHeading(FormatType.HEADING_SMALL); showHeadingMenu = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = MaterialTheme.shapes.medium,
+                    color    = MaterialTheme.colorScheme.surfaceVariant
+                ) { Text("Small", fontSize = 16.sp, modifier = Modifier.padding(16.dp)) }
+                Spacer(Modifier.height(Spacing.small))
+                Surface(
+                    onClick  = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.HEADING_NORMAL) else viewModel.setActiveHeading(FormatType.HEADING_NORMAL); showHeadingMenu = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = MaterialTheme.shapes.medium,
+                    color    = MaterialTheme.colorScheme.primaryContainer
+                ) { Text("Normal (Default)", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
+                Spacer(Modifier.height(Spacing.small))
+                Surface(
+                    onClick  = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.HEADING_LARGE) else viewModel.setActiveHeading(FormatType.HEADING_LARGE); showHeadingMenu = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = MaterialTheme.shapes.medium,
+                    color    = MaterialTheme.colorScheme.surfaceVariant
+                ) { Text("Large", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
+            }
         }
     }
 
@@ -566,46 +594,52 @@ fun NoteEditorScreen(
         )
     }
 
-    // SPRINT 7: Color picker — shown when user taps "Color" in the overflow menu.
-    // A simple AlertDialog wrapping the existing NoteColorPicker composable.
-    // The picker is unchanged — it just lives in a dialog now instead of the bottom bar.
+    // ── Color picker bottom sheet ─────────────────────────────────────────────
+    // Replaces the old AlertDialog — a sheet gives the color dots more room
+    // and feels more natural for a picker triggered from the overflow menu.
     if (showColorDialog) {
-        AlertDialog(
+        ModalBottomSheet(
             onDismissRequest = { showColorDialog = false },
-            title = {
+            sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor   = MaterialTheme.colorScheme.surface,
+            dragHandle       = { SheetDragHandle() }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.large)
+                    .padding(bottom = Spacing.extraLarge)
+            ) {
                 Text(
-                    text  = "Note Color",
-                    style = MaterialTheme.typography.titleMedium
+                    text     = "NOTE COLOR",
+                    style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                    color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    modifier = Modifier.padding(bottom = Spacing.medium)
                 )
-            },
-            text = {
-                // NoteColorPicker is the same composable as before — reused here unchanged.
                 NoteColorPicker(
                     currentColor    = noteColor,
                     onColorSelected = { color ->
                         viewModel.updateNoteColor(color)
-                        // Auto-dismiss after selection — single-tap UX, no "confirm" needed
                         showColorDialog = false
                     }
                 )
-            },
-            confirmButton = {
-                // "None" clear button — removes color and closes
-                TextButton(
-                    onClick = {
-                        viewModel.updateNoteColor(null)
-                        showColorDialog = false
-                    }
+                Spacer(Modifier.height(Spacing.large))
+                // "Clear" as a text row — cleaner than a button in a sheet
+                Surface(
+                    onClick  = { viewModel.updateNoteColor(null); showColorDialog = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = MaterialTheme.shapes.medium,
+                    color    = MaterialTheme.colorScheme.surfaceVariant
                 ) {
-                    Text("Clear color")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showColorDialog = false }) {
-                    Text("Cancel")
+                    Text(
+                        text     = "Clear color",
+                        modifier = Modifier.padding(16.dp),
+                        style    = MaterialTheme.typography.bodyMedium,
+                        color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
                 }
             }
-        )
+        }
     }
 
     // ── Camera rationale dialog ───────────────────────────────────────────────
@@ -1015,7 +1049,7 @@ private fun TopBar(
 // TAGS SECTION
 // ─────────────────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun TagsSection(tags: List<String>, onAddTag: (String) -> Unit, onRemoveTag: (String) -> Unit) {
     var showAddDialog by remember { mutableStateOf(false) }
@@ -1060,11 +1094,45 @@ private fun TagsSection(tags: List<String>, onAddTag: (String) -> Unit, onRemove
     }
     if (showAddDialog) {
         var tagName by remember { mutableStateOf("") }
-        AlertDialog(onDismissRequest = { showAddDialog = false }, title = { Text("Add Tag") },
-            text = { OutlinedTextField(value = tagName, onValueChange = { if (it.length <= 20 && it.all { c -> c.isLetterOrDigit() || c.isWhitespace() }) tagName = it }, label = { Text("Tag name") }, singleLine = true, supportingText = { Text("${tagName.length}/20") }) },
-            confirmButton = { TextButton(onClick = { onAddTag(tagName.trim()); showAddDialog = false }, enabled = tagName.trim().isNotBlank()) { Text("Add") } },
-            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancel") } }
-        )
+        // ModalBottomSheet — keyboard pushes the sheet up naturally via imePadding.
+        // This feels much more native than an AlertDialog with a TextField inside.
+        ModalBottomSheet(
+            onDismissRequest = { showAddDialog = false },
+            sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor   = MaterialTheme.colorScheme.surface,
+            dragHandle       = { SheetDragHandle() }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .padding(horizontal = Spacing.large)
+                    .padding(bottom = Spacing.large)
+            ) {
+                Text(
+                    text     = "ADD TAG",
+                    style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                    color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    modifier = Modifier.padding(bottom = Spacing.medium)
+                )
+                OutlinedTextField(
+                    value         = tagName,
+                    onValueChange = { if (it.length <= 20 && it.all { c -> c.isLetterOrDigit() || c.isWhitespace() }) tagName = it },
+                    label         = { Text("Tag name") },
+                    singleLine    = true,
+                    supportingText = { Text("${tagName.length}/20") },
+                    modifier      = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(Spacing.medium))
+                Button(
+                    onClick  = { onAddTag(tagName.trim()); showAddDialog = false },
+                    enabled  = tagName.trim().isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Add Tag")
+                }
+            }
+        }
     }
 }
 
@@ -1162,29 +1230,13 @@ private fun formatTime(timestamp: Long): String {
 }
 
 /**
- * MoveToFolderDialog — lets the user move the current note to a folder.
+ * MoveToFolderDialog — bottom sheet for moving the current note to a folder.
  *
- * ─── HOW IT WORKS ─────────────────────────────────────────────────────────
- * Shows an AlertDialog with a scrollable list of all folders.
- * The first item is always "No folder" — selecting it removes the note from
- * any folder and puts it at root level (folderId = null).
- * The remaining items are the user's actual folders.
- *
- * The currently assigned folder is highlighted with a checkmark icon.
- *
- * ─── DATA FLOW ───────────────────────────────────────────────────────────
- * onFolderSelected(folderId: String?) is called with:
- *   null  → user tapped "No folder"
- *   id    → user tapped a specific folder
- *
- * The ViewModel's moveToFolder() receives this value, calls
- * noteRepository.moveNoteToFolder(), and updates currentFolderName in uiState.
- *
- * @param folders           All available folders (from viewModel.folders StateFlow)
- * @param currentFolderName Name of the folder the note is currently in (null = root)
- * @param onFolderSelected  Called with the chosen folderId (null = root)
- * @param onDismiss         Called when dialog is dismissed without selection
+ * First row is always "No folder" (clears the folder assignment).
+ * Currently assigned folder is highlighted with a checkmark.
+ * Selecting any row auto-dismisses — no confirm button needed.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MoveToFolderDialog(
     folders: List<com.greenicephoenix.voidnote.domain.model.Folder>,
@@ -1192,52 +1244,55 @@ private fun MoveToFolderDialog(
     onFolderSelected: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("Move to folder") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // Constrain height so the dialog doesn't grow taller than the screen
-                    .heightIn(max = 320.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                // ── "No folder" option — always first ────────────────────────
-                FolderPickerRow(
-                    name      = "No folder",
-                    isSelected = currentFolderName == null,
-                    onClick   = { onFolderSelected(null) }
-                )
+        sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor   = MaterialTheme.colorScheme.surface,
+        dragHandle       = { SheetDragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.large)
+                .padding(bottom = Spacing.extraLarge)
+        ) {
+            Text(
+                text     = "MOVE TO FOLDER",
+                style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier = Modifier.padding(bottom = Spacing.small)
+            )
 
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 4.dp),
-                    color    = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
-                )
+            // "No folder" — always first, removes folder assignment
+            FolderPickerRow(
+                name       = "No folder",
+                isSelected = currentFolderName == null,
+                onClick    = { onFolderSelected(null) }
+            )
 
-                if (folders.isEmpty()) {
-                    // Edge case: user has no folders yet
-                    Text(
-                        text     = "No folders created yet.\nCreate one from the main screen.",
-                        style    = MaterialTheme.typography.bodySmall,
-                        color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(vertical = 8.dp)
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color    = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+            )
+
+            if (folders.isEmpty()) {
+                Text(
+                    text     = "No folders yet — create one from the main screen.",
+                    style    = MaterialTheme.typography.bodySmall,
+                    color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(vertical = Spacing.medium)
+                )
+            } else {
+                folders.forEach { folder ->
+                    FolderPickerRow(
+                        name       = folder.name,
+                        isSelected = currentFolderName == folder.name,
+                        onClick    = { onFolderSelected(folder.id) }
                     )
-                } else {
-                    folders.forEach { folder ->
-                        FolderPickerRow(
-                            name      = folder.name,
-                            isSelected = currentFolderName == folder.name,
-                            onClick   = { onFolderSelected(folder.id) }
-                        )
-                    }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    )
+    }
 }
 
 /**
@@ -1371,5 +1426,27 @@ fun NoteColorPicker(
                 )
             }
         }
+    }
+}
+
+/**
+ * SheetDragHandle — shared drag handle for all ModalBottomSheets in this file.
+ *
+ * Matches the Nothing aesthetic: minimal 32×3dp pill, low-contrast.
+ * Defined once here rather than inline in every sheet.
+ */
+@Composable
+private fun SheetDragHandle() {
+    Box(
+        modifier         = Modifier
+            .fillMaxWidth()
+            .padding(top = Spacing.medium, bottom = Spacing.small),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier.size(width = 32.dp, height = 3.dp),
+            shape    = MaterialTheme.shapes.extraLarge,
+            color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+        ) {}
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.domain.model.Folder
 import com.greenicephoenix.voidnote.presentation.components.FoldersEmptyState
@@ -263,8 +264,12 @@ private fun DeleteFolderConfirmDialog(
 }
 
 /**
- * CreateFolderDialog — inline dialog for naming a new folder.
+ * CreateFolderDialog — bottom sheet for naming a new folder.
+ *
+ * Using a sheet instead of a center dialog so the keyboard pushes
+ * the input field up naturally rather than covering it.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreateFolderDialog(
     folderName: String,
@@ -272,30 +277,53 @@ private fun CreateFolderDialog(
     onDismiss: () -> Unit,
     onCreate: () -> Unit
 ) {
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("Create Folder") },
-        text = {
-            OutlinedTextField(
-                value = folderName,
-                onValueChange = onNameChange,
-                label = { Text("Folder name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+        sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor   = MaterialTheme.colorScheme.surface,
+        dragHandle       = {
+            Box(
+                modifier         = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Spacing.medium, bottom = Spacing.small),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.size(width = 32.dp, height = 3.dp),
+                    shape    = MaterialTheme.shapes.extraLarge,
+                    color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                ) {}
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = Spacing.large)
+                .padding(bottom = Spacing.large)
+        ) {
+            Text(
+                text     = "NEW FOLDER",
+                style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier = Modifier.padding(bottom = Spacing.medium)
             )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onCreate,
-                enabled = folderName.isNotBlank()
+            OutlinedTextField(
+                value         = folderName,
+                onValueChange = onNameChange,
+                label         = { Text("Folder name") },
+                singleLine    = true,
+                modifier      = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(Spacing.medium))
+            Button(
+                onClick  = onCreate,
+                enabled  = folderName.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Create")
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
         }
-    )
+    }
 }

@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.greenicephoenix.voidnote.presentation.components.FolderNotesEmptyState
 import androidx.compose.material3.SnackbarHost
@@ -253,6 +254,7 @@ private fun FolderNotesContent(
 // DIALOGS
 // ─────────────────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RenameFolderDialog(
     currentName: String,
@@ -260,28 +262,55 @@ private fun RenameFolderDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.DriveFileRenameOutline, null) },
-        title = { Text("Rename Folder") },
-        text = {
-            OutlinedTextField(
-                value = currentName,
-                onValueChange = onNameChange,
-                label = { Text("Folder name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+        sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor   = MaterialTheme.colorScheme.surface,
+        dragHandle       = {
+            Box(
+                modifier         = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.size(width = 32.dp, height = 3.dp),
+                    shape    = MaterialTheme.shapes.extraLarge,
+                    color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                ) {}
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp)
+        ) {
+            Text(
+                text     = "RENAME FOLDER",
+                style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier = Modifier.padding(bottom = 16.dp)
             )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm, enabled = currentName.isNotBlank()) {
+            OutlinedTextField(
+                value         = currentName,
+                onValueChange = onNameChange,
+                label         = { Text("Folder name") },
+                singleLine    = true,
+                modifier      = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick  = onConfirm,
+                enabled  = currentName.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Rename")
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    )
+    }
 }
 
 /**

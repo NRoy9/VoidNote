@@ -546,6 +546,7 @@ private fun TagsEntryRow(onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreateFolderDialog(
     showDialog: Boolean,
@@ -555,10 +556,38 @@ private fun CreateFolderDialog(
     onCreate: () -> Unit
 ) {
     if (showDialog) {
-        AlertDialog(
+        ModalBottomSheet(
             onDismissRequest = onDismiss,
-            title = { Text("Create Folder") },
-            text = {
+            sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor   = MaterialTheme.colorScheme.surface,
+            dragHandle       = {
+                Box(
+                    modifier         = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, bottom = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        modifier = Modifier.size(width = 32.dp, height = 3.dp),
+                        shape    = MaterialTheme.shapes.extraLarge,
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                    ) {}
+                }
+            }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .padding(horizontal = Spacing.large)
+                    .padding(bottom = Spacing.large)
+            ) {
+                Text(
+                    text     = "NEW FOLDER",
+                    style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                    color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    modifier = Modifier.padding(bottom = Spacing.medium)
+                )
                 OutlinedTextField(
                     value         = folderName,
                     onValueChange = onNameChange,
@@ -566,13 +595,15 @@ private fun CreateFolderDialog(
                     singleLine    = true,
                     modifier      = Modifier.fillMaxWidth()
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = onCreate, enabled = folderName.isNotBlank()) { Text("Create") }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                Spacer(Modifier.height(Spacing.medium))
+                Button(
+                    onClick  = onCreate,
+                    enabled  = folderName.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Create")
+                }
             }
-        )
+        }
     }
 }
