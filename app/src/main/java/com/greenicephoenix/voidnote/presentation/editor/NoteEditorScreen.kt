@@ -465,6 +465,14 @@ fun NoteEditorScreen(
                                         )
                                     },
                                     onDeleteBlock = { viewModel.deleteBlock(block.id) },
+                                    onPasteLines = { itemId, firstLine, remainingLines ->
+                                        viewModel.pasteTodoLines(
+                                            blockId      = block.id,
+                                            afterItemId  = itemId,
+                                            firstLineText = firstLine,
+                                            remainingLines = remainingLines
+                                        )
+                                    },
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }

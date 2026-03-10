@@ -20,7 +20,11 @@ import com.greenicephoenix.voidnote.domain.repository.InlineBlockRepository
 import com.greenicephoenix.voidnote.domain.repository.NoteRepository
 import com.greenicephoenix.voidnote.domain.model.NoteColor
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -89,6 +93,26 @@ class NoteEditorViewModel @Inject constructor(
     private var currentFolderId: String? = null
     private var isDeleting = false
 
+    // ── SPRINT 9: B4/B5 tracking vars ────────────────────────────────────────
+    //
+    // cleanupScope: a separate coroutine scope that outlives viewModelScope.
+    // viewModelScope is cancelled BEFORE onCleared() returns, so any coroutine
+    // launched into it for cleanup would be cancelled immediately. cleanupScope
+    // is manually cancelled after cleanup completes.
+    private val cleanupScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // wasNewOnOpen: true when the editor was opened as a brand-new note (noteId == "new").
+    // Loaded existing notes must never be deleted by ghost-note cleanup.
+    private var wasNewOnOpen: Boolean = false
+
+    // userTypedTitle: true the moment onTitleChange() is called (user touched the title).
+    // Prevents auto-generated "Untitled Note N" from overwriting a user's own title.
+    private var userTypedTitle: Boolean = false
+
+    // autoTitleGenerated: true after "Untitled Note N" has been assigned once this session.
+    // Prevents re-numbering on every subsequent auto-save.
+    private var autoTitleGenerated: Boolean = false
+
     // ── SPRINT 5: Expose folder list ──────────────────────────────────────────
     // Converted to StateFlow with WhileSubscribed so it stops collecting when
     // no UI is observing (e.g. when the screen is in the background).
@@ -113,6 +137,40 @@ class NoteEditorViewModel @Inject constructor(
             voiceRecorder.stopRecording()
         }
         voiceRecorder.releaseRecorder()
+
+        // B4 FIX — Ghost note cleanup.
+        //
+        // PROBLEM: ensureNotePersisted() must write a note row BEFORE inserting any
+        // inline block (FK constraint: inline_blocks.noteId → notes.id). So when a
+        // user taps "Add Checklist" on a blank note, a shell note is created in DB.
+        // If the user then deletes that block and navigates away without typing
+        // anything, this empty shell remains visible in the notes list.
+        //
+        // FIX: detect the ghost condition in onCleared() and permanently delete the
+        // shell. viewModelScope is already cancelled here, so we use cleanupScope —
+        // a separate IO scope that lives until we explicitly cancel it.
+        //
+        // GHOST CONDITIONS (all must be true):
+        //   wasNewOnOpen    → opened as a brand-new note (not loaded from DB)
+        //   !isNewNote      → was persisted by ensureNotePersisted() (ID exists in DB)
+        //   !userTypedTitle → user never interacted with the title field
+        //   content.isBlank → user never typed body text
+        //   blocks.isEmpty  → no blocks remain (all deleted, or none were kept)
+        val state = _uiState.value
+        val isGhostNote = wasNewOnOpen &&
+                !state.isNewNote &&
+                !userTypedTitle &&
+                state.content.isBlank() &&
+                state.blocks.isEmpty()
+
+        if (isGhostNote) {
+            cleanupScope.launch {
+                noteRepository.deleteNotePermanently(currentNoteId)
+                cleanupScope.cancel()  // release scope once cleanup is done
+            }
+        } else {
+            cleanupScope.cancel()
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -121,6 +179,9 @@ class NoteEditorViewModel @Inject constructor(
 
     private fun loadNote() {
         if (noteId == "new") {
+            // Track that this session started with a new note — required for
+            // ghost-note detection in onCleared() and auto-title in saveNote().
+            wasNewOnOpen = true
             currentNoteId = UUID.randomUUID().toString()
             _uiState.value = _uiState.value.copy(
                 title = "", content = "", isNewNote = true, isLoading = false
@@ -218,6 +279,76 @@ class NoteEditorViewModel @Inject constructor(
             val maxOrder = payload.items.maxOfOrNull { it.sortOrder } ?: -1
             val newItem  = TodoItem(id = UUID.randomUUID().toString(), text = "", isChecked = false, sortOrder = maxOrder + 1)
             inlineBlockRepository.updateBlock(block.copy(payload = payload.copy(items = payload.items + newItem)))
+        }
+    }
+
+    /**
+     * Paste multi-line text into a checklist — each line becomes its own item.
+     *
+     * Called when the user pastes text containing newlines into a TodoItemRow.
+     * Example: paste "Buy milk\nBuy eggs\nBuy bread" while editing item X:
+     *   • Item X text → "Buy milk"   (first line replaces current item)
+     *   • New item    → "Buy eggs"   (inserted immediately after X)
+     *   • New item    → "Buy bread"  (inserted after that)
+     *   • Cursor      → lands on "Buy bread" (last pasted item)
+     *
+     * HOW IT WORKS:
+     * 1. Sort all existing items by sortOrder for stable insertion.
+     * 2. Find the index of `afterItemId` (the item that was being edited).
+     * 3. Update that item's text to `firstLineText`.
+     * 4. Build new TodoItem objects for each remaining line.
+     * 5. Insert them into the list immediately after position `insertIndex`.
+     * 6. Renumber ALL sortOrders from 0 based on final list index.
+     *    This avoids sortOrder collisions and keeps ordering clean forever.
+     * 7. One atomic updateBlock call — no intermediate state visible in UI.
+     *
+     * @param blockId       The TODO block being edited.
+     * @param afterItemId   The item that received the paste (its text → firstLineText).
+     * @param firstLineText The first line of the pasted text (replaces current item).
+     * @param remainingLines Lines 2..N of the pasted text (become new items below).
+     */
+    fun pasteTodoLines(
+        blockId: String,
+        afterItemId: String,
+        firstLineText: String,
+        remainingLines: List<String>
+    ) {
+        viewModelScope.launch {
+            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val payload = block.payload as? InlineBlockPayload.Todo ?: return@launch
+
+            // Sort by sortOrder for stable, predictable insertion position
+            val sortedItems = payload.items.sortedBy { it.sortOrder }.toMutableList()
+
+            // Find the item that was being edited when paste happened
+            val insertIndex = sortedItems.indexOfFirst { it.id == afterItemId }
+            if (insertIndex == -1) return@launch
+
+            // Replace the current item's text with the first pasted line
+            sortedItems[insertIndex] = sortedItems[insertIndex].copy(text = firstLineText)
+
+            // Build new items for lines 2..N, inserting after the current item
+            val newItems = remainingLines.mapIndexed { i, line ->
+                TodoItem(
+                    id        = UUID.randomUUID().toString(),
+                    text      = line,
+                    isChecked = false,
+                    sortOrder = insertIndex + 1 + i  // placeholder — renumbered below
+                )
+            }
+            sortedItems.addAll(insertIndex + 1, newItems)
+
+            // Renumber all sortOrders cleanly (0, 1, 2, ...) from final list order.
+            // This prevents sortOrder gaps or collisions that could mess up future
+            // insertions or sort ordering.
+            val renumbered = sortedItems.mapIndexed { index, item ->
+                item.copy(sortOrder = index)
+            }
+
+            // Single atomic write — no intermediate flicker in the UI
+            inlineBlockRepository.updateBlock(
+                block.copy(payload = payload.copy(items = renumbered))
+            )
         }
     }
 
@@ -524,17 +655,63 @@ class NoteEditorViewModel @Inject constructor(
 
     private suspend fun saveNote() {
         val state = _uiState.value
-        if (state.title.isBlank() && state.content.isBlank()) return
 
+        // B4/B5 FIX — Blocks-aware early-return check.
+        //
+        // OLD CHECK: `if (state.title.isBlank() && state.content.isBlank()) return`
+        // PROBLEM: This missed notes that contain ONLY inline blocks (checklists,
+        // images, audio) with no typed title or text. Such notes would never be
+        // saved properly — the block markers never made it into notes.content.
+        //
+        // NEW CHECK: also consider whether blocks exist. If NOTHING exists at all
+        // (no title, no text, no blocks), there is genuinely nothing to save.
         val currentBlocks = inlineBlockRepository.getBlocksForNote(currentNoteId).first()
-        val rawContent    = DocumentParser.buildRawContent(
+        val hasAnyContent = state.title.isNotBlank() ||
+                state.content.isNotBlank() ||
+                currentBlocks.isNotEmpty()
+        if (!hasAnyContent) return
+
+        // B5 FIX — Auto-generate "Untitled Note N" for new notes with blank titles.
+        //
+        // WHY wasNewOnOpen guard?
+        // Without it, existing notes that happen to have a blank title (from before
+        // this sprint) would get re-titled on their next save — wrong behaviour.
+        //
+        // WHY autoTitleGenerated guard?
+        // saveNote() is called on every auto-save (every 500ms while typing blocks).
+        // Without this flag, the N would increment on every save — producing a
+        // different number each time. autoTitleGenerated ensures we generate it once.
+        //
+        // WHY userTypedTitle guard?
+        // If the user typed something in the title field (even if they cleared it),
+        // we respect their intent and don't override with an auto-title.
+        //
+        // NOTE: We store the real title in the DB (not just show it in the card).
+        // This means search, export, and NoteCard all work with no special cases.
+        val resolvedTitle = if (
+            state.title.isBlank() &&
+            wasNewOnOpen &&
+            !autoTitleGenerated &&
+            !userTypedTitle
+        ) {
+            autoTitleGenerated = true  // prevent re-numbering on future auto-saves
+            val number = noteRepository.getNewUntitledNoteNumber()
+            val generated = "Untitled Note $number"
+            // Reflect in UI so the title field shows the auto-title if user scrolls up
+            _uiState.value = _uiState.value.copy(title = generated)
+            generated
+        } else {
+            state.title
+        }
+
+        val rawContent = DocumentParser.buildRawContent(
             logicalContent = state.content,
             blocks         = currentBlocks
         )
 
         val note = Note(
             id             = currentNoteId,
-            title          = state.title,
+            title          = resolvedTitle,
             content        = rawContent,
             contentFormats = state.contentFormats,
             createdAt      = System.currentTimeMillis(),
@@ -544,7 +721,7 @@ class NoteEditorViewModel @Inject constructor(
             isTrashed      = false,
             tags           = state.tags,
             folderId       = currentFolderId,
-            color    = _uiState.value.noteColor
+            color          = _uiState.value.noteColor
         )
 
         if (state.isNewNote) {
@@ -581,6 +758,9 @@ class NoteEditorViewModel @Inject constructor(
     // ─────────────────────────────────────────────────────────────────────────
 
     fun onTitleChange(newTitle: String) {
+        // Signal that the user has explicitly touched the title field.
+        // This prevents saveNote() from overwriting it with an auto-generated title.
+        userTypedTitle = true
         _uiState.value = _uiState.value.copy(title = newTitle)
         scheduleAutoSave()
     }

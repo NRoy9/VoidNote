@@ -159,6 +159,22 @@ interface NoteDao {
     @Query("SELECT COUNT(*) FROM notes WHERE isTrashed = 0")
     fun getNoteCount(): Flow<Int>
 
+    /**
+     * One-shot count of non-trashed notes. Used to generate "Untitled Note N" titles.
+     *
+     * WHY NOT searchable by title pattern?
+     * Note titles are AES-256-GCM encrypted in the DB. A LIKE query would compare
+     * against ciphertext — it can never match a plaintext pattern like "Untitled Note%".
+     * Using total note count + 1 as N gives a unique, ever-increasing number without
+     * needing to decrypt anything. Not perfectly sequential, but always unique.
+     *
+     * WHY suspend instead of Flow?
+     * We need a single value at the moment of title generation, not a live stream.
+     * A suspend fun runs once, returns, done — no open cursor kept alive.
+     */
+    @Query("SELECT COUNT(*) FROM notes WHERE isTrashed = 0")
+    suspend fun getNoteCountOnce(): Int
+
     // ─── Trash auto-delete (v5) ───────────────────────────────────────────────
 
     /**

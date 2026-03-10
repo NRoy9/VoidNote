@@ -109,4 +109,17 @@ interface NoteRepository {
      * (title, content, tags). Operates directly on the NoteEntity row.
      */
     suspend fun updateNoteColor(noteId: String, color: NoteColor?)
+
+    /**
+     * Sprint 9 (B5) — Returns a unique number for "Untitled Note N" title generation.
+     *
+     * WHY in the repository interface and not called directly on NoteDao?
+     * ViewModels depend on repository interfaces (domain layer), never on DAOs
+     * (data layer). Keeping this here preserves Clean Architecture separation.
+     *
+     * WHY not count notes titled "Untitled Note*"?
+     * Titles are AES-256-GCM encrypted in the DB — SQL LIKE cannot match ciphertext.
+     * Total note count + 1 is used instead: unique, ever-increasing, no decryption needed.
+     */
+    suspend fun getNewUntitledNoteNumber(): Int
 }

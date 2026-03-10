@@ -81,6 +81,9 @@ fun TodoBlockComposable(
     onUpdateItemText: (itemId: String, newText: String) -> Unit,
     onDeleteItem: (itemId: String) -> Unit,
     onDeleteBlock: () -> Unit,
+    // Called when the user pastes multi-line text into a checklist item.
+    // Params: itemId of the item receiving the paste, first line text, remaining lines.
+    onPasteLines: (itemId: String, firstLineText: String, remainingLines: List<String>) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val todoPayload = block.payload as? InlineBlockPayload.Todo ?: return
@@ -208,6 +211,11 @@ fun TodoBlockComposable(
                                 onImeAction = {
                                     shouldFocusLastItem = true  // arm the focus jump
                                     onAddItem()                 // create the new item
+                                },
+                                onPasteLines = { firstLine, remainingLines ->
+                                    // Arm focus so cursor lands on the last pasted item
+                                    shouldFocusLastItem = true
+                                    onPasteLines(item.id, firstLine, remainingLines)
                                 },
                                 showDeleteButton = isBlockFocused || items.size > 1
                             )
@@ -337,6 +345,8 @@ private fun TodoItemRow(
     onDelete: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
     onImeAction: () -> Unit,
+    // Called when multi-line text is pasted. Params: first line, remaining lines.
+    onPasteLines: (firstLineText: String, remainingLines: List<String>) -> Unit,
     showDeleteButton: Boolean
 ) {
     // Haptic feedback on checkbox toggle — gives physical confirmation
@@ -415,13 +425,58 @@ private fun TodoItemRow(
         BasicTextField(
             value = localValue,
             onValueChange = { newValue ->
-                // Intercept Enter/Return — both software keyboard "Next" button
-                // and physical keyboards send \n through onValueChange.
+                // ── Paste / Enter detection ──────────────────────────────────
+                //
+                // All text input arrives here: typing, Enter, and paste alike.
+                // We use the presence of \n characters to identify special cases.
+                //
+                // CASE 1 — Multi-line paste (≥2 non-empty lines after splitting on \n):
+                //   "Buy milk\nBuy eggs\nBuy bread" pasted while editing any item.
+                //   → First line replaces current item text.
+                //   → Remaining lines become new items inserted below.
+                //   → localValue immediately shows only the first line (no flicker).
+                //   → shouldFocusLastItem is armed by the caller (onPasteLines wrapper
+                //     in TodoBlockComposable) so cursor jumps to last pasted item.
+                //
+                // CASE 2 — Enter key (B2 fix, unchanged):
+                //   Strip \n → result equals current text → only a newline was added.
+                //   → Fire onImeAction() to create a new empty item.
+                //
+                // CASE 3 — Single-line paste that happens to end with \n (B2 fix):
+                //   Strip \n → result differs from current text → real content added.
+                //   → Replace \n with space and accept the text normally.
+                //
+                // CASE 4 — Normal typing (no \n): pass through unchanged.
                 if (newValue.text.contains('\n')) {
-                    onImeAction()
+                    // Split on newlines, trim each line, drop blanks
+                    val lines = newValue.text
+                        .split('\n')
+                        .map { it.trimEnd() }
+                        .filter { it.isNotEmpty() }
+
+                    if (lines.size >= 2) {
+                        // CASE 1 — Multi-line paste
+                        // Update localValue immediately so this item shows only the first line.
+                        // The ViewModel will persist all lines atomically via onPasteLines.
+                        localValue = newValue.copy(text = lines.first())
+                        onPasteLines(lines.first(), lines.drop(1))
+                    } else {
+                        // CASE 2 or 3 — Enter key or single-line paste with stray newline
+                        val stripped = newValue.text.replace("\n", "")
+                        if (stripped == localValue.text) {
+                            // CASE 2 — Pure Enter key
+                            onImeAction()
+                        } else {
+                            // CASE 3 — Single-line paste with trailing/leading \n
+                            val cleaned = newValue.text.replace('\n', ' ')
+                            localValue = newValue.copy(text = cleaned)
+                            onTextChange(cleaned)
+                        }
+                    }
                 } else {
-                    localValue = newValue          // update local state immediately
-                    onTextChange(newValue.text)    // propagate to ViewModel (debounced save)
+                    // CASE 4 — Normal typing, no newlines
+                    localValue = newValue
+                    onTextChange(newValue.text)
                 }
             },
             modifier = Modifier

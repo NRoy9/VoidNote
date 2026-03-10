@@ -199,6 +199,16 @@ class NoteRepositoryImpl @Inject constructor(
         )
     }
 
+    /**
+     * Sprint 9 (B5) — Returns total non-trashed note count + 1 for auto-title numbering.
+     *
+     * We use total note count rather than counting "Untitled Note%" titles because
+     * titles are AES-256-GCM encrypted in the DB — SQL LIKE would match ciphertext.
+     * Count + 1 gives a unique, ever-increasing N for "Untitled Note N" titles.
+     */
+    override suspend fun getNewUntitledNoteNumber(): Int =
+        noteDao.getNoteCountOnce() + 1
+
     // ─── Pin / Archive ────────────────────────────────────────────────────────
 
     override suspend fun togglePin(noteId: String) {
