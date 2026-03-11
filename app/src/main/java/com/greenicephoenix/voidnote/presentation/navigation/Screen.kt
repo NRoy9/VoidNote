@@ -28,6 +28,7 @@ sealed class Screen(val route: String) {
     data object ExportNotes         : Screen("export_notes")
     data object ImportBackup        : Screen("import_backup")       // Settings → Data Management → Import Backup
     data object ChangeVaultPassword : Screen("change_vault_password")   // Settings → Security → Change Password
+    data object Support             : Screen("support")             // Settings → About → Support the Developer
     data object Search      : Screen("search")
     data object Folders     : Screen("folders")
     data object Tags        : Screen("tags")

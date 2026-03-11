@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -46,6 +47,7 @@ fun SettingsScreen(
     onNavigateToExport: () -> Unit = {},            // → ExportNotesScreen
     onNavigateToImport: () -> Unit = {},            // → ImportBackupScreen
     onNavigateToChangePassword: () -> Unit = {},    // → ChangeVaultPasswordScreen
+    onNavigateToSupport: () -> Unit = {},           // → SupportScreen
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState            by viewModel.uiState.collectAsState()
@@ -379,7 +381,30 @@ fun SettingsScreen(
                 )
             }
 
-            item { Spacer(modifier = Modifier.height(Spacing.extraLarge)) }
+            item {
+                SettingsItem(
+                    icon     = Icons.Default.Forum,
+                    title    = "Discord Community",
+                    subtitle = "Bug reports, feedback & chat",
+                    onClick  = {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW,
+                                "https://discord.gg/yYgDNJKv".toUri())
+                        )
+                    }
+                )
+            }
+
+//            item {
+//                SettingsItem(
+//                    icon     = Icons.Default.Favorite,
+//                    title    = "Support the Developer",
+//                    subtitle = "Buy Me a Coffee · Ko-fi",
+//                    onClick  = onNavigateToSupport
+//                )
+//            }
+//
+//            item { Spacer(modifier = Modifier.height(Spacing.extraLarge)) }
 
             item {
                 Text(
@@ -453,7 +478,7 @@ fun SettingsScreen(
                 icon  = { Icon(Icons.Default.SystemUpdate, null, tint = MaterialTheme.colorScheme.primary) },
                 title = { Text("Update Available") },
                 text  = {
-                    Text("Version ${state.version} is available on GitHub. \nTap Download to open the release page.")
+                    Text("Version ${state.version} is available on GitHub.\nTap Download to open the release page.")
                 },
                 confirmButton = {
                     TextButton(onClick = {
@@ -740,53 +765,79 @@ private fun StorageInfoCard(noteCount: Int, folderCount: Int) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ThemeSelectionDialog(
     currentTheme: AppTheme,
     onThemeSelected: (AppTheme) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("Choose Theme") },
-        text  = {
-            Column {
-                AppTheme.entries.forEach { theme ->
-                    Surface(
-                        onClick  = { onThemeSelected(theme) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape    = MaterialTheme.shapes.small,
-                        color    = if (theme == currentTheme)
-                            MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surface
+        sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor   = MaterialTheme.colorScheme.surface,
+        dragHandle       = {
+            Box(
+                modifier         = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.size(width = 32.dp, height = 3.dp),
+                    shape    = MaterialTheme.shapes.extraLarge,
+                    color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                ) {}
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.large)
+                .padding(bottom = Spacing.extraLarge)
+        ) {
+            Text(
+                text     = "CHOOSE THEME",
+                style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier = Modifier.padding(bottom = Spacing.medium)
+            )
+            AppTheme.entries.forEach { theme ->
+                Surface(
+                    onClick  = { onThemeSelected(theme) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = MaterialTheme.shapes.medium,
+                    color    = if (theme == currentTheme)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Row(
+                        modifier              = Modifier
+                            .fillMaxWidth()
+                            .padding(Spacing.medium),
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(
-                            modifier              = Modifier.fillMaxWidth().padding(Spacing.medium),
-                            verticalAlignment     = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text  = theme.displayName,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (theme == currentTheme)
-                                    MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurface
+                        Text(
+                            text  = theme.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (theme == currentTheme)
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                        if (theme == currentTheme) {
+                            Icon(
+                                imageVector        = Icons.Default.Check,
+                                contentDescription = "Selected",
+                                tint               = MaterialTheme.colorScheme.primary,
+                                modifier           = Modifier.size(20.dp)
                             )
-                            if (theme == currentTheme) {
-                                Icon(
-                                    imageVector        = Icons.Default.Check,
-                                    contentDescription = "Selected",
-                                    tint               = MaterialTheme.colorScheme.primary,
-                                    modifier           = Modifier.size(20.dp)
-                                )
-                            }
                         }
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
                 }
+                Spacer(modifier = Modifier.height(Spacing.small))
             }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+        }
+    }
 }
