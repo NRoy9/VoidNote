@@ -68,6 +68,10 @@ import com.greenicephoenix.voidnote.domain.model.NoteColor
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import com.greenicephoenix.voidnote.domain.model.InlineBlock
+import com.greenicephoenix.voidnote.domain.model.InlineBlockPayload
+import com.greenicephoenix.voidnote.presentation.editor.DocumentNode
+import com.greenicephoenix.voidnote.presentation.editor.DocumentParser
 
 /**
  * Note Editor Screen.
@@ -274,7 +278,7 @@ fun NoteEditorScreen(
                 onArchiveClick      = { viewModel.archiveNote(); onNavigateBack() },
                 onDeleteClick       = { showDeleteDialog = true },
                 onShareClick        = {
-                    shareNote(context, uiState.title.ifBlank { "Untitled" }, uiState.content, uiState.tags)
+                    shareNote(context, uiState.title.ifBlank { "Untitled" }, uiState.content, uiState.tags, uiState.blocks)
                 },
                 lastSaved           = uiState.lastSaved,
                 // SPRINT 5: pass the folder name for display and the callback to open the dialog
@@ -1210,13 +1214,82 @@ private fun NotePreviewPanel(
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-private fun shareNote(context: android.content.Context, title: String, content: String, tags: List<String>) {
-    val text = buildString {
-        appendLine(title); appendLine()
-        if (tags.isNotEmpty()) { appendLine("Tags: ${tags.joinToString(", ")}"); appendLine() }
-        append(content)
+/**
+ * shareNote — formats a note as plain text and fires the system share sheet.
+ *
+ * ROOT CAUSE OF PREVIOUS BUG:
+ * uiState.content holds the *logical* content — DocumentParser.extractLogicalContent()
+ * strips everything from the first ⟦block:...⟧ marker onwards when loading the note.
+ * So parsing uiState.content directly produced zero Block nodes; checklists were invisible.
+ *
+ * THE FIX:
+ * Reconstruct the full raw content string with DocumentParser.buildRawContent() before
+ * calling parse(). This re-appends the block marker tokens so parse() can find them.
+ *
+ * CHECKLIST RENDERING:
+ *   ☑ Buy milk        (isChecked = true)
+ *   ☐ Buy eggs        (isChecked = false)
+ *
+ * IMAGE / AUDIO blocks:
+ *   [Image]  /  [Voice note]  — noted but not shareable as text
+ */
+private fun shareNote(
+    context : android.content.Context,
+    title   : String,
+    content : String,
+    tags    : List<String>,
+    blocks  : Map<String, InlineBlock>
+) {
+    val body = buildString {
+        // ── Header ────────────────────────────────────────────────
+        appendLine(title)
+        appendLine()
+        if (tags.isNotEmpty()) {
+            appendLine("Tags: ${tags.joinToString(", ")}")
+            appendLine()
+        }
+
+        // ── Reconstruct raw content so markers are present ────────
+        // content is already logicalContent (markers stripped on load).
+        // buildRawContent() re-appends ⟦block:TODO:uuid⟧ etc. so
+        // parse() can find and walk them.
+        val rawContent = DocumentParser.buildRawContent(content, blocks.values.toList())
+        val nodes = DocumentParser.parse(rawContent)
+
+        nodes.forEach { node ->
+            when (node) {
+                is DocumentNode.Text -> {
+                    append(node.text)
+                }
+                is DocumentNode.Block -> {
+                    when (node.blockType) {
+                        InlineBlockType.TODO -> {
+                            val block = blocks[node.blockId] ?: return@forEach
+                            val payload = block.payload as? InlineBlockPayload.Todo
+                                ?: return@forEach
+                            // Render each checklist item as ☑ / ☐ + text
+                            payload.items
+                                .sortedBy { it.sortOrder }
+                                .forEach { item ->
+                                    val tick = if (item.isChecked) "☑" else "☐"
+                                    appendLine("$tick ${item.text}")
+                                }
+                        }
+                        InlineBlockType.IMAGE   -> appendLine("[Image]")
+                        InlineBlockType.AUDIO   -> appendLine("[Voice note]")
+                        InlineBlockType.DRAWING -> appendLine("[Drawing]")
+                    }
+                }
+            }
+        }
     }
-    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text); putExtra(Intent.EXTRA_SUBJECT, title) }, "Share note"))
+
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, title)
+        putExtra(Intent.EXTRA_TEXT, body.trimEnd())
+    }
+    context.startActivity(Intent.createChooser(intent, "Share note"))
 }
 
 private fun formatTime(timestamp: Long): String {

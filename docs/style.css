@@ -301,16 +301,23 @@ p {
 .nav__hamburger {
   display: none;
   flex-direction: column;
+  justify-content: center;
   gap: 5px;
   padding: var(--space-sm);
+  cursor: pointer;
+  /* Larger touch target for mobile */
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
 }
 
 .nav__hamburger span {
   display: block;
-  width: 20px;
-  height: 1.5px;
+  width: 22px;
+  height: 2px;
   background: var(--color-text);
-  transition: transform var(--transition-base);
+  border-radius: 1px;
+  transition: transform var(--transition-base), opacity var(--transition-base);
 }
 
 
@@ -1172,35 +1179,57 @@ p {
     display: flex;
   }
 
-  /* Mobile nav — full screen overlay */
+  /* Mobile nav — full screen overlay.
+     z-index: 200 ensures it covers ALL page content including
+     the phone mockup which can create its own stacking context.
+     background is solid (no transparency) so content is fully hidden.  */
   .nav__links.open {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     position: fixed;
     top: var(--nav-height);
     left: 0;
     right: 0;
     bottom: 0;
-    background: var(--color-bg);
+    background: #000000;
     padding: var(--space-xxl) var(--space-xl);
     gap: var(--space-xl);
     border-top: 1px solid var(--color-border);
-    z-index: 99;
+    z-index: 200;
+    overflow-y: auto;
   }
 
   .nav__links.open .nav__link {
     font-size: 1.1rem;
+    color: var(--color-text);
+    letter-spacing: 0.12em;
   }
 
-  /* Hero: stack vertically */
+  /* Make the CTA button full-width in mobile nav */
+  .nav__links.open .nav__cta {
+    width: 100%;
+    justify-content: center;
+    padding: var(--space-md) var(--space-xl);
+    font-size: 0.9rem;
+  }
+
+  /* Hero: stack vertically.
+     Phone mockup goes first (order: -1) so it needs top padding
+     to breathe away from the fixed nav bar.                         */
   .hero__inner {
     grid-template-columns: 1fr;
-    gap: var(--space-xxl);
+    gap: var(--space-xl);
     text-align: center;
+    padding-top: var(--space-xl);
+    padding-bottom: var(--space-xl);
   }
 
+  /* order: -1 puts the phone mockup above the text on mobile.
+     The extra top padding keeps it from feeling glued to the nav. */
   .hero__visual {
-    order: -1;     /* Phone mockup goes on top on mobile */
+    order: -1;
+    padding-top: var(--space-md);
   }
 
   .phone-mockup {
