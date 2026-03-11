@@ -58,7 +58,7 @@ object ChangelogData {
             tagline     = "Shared notes now look the way they should.",
             changes     = listOf(
                 ChangeItem(ChangeType.FIXED,    "Share note — checklist items were completely missing from shared text"),
-                ChangeItem(ChangeType.NEW,      "Support the Developer screen — Ko-fi and Buy Me a Coffee, accessible from Settings"),
+                //ChangeItem(ChangeType.NEW,      "Support the Developer screen — Ko-fi and Buy Me a Coffee, accessible from Settings"),
                 ChangeItem(ChangeType.NEW,      "Discord community — join from Settings → About or the website footer"),
                 ChangeItem(ChangeType.IMPROVED, "All picker dialogs replaced with bottom sheets — heading style, color, folder, tag, theme, and rename"),
             )
