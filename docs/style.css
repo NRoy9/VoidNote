@@ -1170,7 +1170,7 @@ p {
     padding: 0 var(--space-md);
   }
 
-  /* Nav — hide links, show hamburger */
+  /* ── Nav: hide links row, show hamburger ──────────────────────── */
   .nav__links {
     display: none;
   }
@@ -1179,44 +1179,70 @@ p {
     display: flex;
   }
 
-  /* Mobile nav — full screen overlay.
-     z-index: 200 ensures it covers ALL page content including
-     the phone mockup which can create its own stacking context.
-     background is solid (no transparency) so content is fully hidden.  */
+  /* ── Mobile nav overlay ───────────────────────────────────────────
+     IMPORTANT NOTES:
+     - z-index: 9999 beats every stacking context on the page
+     - width/height are set explicitly (not right/bottom) — avoids
+       iOS Safari quirks where right:0/bottom:0 can misfire when
+       body has overflow-x:hidden
+     - background: #000000 (hardcoded, not a var) — guarantees solid
+       black even if custom property resolution fails
+     - -webkit-overflow-scrolling: touch — enables momentum scroll
+       on older iOS
+     - The li and a rules below are CRITICAL — without them some
+       browsers won't treat li as a full-width flex child             */
   .nav__links.open {
-    display: flex;
+    display: flex !important;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     position: fixed;
     top: var(--nav-height);
     left: 0;
-    right: 0;
-    bottom: 0;
+    width: 100vw;
+    height: calc(100vh - var(--nav-height));
     background: #000000;
-    padding: var(--space-xxl) var(--space-xl);
-    gap: var(--space-xl);
-    border-top: 1px solid var(--color-border);
-    z-index: 200;
+    border-top: 1px solid #222222;
+    padding: 32px 24px 48px 24px;
+    gap: 0;
+    z-index: 9999;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
-  .nav__links.open .nav__link {
-    font-size: 1.1rem;
-    color: var(--color-text);
-    letter-spacing: 0.12em;
-  }
-
-  /* Make the CTA button full-width in mobile nav */
-  .nav__links.open .nav__cta {
+  /* li items: explicit block + full width so they aren't squished */
+  .nav__links.open li {
+    display: block;
     width: 100%;
-    justify-content: center;
-    padding: var(--space-md) var(--space-xl);
-    font-size: 0.9rem;
   }
 
-  /* Hero: stack vertically.
-     Phone mockup goes first (order: -1) so it needs top padding
-     to breathe away from the fixed nav bar.                         */
+  /* Nav links: generous tap target with bottom border as divider */
+  .nav__links.open .nav__link {
+    display: block;
+    width: 100%;
+    padding: 18px 0;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1rem;
+    letter-spacing: 0.15em;
+    color: #FFFFFF;
+    border-bottom: 1px solid #1a1a1a;
+  }
+
+  /* CTA button: full width, prominent, sits at bottom of list */
+  .nav__links.open .nav__cta {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-top: 24px;
+    padding: 16px 24px;
+    font-size: 0.9rem;
+    letter-spacing: 0.15em;
+    background: #FFFFFF;
+    color: #000000;
+    border-radius: 4px;
+  }
+
+  /* ── Hero: stack vertically ───────────────────────────────────────
+     Phone mockup moves to top (order: -1) with breathing room.      */
   .hero__inner {
     grid-template-columns: 1fr;
     gap: var(--space-xl);
@@ -1225,8 +1251,6 @@ p {
     padding-bottom: var(--space-xl);
   }
 
-  /* order: -1 puts the phone mockup above the text on mobile.
-     The extra top padding keeps it from feeling glued to the nav. */
   .hero__visual {
     order: -1;
     padding-top: var(--space-md);
