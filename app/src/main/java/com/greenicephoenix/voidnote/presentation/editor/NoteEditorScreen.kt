@@ -107,12 +107,18 @@ fun NoteEditorScreen(
 
     // ── Singletons via Hilt EntryPoints ───────────────────────────────────────
     val imageLoader: VoidNoteImageLoader = remember {
-        EntryPointAccessors.fromApplication(context.applicationContext, ImageLoaderEntryPoint::class.java).imageLoader()
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            ImageLoaderEntryPoint::class.java
+        ).imageLoader()
     }
     val audioEntry = remember {
-        EntryPointAccessors.fromApplication(context.applicationContext, AudioManagerEntryPoint::class.java)
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            AudioManagerEntryPoint::class.java
+        )
     }
-    val audioStorage: AudioStorageManager   = remember { audioEntry.audioStorage() }
+    val audioStorage: AudioStorageManager = remember { audioEntry.audioStorage() }
     val voiceRecorder: VoiceRecorderManager = remember { audioEntry.voiceRecorder() }
 
     // ── Camera permission ─────────────────────────────────────────────────────
@@ -122,29 +128,32 @@ fun NoteEditorScreen(
             uri?.let { viewModel.storePendingCameraUri(it) }
         }
     }
-    var showCameraRationale        by remember { mutableStateOf(false) }
-    var showCameraSettingsDialog   by remember { mutableStateOf(false) }
+    var showCameraRationale by remember { mutableStateOf(false) }
+    var showCameraSettingsDialog by remember { mutableStateOf(false) }
     var hasRequestedCameraPermission by remember { mutableStateOf(false) }
 
     // ── Microphone permission ─────────────────────────────────────────────────
-    val micPermissionState = rememberPermissionState(Manifest.permission.RECORD_AUDIO) { isGranted ->
-        if (isGranted) viewModel.startRecording()
-    }
-    var showMicRationale        by remember { mutableStateOf(false) }
-    var showMicSettingsDialog   by remember { mutableStateOf(false) }
+    val micPermissionState =
+        rememberPermissionState(Manifest.permission.RECORD_AUDIO) { isGranted ->
+            if (isGranted) viewModel.startRecording()
+        }
+    var showMicRationale by remember { mutableStateOf(false) }
+    var showMicSettingsDialog by remember { mutableStateOf(false) }
     var hasRequestedMicPermission by remember { mutableStateOf(false) }
 
     // ── Gallery launcher ──────────────────────────────────────────────────────
-    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { viewModel.insertImageBlock(it) }
-    }
+    val imagePickerLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            uri?.let { viewModel.insertImageBlock(it) }
+        }
 
     // ── Camera launcher ───────────────────────────────────────────────────────
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        val tempPath = uiState.cameraCaptureTempPath
-        if (success && tempPath != null) viewModel.insertCameraImage(tempPath)
-        else viewModel.clearCameraCapturePath()
-    }
+    val cameraLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+            val tempPath = uiState.cameraCaptureTempPath
+            if (success && tempPath != null) viewModel.insertCameraImage(tempPath)
+            else viewModel.clearCameraCapturePath()
+        }
 
     // Watch for pending camera URI (set after permission callback grants access)
     LaunchedEffect(uiState.pendingCameraUri) {
@@ -161,11 +170,13 @@ fun NoteEditorScreen(
                 val uri = viewModel.prepareCameraCapture()
                 uri?.let { cameraLauncher.launch(it) }
             }
+
             cameraPermissionState.status.shouldShowRationale -> showCameraRationale = true
             !hasRequestedCameraPermission -> {
                 hasRequestedCameraPermission = true
                 cameraPermissionState.launchPermissionRequest()
             }
+
             else -> showCameraSettingsDialog = true
         }
     }
@@ -179,6 +190,7 @@ fun NoteEditorScreen(
                 hasRequestedMicPermission = true
                 micPermissionState.launchPermissionRequest()
             }
+
             else -> showMicSettingsDialog = true
         }
     }
@@ -191,21 +203,35 @@ fun NoteEditorScreen(
         }
     }
 
-    var showDeleteDialog       by remember { mutableStateOf(false) }
-    var showHeadingMenu        by remember { mutableStateOf(false) }
-    var showInsertSheet        by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showHeadingMenu by remember { mutableStateOf(false) }
+    var showInsertSheet by remember { mutableStateOf(false) }
     // SPRINT 5: controls visibility of the "Move to folder" folder picker dialog
     var showMoveToFolderDialog by remember { mutableStateOf(false) }
     // SPRINT 7: controls visibility of the color picker dialog (moved from bottom bar)
-    var showColorDialog        by remember { mutableStateOf(false) }
+    var showColorDialog by remember { mutableStateOf(false) }
+    // SPRINT 10 · Focus Mode — hides TopBar and bottom toolbar so the user
+    // gets a full-screen writing canvas with zero UI chrome. Pure local state:
+    // no need to survive process death, and the ViewModel doesn't care about it.
+    var isFocusMode by remember { mutableStateOf(false) }
 
     // Declared here — ABOVE onNumberedListClick — because that lambda
     // captures contentFieldValue by reference and Kotlin does not hoist vars.
     var titleFieldValue by remember {
-        mutableStateOf(TextFieldValue(text = uiState.title, selection = TextRange(uiState.title.length)))
+        mutableStateOf(
+            TextFieldValue(
+                text = uiState.title,
+                selection = TextRange(uiState.title.length)
+            )
+        )
     }
     var contentFieldValue by remember {
-        mutableStateOf(TextFieldValue(text = uiState.content, selection = TextRange(uiState.content.length)))
+        mutableStateOf(
+            TextFieldValue(
+                text = uiState.content,
+                selection = TextRange(uiState.content.length)
+            )
+        )
     }
 
     /**
@@ -220,37 +246,37 @@ fun NoteEditorScreen(
      *    then call viewModel.onContentChange() to trigger format adjustment + save.
      */
     val onNumberedListClick: () -> Unit = {
-        val text      = contentFieldValue.text
-        val cursor    = contentFieldValue.selection.start.coerceIn(0, text.length)
+        val text = contentFieldValue.text
+        val cursor = contentFieldValue.selection.start.coerceIn(0, text.length)
         val lineStart = text.lastIndexOf('\n', cursor - 1) + 1   // 0 if no prior newline
-        val lineEnd   = text.indexOf('\n', cursor).let { if (it == -1) text.length else it }
-        val lineText  = text.substring(lineStart, lineEnd)
+        val lineEnd = text.indexOf('\n', cursor).let { if (it == -1) text.length else it }
+        val lineText = text.substring(lineStart, lineEnd)
 
         val existingNumPattern = Regex("""^\d+\.\s""")
 
         if (existingNumPattern.containsMatchIn(lineText)) {
             // ── Toggle OFF: remove the "N. " prefix ──────────────────────────
-            val prefixLen  = existingNumPattern.find(lineText)!!.value.length
-            val newText    = text.removeRange(lineStart, lineStart + prefixLen)
-            val newCursor  = (cursor - prefixLen).coerceAtLeast(lineStart)
+            val prefixLen = existingNumPattern.find(lineText)!!.value.length
+            val newText = text.removeRange(lineStart, lineStart + prefixLen)
+            val newCursor = (cursor - prefixLen).coerceAtLeast(lineStart)
             contentFieldValue = TextFieldValue(
-                text      = newText,
+                text = newText,
                 selection = TextRange(newCursor)
             )
             viewModel.onContentChange(newText)
         } else {
             // ── Toggle ON: find what number to use ───────────────────────────
-            val prevLineEnd   = (lineStart - 1).coerceAtLeast(0)
+            val prevLineEnd = (lineStart - 1).coerceAtLeast(0)
             val prevLineStart = text.lastIndexOf('\n', prevLineEnd - 1) + 1
-            val prevLine      = if (lineStart > 0) text.substring(prevLineStart, prevLineEnd) else ""
-            val prevNum       = existingNumPattern.find(prevLine)
+            val prevLine = if (lineStart > 0) text.substring(prevLineStart, prevLineEnd) else ""
+            val prevNum = existingNumPattern.find(prevLine)
                 ?.value?.trimEnd()?.dropLast(1)?.toIntOrNull()
-            val num    = if (prevNum != null) prevNum + 1 else 1
+            val num = if (prevNum != null) prevNum + 1 else 1
             val prefix = "$num. "
-            val newText   = text.substring(0, lineStart) + prefix + text.substring(lineStart)
+            val newText = text.substring(0, lineStart) + prefix + text.substring(lineStart)
             val newCursor = cursor + prefix.length
             contentFieldValue = TextFieldValue(
-                text      = newText,
+                text = newText,
                 selection = TextRange(newCursor)
             )
             viewModel.onContentChange(newText)
@@ -258,10 +284,12 @@ fun NoteEditorScreen(
     }
 
     LaunchedEffect(uiState.title) {
-        if (titleFieldValue.text != uiState.title) titleFieldValue = titleFieldValue.copy(text = uiState.title)
+        if (titleFieldValue.text != uiState.title) titleFieldValue =
+            titleFieldValue.copy(text = uiState.title)
     }
     LaunchedEffect(uiState.content) {
-        if (contentFieldValue.text != uiState.content) contentFieldValue = contentFieldValue.copy(text = uiState.content)
+        if (contentFieldValue.text != uiState.content) contentFieldValue =
+            contentFieldValue.copy(text = uiState.content)
     }
 
     val hasSelection = contentFieldValue.selection.start != contentFieldValue.selection.end
@@ -270,82 +298,159 @@ fun NoteEditorScreen(
     // ── Layout ────────────────────────────────────────────────────────────────
     Scaffold(
         topBar = {
-            TopBar(
-                onBackClick         = onNavigateBack,
-                isPinned            = uiState.isPinned,
-                isArchived          = uiState.isArchived,
-                onPinClick          = { viewModel.togglePin() },
-                onArchiveClick      = { viewModel.archiveNote(); onNavigateBack() },
-                onDeleteClick       = { showDeleteDialog = true },
-                onShareClick        = {
-                    shareNote(context, uiState.title.ifBlank { "Untitled" }, uiState.content, uiState.tags, uiState.blocks)
-                },
-                lastSaved           = uiState.lastSaved,
-                // SPRINT 5: pass the folder name for display and the callback to open the dialog
-                currentFolderName   = uiState.currentFolderName,
-                onMoveToFolderClick = { showMoveToFolderDialog = true },
-                // SPRINT 7: color moved from bottom bar to overflow menu
-                currentColor        = noteColor,
-                onColorClick        = { showColorDialog = true }
-            )
+            // Focus Mode: TopBar slides up and out. AnimatedVisibility handles
+            // the animation; when invisible Scaffold applies zero top inset so
+            // the content fills the space the TopBar previously occupied.
+            AnimatedVisibility(
+                visible = !isFocusMode,
+                enter = fadeIn(tween(220)) + expandVertically(tween(220)),
+                exit = fadeOut(tween(180)) + shrinkVertically(tween(180))
+            ) {
+                TopBar(
+                    onBackClick = onNavigateBack,
+                    isPinned = uiState.isPinned,
+                    isArchived = uiState.isArchived,
+                    onPinClick = { viewModel.togglePin() },
+                    onArchiveClick = { viewModel.archiveNote(); onNavigateBack() },
+                    onDeleteClick = { showDeleteDialog = true },
+                    onShareClick = {
+                        shareNote(
+                            context,
+                            uiState.title.ifBlank { "Untitled" },
+                            uiState.content,
+                            uiState.tags,
+                            uiState.blocks
+                        )
+                    },
+                    lastSaved = uiState.lastSaved,
+                    // SPRINT 5: pass the folder name for display and the callback to open the dialog
+                    currentFolderName = uiState.currentFolderName,
+                    onMoveToFolderClick = { showMoveToFolderDialog = true },
+                    currentColor = noteColor,
+                    onColorClick = { showColorDialog = true },
+                    // SPRINT 10: Preview + Focus now live in the TopBar
+                    showPreview = uiState.showPreview,
+                    isFocusMode = isFocusMode,
+                    onPreviewClick = { viewModel.togglePreview() },
+                    onFocusToggle = { isFocusMode = !isFocusMode }
+                )
+            }
         },
         bottomBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .imePadding()
-                    .navigationBarsPadding()
+            // Focus Mode: entire bottom bar (tags + toolbar + sheets) slides down
+            // and out, mirroring the TopBar's fade+shrink exit above.
+            // When invisible, Scaffold reclaims the space so the writing canvas
+            // stretches edge-to-edge. The keyboard remains open — the user is
+            // still writing, just without any UI chrome.
+            AnimatedVisibility(
+                visible = !isFocusMode,
+                enter = fadeIn(tween(220)) + expandVertically(tween(220), Alignment.Bottom),
+                exit = fadeOut(tween(180)) + shrinkVertically(tween(180), Alignment.Bottom)
             ) {
-                TagsSection(
-                    tags       = uiState.tags,
-                    onAddTag   = { viewModel.addTag(it) },
-                    onRemoveTag = { viewModel.removeTag(it) }
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .imePadding()
+                        .navigationBarsPadding()
+                ) {
+                    TagsSection(
+                        tags = uiState.tags,
+                        onAddTag = { viewModel.addTag(it) },
+                        onRemoveTag = { viewModel.removeTag(it) }
+                    )
 
+                    FormattingToolbar(
+                        isBoldActive = if (hasSelection) hasFormat(
+                            uiState.contentFormats,
+                            contentFieldValue.selection.start,
+                            contentFieldValue.selection.end,
+                            FormatType.BOLD
+                        ) else uiState.activeBold,
+                        isItalicActive = if (hasSelection) hasFormat(
+                            uiState.contentFormats,
+                            contentFieldValue.selection.start,
+                            contentFieldValue.selection.end,
+                            FormatType.ITALIC
+                        ) else uiState.activeItalic,
+                        isUnderlineActive = if (hasSelection) hasFormat(
+                            uiState.contentFormats,
+                            contentFieldValue.selection.start,
+                            contentFieldValue.selection.end,
+                            FormatType.UNDERLINE
+                        ) else uiState.activeUnderline,
+                        isStrikethroughActive = if (hasSelection) hasFormat(
+                            uiState.contentFormats,
+                            contentFieldValue.selection.start,
+                            contentFieldValue.selection.end,
+                            FormatType.STRIKETHROUGH
+                        ) else uiState.activeStrikethrough,
+                        activeHeading = uiState.activeHeading,
+                        hasSelection = hasSelection,
+                        showInsertSheet = showInsertSheet,
+                        showPreview = uiState.showPreview,
+                        onInsertClick = { showInsertSheet = true },
+                        onBoldClick = {
+                            if (hasSelection) viewModel.applyFormatting(
+                                contentFieldValue.selection.start,
+                                contentFieldValue.selection.end,
+                                FormatType.BOLD
+                            ) else viewModel.toggleActiveBold()
+                        },
+                        onItalicClick = {
+                            if (hasSelection) viewModel.applyFormatting(
+                                contentFieldValue.selection.start,
+                                contentFieldValue.selection.end,
+                                FormatType.ITALIC
+                            ) else viewModel.toggleActiveItalic()
+                        },
+                        onUnderlineClick = {
+                            if (hasSelection) viewModel.applyFormatting(
+                                contentFieldValue.selection.start,
+                                contentFieldValue.selection.end,
+                                FormatType.UNDERLINE
+                            ) else viewModel.toggleActiveUnderline()
+                        },
+                        onStrikethroughClick = {
+                            if (hasSelection) viewModel.applyFormatting(
+                                contentFieldValue.selection.start,
+                                contentFieldValue.selection.end,
+                                FormatType.STRIKETHROUGH
+                            ) else viewModel.toggleActiveStrikethrough()
+                        },
+                        onHeadingClick = { showHeadingMenu = true },
+                        onClearClick = { viewModel.clearAllFormatting() },
+                        onTodoClick = { viewModel.insertTodoBlock() },
+                        onNumberedListClick = onNumberedListClick,
+                        wordCount = contentFieldValue.text.split("\\s+".toRegex())
+                            .filter { it.isNotBlank() }.size,
+                        charCount = contentFieldValue.text.length
+                    )
 
-                FormattingToolbar(
-                    isBoldActive = if (hasSelection) hasFormat(uiState.contentFormats, contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.BOLD) else uiState.activeBold,
-                    isItalicActive = if (hasSelection) hasFormat(uiState.contentFormats, contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.ITALIC) else uiState.activeItalic,
-                    isUnderlineActive = if (hasSelection) hasFormat(uiState.contentFormats, contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.UNDERLINE) else uiState.activeUnderline,
-                    isStrikethroughActive = if (hasSelection) hasFormat(uiState.contentFormats, contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.STRIKETHROUGH) else uiState.activeStrikethrough,
-                    activeHeading  = uiState.activeHeading,
-                    hasSelection   = hasSelection,
-                    showInsertSheet = showInsertSheet,
-                    showPreview    = uiState.showPreview,
-                    onInsertClick  = { showInsertSheet = true },
-                    onBoldClick    = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.BOLD) else viewModel.toggleActiveBold() },
-                    onItalicClick  = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.ITALIC) else viewModel.toggleActiveItalic() },
-                    onUnderlineClick = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.UNDERLINE) else viewModel.toggleActiveUnderline() },
-                    onStrikethroughClick = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.STRIKETHROUGH) else viewModel.toggleActiveStrikethrough() },
-                    onHeadingClick = { showHeadingMenu = true },
-                    onClearClick   = { viewModel.clearAllFormatting() },
-                    onTodoClick    = { viewModel.insertTodoBlock() },
-                    onNumberedListClick = onNumberedListClick,
-                    onPreviewClick = { viewModel.togglePreview() },
-                    wordCount      = contentFieldValue.text.split("\\s+".toRegex()).filter { it.isNotBlank() }.size,
-                    charCount      = contentFieldValue.text.length
-                )
+                    // RecordingSheet slides in OVER InsertBlockSheet while recording.
+                    // Both stay in composition so animations work correctly.
+                    RecordingSheet(
+                        isVisible = uiState.isRecording,
+                        elapsedMs = uiState.recordingElapsedMs,
+                        onStopClick = { viewModel.stopRecording() }
+                    )
 
-                // RecordingSheet slides in OVER InsertBlockSheet while recording.
-                // Both stay in composition so animations work correctly.
-                RecordingSheet(
-                    isVisible    = uiState.isRecording,
-                    elapsedMs    = uiState.recordingElapsedMs,
-                    onStopClick  = { viewModel.stopRecording() }
-                )
-
-                InsertBlockSheet(
-                    visible          = showInsertSheet && !uiState.isRecording,
-                    onDismiss        = { showInsertSheet = false },
-                    onChecklistClick = { showInsertSheet = false; viewModel.insertTodoBlock() },
-                    onGalleryClick   = {
-                        showInsertSheet = false
-                        imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    },
-                    onCameraClick    = { showInsertSheet = false; onCameraClick() },
-                    onVoiceClick     = { showInsertSheet = false; onVoiceClick() }
-                )
+                    InsertBlockSheet(
+                        visible = showInsertSheet && !uiState.isRecording,
+                        onDismiss = { showInsertSheet = false },
+                        onChecklistClick = { showInsertSheet = false; viewModel.insertTodoBlock() },
+                        onGalleryClick = {
+                            showInsertSheet = false
+                            imagePickerLauncher.launch(
+                                PickVisualMediaRequest(
+                                    ActivityResultContracts.PickVisualMedia.ImageOnly
+                                )
+                            )
+                        },
+                        onCameraClick = { showInsertSheet = false; onCameraClick() },
+                        onVoiceClick = { showInsertSheet = false; onVoiceClick() }
+                    )
+                }
             }
         }
     ) { paddingValues ->
@@ -355,343 +460,501 @@ fun NoteEditorScreen(
             // Uses applyFormatting() which already lives in TextSpanUtils.kt.
             // SelectionContainer allows the user to copy text from the preview.
             NotePreviewPanel(
-                title          = uiState.title,
-                content        = uiState.content,
+                title = uiState.title,
+                content = uiState.content,
                 contentFormats = uiState.contentFormats,
-                modifier       = Modifier
+                modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             )
         } else {
-            // ── EDIT MODE (existing editor) ───────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(paddingValues)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = Spacing.medium)
-            ) {
-                Spacer(Modifier.height(Spacing.small))
-
-                RichTextEditor(
-                    value = titleFieldValue,
-                    onValueChange = { newValue ->
-                        if (newValue.text.length <= 100) {
-                            titleFieldValue = newValue
-                            viewModel.onTitleChange(newValue.text)
-                        }
-                    },
-                    placeholder = "Note title",
-                    textStyle = TextStyle(
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 32.sp
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(Spacing.medium))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                Spacer(Modifier.height(Spacing.medium))
-
-                RichTextEditor(
-                    value = contentFieldValue,
-                    onValueChange = { newValue ->
-                        val oldText = contentFieldValue.text
-                        val newText = newValue.text
-                        val cursor  = newValue.selection.start
-
-                        // Auto-continue numbered list when Enter is pressed.
-                        // Detect: text grew by exactly 1 char AND that char is \n.
-                        val handled = if (
-                            newText.length == oldText.length + 1 &&
-                            cursor > 0 &&
-                            newText[cursor - 1] == '\n'
-                        ) {
-                            // Find the line that just had Enter pressed at its end
-                            val insertedAt    = cursor - 1
-                            val prevLineStart = newText.lastIndexOf('\n', insertedAt - 1) + 1
-                            val prevLine      = newText.substring(prevLineStart, insertedAt)
-                            val numMatch      = Regex("""^(\d+)\.\s""").find(prevLine)
-                            if (numMatch != null) {
-                                // Previous line was "N. something" → insert "N+1. " on new line
-                                val nextNum = (numMatch.groupValues[1].toIntOrNull() ?: 0) + 1
-                                val prefix  = "$nextNum. "
-                                val finalText = newText.substring(0, cursor) + prefix + newText.substring(cursor)
-                                contentFieldValue = TextFieldValue(
-                                    text      = finalText,
-                                    selection = TextRange(cursor + prefix.length)
-                                )
-                                viewModel.onContentChange(finalText)
-                                true
-                            } else false
-                        } else false
-
-                        if (!handled) {
-                            contentFieldValue = newValue
-                            viewModel.onContentChange(newValue.text)
-                        }
-                    },
-                    placeholder = "Start writing...",
-                    textStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-                    formats = uiState.contentFormats,
-                    modifier = Modifier.fillMaxWidth().then(
-                        if (sortedBlocks.isEmpty()) Modifier.heightIn(min = 400.dp) else Modifier
-                    )
-                )
-
-                if (sortedBlocks.isNotEmpty()) {
+            // ── EDIT MODE ────────────────────────────────────────────────────
+            // Box lets us overlay the ghost exit-focus button over the canvas
+            // without affecting the scroll layout beneath it.
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(paddingValues)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = Spacing.medium)
+                ) {
                     Spacer(Modifier.height(Spacing.small))
-                    sortedBlocks.forEach { block ->
-                        when (block.type) {
-                            InlineBlockType.TODO -> {
-                                TodoBlockComposable(
-                                    block = block,
-                                    onToggleItem = { itemId ->
-                                        viewModel.toggleTodoItem(
-                                            block.id,
-                                            itemId
-                                        )
-                                    },
-                                    onAddItem = { viewModel.addTodoItem(block.id) },
-                                    onUpdateItemText = { itemId, newText ->
-                                        viewModel.updateTodoItemText(
-                                            block.id,
-                                            itemId,
-                                            newText
-                                        )
-                                    },
-                                    onDeleteItem = { itemId ->
-                                        viewModel.deleteTodoItem(
-                                            block.id,
-                                            itemId
-                                        )
-                                    },
-                                    onDeleteBlock = { viewModel.deleteBlock(block.id) },
-                                    onPasteLines = { itemId, firstLine, remainingLines ->
-                                        viewModel.pasteTodoLines(
-                                            blockId      = block.id,
-                                            afterItemId  = itemId,
-                                            firstLineText = firstLine,
-                                            remainingLines = remainingLines
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
 
-                            InlineBlockType.IMAGE -> {
-                                ImageBlockComposable(
-                                    block = block,
-                                    voidNoteImageLoader = imageLoader,
-                                    onCaptionChange = {
-                                        viewModel.updateImageCaption(
-                                            block.id,
-                                            it
+                    RichTextEditor(
+                        value = titleFieldValue,
+                        onValueChange = { newValue ->
+                            if (newValue.text.length <= 100) {
+                                titleFieldValue = newValue
+                                viewModel.onTitleChange(newValue.text)
+                            }
+                        },
+                        placeholder = "Note title",
+                        textStyle = TextStyle(
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 32.sp
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(Spacing.medium))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                    Spacer(Modifier.height(Spacing.medium))
+
+                    RichTextEditor(
+                        value = contentFieldValue,
+                        onValueChange = { newValue ->
+                            val oldText = contentFieldValue.text
+                            val newText = newValue.text
+                            val cursor = newValue.selection.start
+
+                            // Auto-continue numbered list when Enter is pressed.
+                            // Detect: text grew by exactly 1 char AND that char is \n.
+                            val handled = if (
+                                newText.length == oldText.length + 1 &&
+                                cursor > 0 &&
+                                newText[cursor - 1] == '\n'
+                            ) {
+                                // Find the line that just had Enter pressed at its end
+                                val insertedAt = cursor - 1
+                                val prevLineStart = newText.lastIndexOf('\n', insertedAt - 1) + 1
+                                val prevLine = newText.substring(prevLineStart, insertedAt)
+                                val numMatch = Regex("""^(\d+)\.\s""").find(prevLine)
+                                if (numMatch != null) {
+                                    // Previous line was "N. something" → insert "N+1. " on new line
+                                    val nextNum = (numMatch.groupValues[1].toIntOrNull() ?: 0) + 1
+                                    val prefix = "$nextNum. "
+                                    val finalText =
+                                        newText.substring(0, cursor) + prefix + newText.substring(
+                                            cursor
                                         )
-                                    },
-                                    onDeleteBlock = { viewModel.deleteBlock(block.id) },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
+                                    contentFieldValue = TextFieldValue(
+                                        text = finalText,
+                                        selection = TextRange(cursor + prefix.length)
+                                    )
+                                    viewModel.onContentChange(finalText)
+                                    true
+                                } else false
+                            } else false
 
-                            InlineBlockType.AUDIO -> {
-                                // AudioBlockComposable manages its own playback state locally.
-                                // It gets audioStorage and voiceRecorder from EntryPoint (passed as params)
-                                // so it can decrypt and create a MediaPlayer without a ViewModel reference.
-                                AudioBlockComposable(
-                                    block = block,
-                                    audioStorage = audioStorage,
-                                    voiceRecorder = voiceRecorder,
-                                    onDeleteBlock = { viewModel.deleteBlock(block.id) },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                            if (!handled) {
+                                contentFieldValue = newValue
+                                viewModel.onContentChange(newValue.text)
                             }
+                        },
+                        placeholder = "Start writing...",
+                        textStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+                        formats = uiState.contentFormats,
+                        modifier = Modifier.fillMaxWidth().then(
+                            if (sortedBlocks.isEmpty()) Modifier.heightIn(min = 400.dp) else Modifier
+                        )
+                    )
 
-                            else -> {
-                                // DRAWING and any future block types — not yet implemented.
-                                // The else branch is required because InlineBlockType is an enum
-                                // and Kotlin's when must be exhaustive when used as an expression.
-                            }
-                        }
+                    if (sortedBlocks.isNotEmpty()) {
                         Spacer(Modifier.height(Spacing.small))
+                        sortedBlocks.forEach { block ->
+                            when (block.type) {
+                                InlineBlockType.TODO -> {
+                                    TodoBlockComposable(
+                                        block = block,
+                                        onToggleItem = { itemId ->
+                                            viewModel.toggleTodoItem(
+                                                block.id,
+                                                itemId
+                                            )
+                                        },
+                                        onAddItem = { viewModel.addTodoItem(block.id) },
+                                        onUpdateItemText = { itemId, newText ->
+                                            viewModel.updateTodoItemText(
+                                                block.id,
+                                                itemId,
+                                                newText
+                                            )
+                                        },
+                                        onDeleteItem = { itemId ->
+                                            viewModel.deleteTodoItem(
+                                                block.id,
+                                                itemId
+                                            )
+                                        },
+                                        onDeleteBlock = { viewModel.deleteBlock(block.id) },
+                                        onPasteLines = { itemId, firstLine, remainingLines ->
+                                            viewModel.pasteTodoLines(
+                                                blockId = block.id,
+                                                afterItemId = itemId,
+                                                firstLineText = firstLine,
+                                                remainingLines = remainingLines
+                                            )
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                InlineBlockType.IMAGE -> {
+                                    ImageBlockComposable(
+                                        block = block,
+                                        voidNoteImageLoader = imageLoader,
+                                        onCaptionChange = {
+                                            viewModel.updateImageCaption(
+                                                block.id,
+                                                it
+                                            )
+                                        },
+                                        onDeleteBlock = { viewModel.deleteBlock(block.id) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                InlineBlockType.AUDIO -> {
+                                    // AudioBlockComposable manages its own playback state locally.
+                                    // It gets audioStorage and voiceRecorder from EntryPoint (passed as params)
+                                    // so it can decrypt and create a MediaPlayer without a ViewModel reference.
+                                    AudioBlockComposable(
+                                        block = block,
+                                        audioStorage = audioStorage,
+                                        voiceRecorder = voiceRecorder,
+                                        onDeleteBlock = { viewModel.deleteBlock(block.id) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                else -> {
+                                    // DRAWING and any future block types — not yet implemented.
+                                    // The else branch is required because InlineBlockType is an enum
+                                    // and Kotlin's when must be exhaustive when used as an expression.
+                                }
+                            }
+                            Spacer(Modifier.height(Spacing.small))
+                        }
+                    }
+
+                    Spacer(Modifier.height(200.dp))
+                }  // end Column
+
+                // ── Ghost exit button (Focus Mode only) ───────────────────────
+                // When focus mode is active, all chrome is hidden. This tiny pill
+                // floats at the bottom-right of the canvas so the user has a clear,
+                // discoverable way to exit without hunting for a gesture.
+                //
+                // Design choices:
+                //   • 10% opacity at rest → barely visible, non-distracting
+                //   • "EXIT FOCUS" label in labelSmall so it's text, not just an icon
+                //   • Placed 24dp from bottom-right — clear of the system nav area
+                //     because the Scaffold's paddingValues already accounts for system bars
+                //   • AnimatedVisibility: same fade timing as TopBar/bottomBar enter/exit
+                AnimatedVisibility(
+                    visible = isFocusMode,
+                    enter = fadeIn(tween(300)),
+                    exit = fadeOut(tween(200)),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(paddingValues)
+                        .padding(bottom = Spacing.large, end = Spacing.medium)
+                ) {
+                    Surface(
+                        onClick = { isFocusMode = false },
+                        shape = MaterialTheme.shapes.extraLarge,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                        border = BorderStroke(
+                            0.5.dp,
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FullscreenExit,
+                                contentDescription = "Exit focus mode",
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = "EXIT FOCUS",
+                                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
                     }
                 }
-
-                Spacer(Modifier.height(200.dp))
-            }
+            }  // end Box
         }
 
-    }
-
-    // ── Heading bottom sheet ──────────────────────────────────────────────────
-    if (showHeadingMenu) {
-        ModalBottomSheet(
-            onDismissRequest = { showHeadingMenu = false },
-            sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor   = MaterialTheme.colorScheme.surface,
-            dragHandle       = { SheetDragHandle() }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.large)
-                    .padding(bottom = Spacing.extraLarge)
+        // ── Heading bottom sheet ──────────────────────────────────────────────────
+        if (showHeadingMenu) {
+            ModalBottomSheet(
+                onDismissRequest = { showHeadingMenu = false },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = MaterialTheme.colorScheme.surface,
+                dragHandle = { SheetDragHandle() }
             ) {
-                Text(
-                    text     = "TEXT SIZE",
-                    style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
-                    color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    modifier = Modifier.padding(bottom = Spacing.medium)
-                )
-                Surface(
-                    onClick  = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.HEADING_SMALL) else viewModel.setActiveHeading(FormatType.HEADING_SMALL); showHeadingMenu = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape    = MaterialTheme.shapes.medium,
-                    color    = MaterialTheme.colorScheme.surfaceVariant
-                ) { Text("Small", fontSize = 16.sp, modifier = Modifier.padding(16.dp)) }
-                Spacer(Modifier.height(Spacing.small))
-                Surface(
-                    onClick  = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.HEADING_NORMAL) else viewModel.setActiveHeading(FormatType.HEADING_NORMAL); showHeadingMenu = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape    = MaterialTheme.shapes.medium,
-                    color    = MaterialTheme.colorScheme.primaryContainer
-                ) { Text("Normal (Default)", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
-                Spacer(Modifier.height(Spacing.small))
-                Surface(
-                    onClick  = { if (hasSelection) viewModel.applyFormatting(contentFieldValue.selection.start, contentFieldValue.selection.end, FormatType.HEADING_LARGE) else viewModel.setActiveHeading(FormatType.HEADING_LARGE); showHeadingMenu = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape    = MaterialTheme.shapes.medium,
-                    color    = MaterialTheme.colorScheme.surfaceVariant
-                ) { Text("Large", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
-            }
-        }
-    }
-
-    // ── Delete dialog ─────────────────────────────────────────────────────────
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            icon  = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Delete Note?") },
-            text  = { Text("\"${uiState.title.ifBlank { "Untitled" }}\" will be moved to trash.") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.deleteNote(); showDeleteDialog = false; onNavigateBack() },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") }
-            },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
-        )
-    }
-
-    // Shows a list of all folders. Tapping a folder moves the note there.
-    // "No folder" option at the top removes the note from any folder → root level.
-    if (showMoveToFolderDialog) {
-        MoveToFolderDialog(
-            folders           = folders,
-            currentFolderName = uiState.currentFolderName,
-            onFolderSelected  = { folderId ->
-                viewModel.moveToFolder(folderId)
-                showMoveToFolderDialog = false
-            },
-            onDismiss = { showMoveToFolderDialog = false }
-        )
-    }
-
-    // ── Color picker bottom sheet ─────────────────────────────────────────────
-    // Replaces the old AlertDialog — a sheet gives the color dots more room
-    // and feels more natural for a picker triggered from the overflow menu.
-    if (showColorDialog) {
-        ModalBottomSheet(
-            onDismissRequest = { showColorDialog = false },
-            sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor   = MaterialTheme.colorScheme.surface,
-            dragHandle       = { SheetDragHandle() }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.large)
-                    .padding(bottom = Spacing.extraLarge)
-            ) {
-                Text(
-                    text     = "NOTE COLOR",
-                    style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
-                    color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    modifier = Modifier.padding(bottom = Spacing.medium)
-                )
-                NoteColorPicker(
-                    currentColor    = noteColor,
-                    onColorSelected = { color ->
-                        viewModel.updateNoteColor(color)
-                        showColorDialog = false
-                    }
-                )
-                Spacer(Modifier.height(Spacing.large))
-                // "Clear" as a text row — cleaner than a button in a sheet
-                Surface(
-                    onClick  = { viewModel.updateNoteColor(null); showColorDialog = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape    = MaterialTheme.shapes.medium,
-                    color    = MaterialTheme.colorScheme.surfaceVariant
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.large)
+                        .padding(bottom = Spacing.extraLarge)
                 ) {
                     Text(
-                        text     = "Clear color",
-                        modifier = Modifier.padding(16.dp),
-                        style    = MaterialTheme.typography.bodyMedium,
-                        color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        text = "TEXT SIZE",
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(bottom = Spacing.medium)
                     )
+                    Surface(
+                        onClick = {
+                            if (hasSelection) viewModel.applyFormatting(
+                                contentFieldValue.selection.start,
+                                contentFieldValue.selection.end,
+                                FormatType.HEADING_SMALL
+                            ) else viewModel.setActiveHeading(FormatType.HEADING_SMALL); showHeadingMenu =
+                            false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) { Text("Small", fontSize = 16.sp, modifier = Modifier.padding(16.dp)) }
+                    Spacer(Modifier.height(Spacing.small))
+                    Surface(
+                        onClick = {
+                            if (hasSelection) viewModel.applyFormatting(
+                                contentFieldValue.selection.start,
+                                contentFieldValue.selection.end,
+                                FormatType.HEADING_NORMAL
+                            ) else viewModel.setActiveHeading(FormatType.HEADING_NORMAL); showHeadingMenu =
+                            false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            "Normal (Default)",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(Spacing.small))
+                    Surface(
+                        onClick = {
+                            if (hasSelection) viewModel.applyFormatting(
+                                contentFieldValue.selection.start,
+                                contentFieldValue.selection.end,
+                                FormatType.HEADING_LARGE
+                            ) else viewModel.setActiveHeading(FormatType.HEADING_LARGE); showHeadingMenu =
+                            false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            "Large",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
                 }
             }
         }
-    }
 
-    // ── Camera rationale dialog ───────────────────────────────────────────────
-    if (showCameraRationale) {
-        AlertDialog(
-            onDismissRequest = { showCameraRationale = false },
-            icon    = { Icon(Icons.Default.CameraAlt, null, tint = MaterialTheme.colorScheme.primary) },
-            title   = { Text("Camera Access") },
-            text    = { Text("Void Note needs camera access to capture photos.\n\nPhotos are encrypted immediately and never saved to your gallery.") },
-            confirmButton = { TextButton(onClick = { showCameraRationale = false; hasRequestedCameraPermission = true; cameraPermissionState.launchPermissionRequest() }) { Text("Allow") } },
-            dismissButton = { TextButton(onClick = { showCameraRationale = false }) { Text("Not now") } }
-        )
-    }
+        // ── Delete dialog ─────────────────────────────────────────────────────────
+        if (showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                icon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                title = { Text("Delete Note?") },
+                text = { Text("\"${uiState.title.ifBlank { "Untitled" }}\" will be moved to trash.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteNote(); showDeleteDialog = false; onNavigateBack()
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) { Text("Delete") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showDeleteDialog = false
+                    }) { Text("Cancel") }
+                }
+            )
+        }
 
-    // ── Camera permanently denied dialog ─────────────────────────────────────
-    if (showCameraSettingsDialog) {
-        AlertDialog(
-            onDismissRequest = { showCameraSettingsDialog = false },
-            icon    = { Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary) },
-            title   = { Text("Camera Permission Required") },
-            text    = { Text("Camera access was denied.\n\nTo enable: Settings → Permissions → Camera → Allow") },
-            confirmButton = { TextButton(onClick = { showCameraSettingsDialog = false; context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = Uri.fromParts("package", context.packageName, null) }) }) { Text("Open Settings") } },
-            dismissButton = { TextButton(onClick = { showCameraSettingsDialog = false }) { Text("Cancel") } }
-        )
-    }
+        // Shows a list of all folders. Tapping a folder moves the note there.
+        // "No folder" option at the top removes the note from any folder → root level.
+        if (showMoveToFolderDialog) {
+            MoveToFolderDialog(
+                folders = folders,
+                currentFolderName = uiState.currentFolderName,
+                onFolderSelected = { folderId ->
+                    viewModel.moveToFolder(folderId)
+                    showMoveToFolderDialog = false
+                },
+                onDismiss = { showMoveToFolderDialog = false }
+            )
+        }
 
-    // ── Microphone rationale dialog ───────────────────────────────────────────
-    if (showMicRationale) {
-        AlertDialog(
-            onDismissRequest = { showMicRationale = false },
-            icon    = { Icon(Icons.Default.Mic, null, tint = MaterialTheme.colorScheme.primary) },
-            title   = { Text("Microphone Access") },
-            text    = { Text("Void Note needs microphone access to record voice notes.\n\nVoice notes are encrypted immediately — no audio is ever stored without encryption.") },
-            confirmButton = { TextButton(onClick = { showMicRationale = false; hasRequestedMicPermission = true; micPermissionState.launchPermissionRequest() }) { Text("Allow") } },
-            dismissButton = { TextButton(onClick = { showMicRationale = false }) { Text("Not now") } }
-        )
-    }
+        // ── Color picker bottom sheet ─────────────────────────────────────────────
+        // Replaces the old AlertDialog — a sheet gives the color dots more room
+        // and feels more natural for a picker triggered from the overflow menu.
+        if (showColorDialog) {
+            ModalBottomSheet(
+                onDismissRequest = { showColorDialog = false },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = MaterialTheme.colorScheme.surface,
+                dragHandle = { SheetDragHandle() }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.large)
+                        .padding(bottom = Spacing.extraLarge)
+                ) {
+                    Text(
+                        text = "NOTE COLOR",
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(bottom = Spacing.medium)
+                    )
+                    NoteColorPicker(
+                        currentColor = noteColor,
+                        onColorSelected = { color ->
+                            viewModel.updateNoteColor(color)
+                            showColorDialog = false
+                        }
+                    )
+                    Spacer(Modifier.height(Spacing.large))
+                    // "Clear" as a text row — cleaner than a button in a sheet
+                    Surface(
+                        onClick = { viewModel.updateNoteColor(null); showColorDialog = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = "Clear color",
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+        }
 
-    // ── Microphone permanently denied dialog ──────────────────────────────────
-    if (showMicSettingsDialog) {
-        AlertDialog(
-            onDismissRequest = { showMicSettingsDialog = false },
-            icon    = { Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary) },
-            title   = { Text("Microphone Permission Required") },
-            text    = { Text("Microphone access was denied.\n\nTo enable: Settings → Permissions → Microphone → Allow") },
-            confirmButton = { TextButton(onClick = { showMicSettingsDialog = false; context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = Uri.fromParts("package", context.packageName, null) }) }) { Text("Open Settings") } },
-            dismissButton = { TextButton(onClick = { showMicSettingsDialog = false }) { Text("Cancel") } }
-        )
+        // ── Camera rationale dialog ───────────────────────────────────────────────
+        if (showCameraRationale) {
+            AlertDialog(
+                onDismissRequest = { showCameraRationale = false },
+                icon = {
+                    Icon(
+                        Icons.Default.CameraAlt,
+                        null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                title = { Text("Camera Access") },
+                text = { Text("Void Note needs camera access to capture photos.\n\nPhotos are encrypted immediately and never saved to your gallery.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showCameraRationale = false; hasRequestedCameraPermission =
+                        true; cameraPermissionState.launchPermissionRequest()
+                    }) { Text("Allow") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showCameraRationale = false
+                    }) { Text("Not now") }
+                }
+            )
+        }
+
+        // ── Camera permanently denied dialog ─────────────────────────────────────
+        if (showCameraSettingsDialog) {
+            AlertDialog(
+                onDismissRequest = { showCameraSettingsDialog = false },
+                icon = {
+                    Icon(
+                        Icons.Default.Settings,
+                        null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                title = { Text("Camera Permission Required") },
+                text = { Text("Camera access was denied.\n\nTo enable: Settings → Permissions → Camera → Allow") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showCameraSettingsDialog =
+                            false; context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    })
+                    }) { Text("Open Settings") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCameraSettingsDialog = false }) {
+                        Text(
+                            "Cancel"
+                        )
+                    }
+                }
+            )
+        }
+
+        // ── Microphone rationale dialog ───────────────────────────────────────────
+        if (showMicRationale) {
+            AlertDialog(
+                onDismissRequest = { showMicRationale = false },
+                icon = { Icon(Icons.Default.Mic, null, tint = MaterialTheme.colorScheme.primary) },
+                title = { Text("Microphone Access") },
+                text = { Text("Void Note needs microphone access to record voice notes.\n\nVoice notes are encrypted immediately — no audio is ever stored without encryption.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showMicRationale = false; hasRequestedMicPermission =
+                        true; micPermissionState.launchPermissionRequest()
+                    }) { Text("Allow") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showMicRationale = false
+                    }) { Text("Not now") }
+                }
+            )
+        }
+
+        // ── Microphone permanently denied dialog ──────────────────────────────────
+        if (showMicSettingsDialog) {
+            AlertDialog(
+                onDismissRequest = { showMicSettingsDialog = false },
+                icon = {
+                    Icon(
+                        Icons.Default.Settings,
+                        null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                title = { Text("Microphone Permission Required") },
+                text = { Text("Microphone access was denied.\n\nTo enable: Settings → Permissions → Microphone → Allow") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showMicSettingsDialog =
+                            false; context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    })
+                    }) { Text("Open Settings") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showMicSettingsDialog = false
+                    }) { Text("Cancel") }
+                }
+            )
+        }
     }
 }
 
@@ -779,11 +1042,14 @@ private fun ToolbarSeparator() {
 private fun FormattingToolbar(
     isBoldActive: Boolean, isItalicActive: Boolean, isUnderlineActive: Boolean,
     isStrikethroughActive: Boolean, activeHeading: FormatType?, hasSelection: Boolean,
-    showInsertSheet: Boolean, showPreview: Boolean,
+    showInsertSheet: Boolean,
+    // showPreview retained so the formatting group can hide itself in preview mode,
+    // but preview/focus toggle buttons have moved to the TopBar.
+    showPreview: Boolean,
     onBoldClick: () -> Unit, onItalicClick: () -> Unit,
     onUnderlineClick: () -> Unit, onStrikethroughClick: () -> Unit, onHeadingClick: () -> Unit,
     onClearClick: () -> Unit, onInsertClick: () -> Unit, onTodoClick: () -> Unit,
-    onNumberedListClick: () -> Unit, onPreviewClick: () -> Unit,
+    onNumberedListClick: () -> Unit,
     wordCount: Int = 0, charCount: Int = 0
 ) {
     Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, tonalElevation = 0.dp) {
@@ -825,13 +1091,7 @@ private fun FormattingToolbar(
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                // Word/char count hidden in preview mode
-                // Stats: word/char count top line, reading time below.
-                // Both are labelSmall (~11sp), so two lines ≈ 24sp — well within the
-                // 36dp button height that already drives the Row's height. No bar growth.
-                //
-                // Reading time formula: average adult reads ~200 words per minute.
-                // coerceAtLeast(1) means a blank note shows "~1m" not "~0m".
+                // Word/char count and reading time — hidden in preview mode
                 if (!showPreview) {
                     val readTimeMin = (wordCount / 200.0).let {
                         if (it < 1.0) 1 else kotlin.math.ceil(it).toInt()
@@ -841,28 +1101,17 @@ private fun FormattingToolbar(
                         horizontalAlignment   = Alignment.End,
                         verticalArrangement   = Arrangement.Center
                     ) {
-                        // Line 1 — word count · character count
                         Text(
                             text  = "${wordCount}w · ${charCount}c",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.40f)
                         )
-                        // Line 2 — estimated reading time
                         Text(
                             text  = "~${readTimeMin} min read",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
                         )
                     }
-                }
-                // Preview toggle — always visible so user can enter/exit preview
-                IconButton(onClick = onPreviewClick, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        imageVector = if (showPreview) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = if (showPreview) "Exit preview" else "Preview formatting",
-                        modifier = Modifier.size(18.dp),
-                        tint = if (showPreview) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
                 }
             }
         }
@@ -884,11 +1133,16 @@ private fun TopBar(
     onDeleteClick: () -> Unit,
     onShareClick: () -> Unit,
     lastSaved: Long,
-    // SPRINT 5: folder info for display + callback to open the dialog
     currentFolderName: String? = null,
     onMoveToFolderClick: () -> Unit = {},
     currentColor: NoteColor? = null,
-    onColorClick: () -> Unit = {}
+    onColorClick: () -> Unit = {},
+    // SPRINT 10: Preview + Focus Mode moved here from FormattingToolbar so they
+    // are always visible and never crowded out by formatting buttons.
+    showPreview: Boolean = false,
+    isFocusMode: Boolean = false,
+    onPreviewClick: () -> Unit = {},
+    onFocusToggle: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     TopAppBar(
@@ -912,6 +1166,24 @@ private fun TopBar(
             }
         },
         actions = {
+            // Preview toggle — tinted primary when active
+            IconButton(onClick = onPreviewClick) {
+                Icon(
+                    imageVector        = if (showPreview) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = if (showPreview) "Exit preview" else "Preview formatting",
+                    tint               = if (showPreview) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+            // Focus mode toggle — always reachable here, never crowded
+            IconButton(onClick = onFocusToggle) {
+                Icon(
+                    imageVector        = if (isFocusMode) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                    contentDescription = if (isFocusMode) "Exit focus mode" else "Enter focus mode",
+                    tint               = if (isFocusMode) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
             Box {
                 IconButton(onClick = { showMenu = true }) {
                     Icon(Icons.Default.MoreVert, "More")
