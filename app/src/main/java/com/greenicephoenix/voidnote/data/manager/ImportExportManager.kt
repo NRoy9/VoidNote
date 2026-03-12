@@ -680,6 +680,265 @@ class ImportExportManager @Inject constructor(
         }
     }
 
+    // ─── MARKDOWN IMPORT ──────────────────────────────────────────────────────
+
+    /**
+     * Count how many importable .md notes are in a single .md file or a .zip of .md files.
+     * Called for the preview card BEFORE the actual import — fast, no encryption, no DB writes.
+     *
+     * @return The number of .md files found (each becomes one note).
+     */
+    suspend fun countMarkdownNotes(contentResolver: ContentResolver, uri: Uri): Int {
+        return try {
+            val name = uri.lastPathSegment?.lowercase() ?: ""
+            contentResolver.openInputStream(uri)?.use { stream ->
+                if (name.endsWith(".zip")) {
+                    // Count .md entries inside the ZIP
+                    var count = 0
+                    ZipInputStream(stream).use { zip ->
+                        var entry = zip.nextEntry
+                        while (entry != null) {
+                            if (!entry.isDirectory && entry.name.endsWith(".md", ignoreCase = true)) count++
+                            zip.closeEntry()
+                            entry = zip.nextEntry
+                        }
+                    }
+                    count
+                } else {
+                    // Single .md file = always 1 note
+                    1
+                }
+            } ?: 0
+        } catch (e: Exception) { 0 }
+    }
+
+    /**
+     * Import notes from a single .md file or a ZIP of .md files.
+     *
+     * SUPPORTED INPUT:
+     *   Single .md  — one note, YAML front matter optional
+     *   .zip        — any ZIP containing .md files (Void Note plain text export,
+     *                 Obsidian vault export, Bear export, or hand-crafted)
+     *
+     * YAML FRONT MATTER (optional, between leading --- delimiters):
+     *   title:    Note title (falls back to filename without extension)
+     *   tags:     Comma-separated tag list
+     *   folder:   Folder name — looked up by name, created if missing
+     *   pinned:   true / false
+     *   archived: true / false
+     *
+     * ENCRYPTION:
+     *   title, content and tags are individually encrypted with the session key
+     *   before being written to the DB — same as any note created in the editor.
+     *
+     * DEDUPLICATION:
+     *   Each imported note gets a fresh UUID. Unlike .vnbackup imports, we do NOT
+     *   check for duplicates by ID (the originating app may have different IDs).
+     *   Calling import twice WILL create duplicates — this is documented in the UI.
+     *
+     * @return ImportResult with notesImported, foldersImported, skippedDuplicates (0 — see above)
+     */
+    suspend fun importMarkdown(contentResolver: ContentResolver, uri: Uri): ImportResult {
+        var notesImported  = 0
+        var foldersCreated = 0
+
+        // Cache: folderName → folderId so we create each folder at most once per import
+        val folderCache = mutableMapOf<String, String>()
+
+        // Pre-load all existing folder names to avoid duplicates
+        val existingFolders = folderDao.getAllFoldersOnce()
+        existingFolders.forEach { f -> folderCache[f.name.lowercase()] = f.id }
+
+        try {
+            val name = uri.lastPathSegment?.lowercase() ?: ""
+            contentResolver.openInputStream(uri)?.use { stream ->
+                if (name.endsWith(".zip")) {
+                    ZipInputStream(stream).use { zip ->
+                        var entry = zip.nextEntry
+                        while (entry != null) {
+                            if (!entry.isDirectory && entry.name.endsWith(".md", ignoreCase = true)) {
+                                val text     = zip.readBytes().toString(Charsets.UTF_8)
+                                // Derive a fallback title from the file path (last segment, no extension)
+                                val fallback = entry.name.substringAfterLast('/').removeSuffix(".md")
+                                val parsed   = parseMarkdownFile(text, fallback)
+                                val folderId = resolveMarkdownFolder(parsed.folderName, folderCache) { foldersCreated++ }
+                                insertMarkdownNote(parsed, folderId)
+                                notesImported++
+                            }
+                            zip.closeEntry()
+                            entry = zip.nextEntry
+                        }
+                    }
+                } else {
+                    // Single .md file
+                    val text     = stream.readBytes().toString(Charsets.UTF_8)
+                    val fallback = uri.lastPathSegment?.removeSuffix(".md")?.removeSuffix(".MD") ?: "Imported Note"
+                    val parsed   = parseMarkdownFile(text, fallback)
+                    val folderId = resolveMarkdownFolder(parsed.folderName, folderCache) { foldersCreated++ }
+                    insertMarkdownNote(parsed, folderId)
+                    notesImported++
+                }
+            }
+        } catch (e: Exception) {
+            return ImportResult(
+                notesImported       = notesImported,
+                foldersImported     = foldersCreated,
+                blocksImported      = 0,
+                mediaFilesRestored  = 0,
+                skippedDuplicates   = 0,
+                error               = "Import failed: ${e.message}"
+            )
+        }
+
+        return ImportResult(
+            notesImported      = notesImported,
+            foldersImported    = foldersCreated,
+            blocksImported     = 0,
+            mediaFilesRestored = 0,
+            skippedDuplicates  = 0
+        )
+    }
+
+    /**
+     * Parse a single .md file into a structured note.
+     *
+     * YAML FRONT MATTER:
+     *   The front matter block (between the first two --- lines) is parsed
+     *   line-by-line. Only the keys listed below are read; all others ignored.
+     *   Keys are case-insensitive for compatibility with other apps.
+     *
+     * TITLE RESOLUTION ORDER:
+     *   1. `title:` from YAML front matter
+     *   2. First # Heading in the body content
+     *   3. [fallbackTitle] — typically derived from the filename
+     *
+     * @param text          Full file text (UTF-8)
+     * @param fallbackTitle Title to use when YAML and heading are both absent
+     */
+    private fun parseMarkdownFile(text: String, fallbackTitle: String): ParsedMarkdownNote {
+        val lines = text.lines()
+        var i     = 0
+
+        var title:     String?       = null
+        var folderName: String?      = null
+        var tags:       List<String> = emptyList()
+        var isPinned   = false
+        var isArchived = false
+
+        // ── Parse YAML front matter ────────────────────────────────────────────
+        // Only attempt parsing if the file starts with exactly "---" on its own line.
+        if (lines.getOrNull(0)?.trim() == "---") {
+            i = 1 // skip opening delimiter
+            while (i < lines.size && lines[i].trim() != "---") {
+                val line = lines[i].trim()
+                // Split on first colon only — values may contain colons (e.g. URLs)
+                val colonIdx = line.indexOf(':')
+                if (colonIdx > 0) {
+                    val key   = line.substring(0, colonIdx).trim().lowercase()
+                    val value = line.substring(colonIdx + 1).trim()
+                    when (key) {
+                        "title"    -> title      = value.ifBlank { null }
+                        "folder"   -> folderName = value.ifBlank { null }
+                        "tags"     -> tags       = value.split(',').map { it.trim() }.filter { it.isNotBlank() }.take(5)
+                        "pinned"   -> isPinned   = value.lowercase() == "true"
+                        "archived" -> isArchived = value.lowercase() == "true"
+                    }
+                }
+                i++
+            }
+            i++ // skip closing "---"
+        }
+
+        // ── Remaining lines are the note content ──────────────────────────────
+        val contentLines = lines.drop(i)
+        val content      = contentLines.joinToString("\n").trim()
+
+        // ── Resolve title if YAML didn't supply one ────────────────────────────
+        if (title == null) {
+            // Look for the first # heading in the body
+            val headingLine = contentLines.firstOrNull { it.trimStart().startsWith("# ") }
+            title = headingLine?.trim()?.removePrefix("# ")?.trim()
+        }
+        if (title.isNullOrBlank()) title = fallbackTitle
+
+        return ParsedMarkdownNote(
+            title      = title!!,
+            content    = content,
+            tags       = tags,
+            folderName = folderName,
+            isPinned   = isPinned,
+            isArchived = isArchived
+        )
+    }
+
+    /**
+     * Resolve (or create) a folder by name for a markdown import.
+     * Uses [folderCache] to avoid duplicate DB writes per import session.
+     * Calls [onFolderCreated] when a new folder row is inserted.
+     *
+     * @return The folder ID, or null if folderName is null/blank.
+     */
+    private suspend fun resolveMarkdownFolder(
+        folderName: String?,
+        folderCache: MutableMap<String, String>,
+        onFolderCreated: () -> Unit
+    ): String? {
+        if (folderName.isNullOrBlank()) return null
+        val key = folderName.lowercase()
+        return folderCache.getOrPut(key) {
+            // No existing folder by this name — create one
+            val newId = java.util.UUID.randomUUID().toString()
+            folderDao.insertFolder(
+                FolderEntity(
+                    id          = newId,
+                    name        = folderName,
+                    createdAt   = System.currentTimeMillis()
+                )
+            )
+            onFolderCreated()
+            newId
+        }
+    }
+
+    /**
+     * Encrypt and insert a single parsed markdown note into the DB.
+     * Each call gets a fresh UUID — no dedup by ID.
+     */
+    private suspend fun insertMarkdownNote(parsed: ParsedMarkdownNote, folderId: String?) {
+        val id        = java.util.UUID.randomUUID().toString()
+        val now       = System.currentTimeMillis()
+        val encTitle  = encryption.encrypt(parsed.title)
+        val encContent = encryption.encrypt(parsed.content)
+        val encTags   = parsed.tags.map { encryption.encrypt(it) }
+
+        noteDao.insertNote(
+            NoteEntity(
+                id             = id,
+                title          = encTitle,
+                content        = encContent,
+                contentFormats = emptyList(),
+                createdAt      = now,
+                updatedAt      = now,
+                isPinned       = parsed.isPinned,
+                isArchived     = parsed.isArchived,
+                isTrashed      = false,
+                tags           = encTags,
+                folderId       = folderId,
+                color          = null
+            )
+        )
+    }
+
+    /** Intermediate model used only during markdown parsing — never stored. */
+    private data class ParsedMarkdownNote(
+        val title:      String,
+        val content:    String,
+        val tags:       List<String>,
+        val folderName: String?,
+        val isPinned:   Boolean,
+        val isArchived: Boolean
+    )
+
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     /**

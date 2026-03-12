@@ -671,37 +671,50 @@ class NoteEditorViewModel @Inject constructor(
                 currentBlocks.isNotEmpty()
         if (!hasAnyContent) return
 
-        // B5 FIX — Auto-generate "Untitled Note N" for new notes with blank titles.
+        // SMART AUTO-TITLE — derives the title from note content instead of
+        // always falling back to "Untitled Note N".
         //
-        // WHY wasNewOnOpen guard?
-        // Without it, existing notes that happen to have a blank title (from before
-        // this sprint) would get re-titled on their next save — wrong behaviour.
+        // PRIORITY ORDER (evaluated top-to-bottom, first match wins):
+        //   1. userTypedTitle  → user owns the title, never touch it
+        //   2. !wasNewOnOpen   → existing note from DB, never auto-rename it
+        //   3. content text    → first non-blank line, markdown stripped, ≤50 chars
+        //   4. blocks only     → block-aware name ("Checklist", "Voice note", etc.)
+        //   5. truly empty     → "Untitled Note N" generated once via counter
         //
-        // WHY autoTitleGenerated guard?
-        // saveNote() is called on every auto-save (every 500ms while typing blocks).
-        // Without this flag, the N would increment on every save — producing a
-        // different number each time. autoTitleGenerated ensures we generate it once.
+        // Cases 3 & 4 re-derive on EVERY save so the title tracks edits in real time
+        // (e.g. user types body text → title appears → user keeps typing → title updates).
+        // Case 5 uses autoTitleGenerated to ensure N is only chosen once.
         //
-        // WHY userTypedTitle guard?
-        // If the user typed something in the title field (even if they cleared it),
-        // we respect their intent and don't override with an auto-title.
-        //
-        // NOTE: We store the real title in the DB (not just show it in the card).
-        // This means search, export, and NoteCard all work with no special cases.
-        val resolvedTitle = if (
-            state.title.isBlank() &&
-            wasNewOnOpen &&
-            !autoTitleGenerated &&
-            !userTypedTitle
-        ) {
-            autoTitleGenerated = true  // prevent re-numbering on future auto-saves
-            val number = noteRepository.getNewUntitledNoteNumber()
-            val generated = "Untitled Note $number"
-            // Reflect in UI so the title field shows the auto-title if user scrolls up
-            _uiState.value = _uiState.value.copy(title = generated)
-            generated
-        } else {
-            state.title
+        // The resolved title is written back to uiState so the title field shows it
+        // if the user scrolls up — no special-casing needed in the Screen.
+        val resolvedTitle: String = when {
+            // User explicitly typed in the title field — always honour it as-is
+            userTypedTitle -> state.title
+
+            // Existing note loaded from DB — never auto-rename retroactively
+            !wasNewOnOpen  -> state.title
+
+            // Body text exists → derive from first meaningful line
+            state.content.isNotBlank() -> deriveSmartTitle(state.content)
+
+            // No text but blocks exist → name after the dominant block type
+            currentBlocks.isNotEmpty() -> deriveBlockTitle(currentBlocks)
+
+            // Truly blank note — fall back to numbered title, generated only once
+            !autoTitleGenerated -> {
+                autoTitleGenerated = true
+                val number = noteRepository.getNewUntitledNoteNumber()
+                "Untitled Note $number"
+            }
+
+            // autoTitleGenerated already true and still blank — keep existing title
+            else -> state.title
+        }
+
+        // Reflect any auto-derived title back into UI state so the title field
+        // shows it without a round-trip read from the DB
+        if (resolvedTitle != state.title) {
+            _uiState.value = _uiState.value.copy(title = resolvedTitle)
         }
 
         val rawContent = DocumentParser.buildRawContent(
@@ -936,6 +949,89 @@ class NoteEditorViewModel @Inject constructor(
     fun removeTag(tag: String) {
         _uiState.value = _uiState.value.copy(tags = _uiState.value.tags - tag)
         scheduleAutoSave()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SMART AUTO-TITLE HELPERS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Derive a display title from the first meaningful line of body content.
+     *
+     * WHAT IT STRIPS (order matters — applied left to right):
+     *   Markdown headings  : "### My Title" → "My Title"
+     *   Bold markers       : "**hello**"    → "hello"
+     *   Italic markers     : "*hello*"      → "hello"
+     *   List prefixes      : "- item"       → "item"  (dash or bullet)
+     *   Leading whitespace : "  text"       → "text"
+     *
+     * TRUNCATION:
+     *   If the stripped line is longer than MAX_TITLE_LENGTH characters it is
+     *   trimmed at a word boundary (no mid-word cut) and "…" is appended.
+     *   MAX_TITLE_LENGTH = 50 matches the NoteCard preview width on most phones.
+     *
+     * EMPTY INPUT:
+     *   Returns an empty string — callers are responsible for falling back.
+     */
+    private fun deriveSmartTitle(content: String): String {
+        val MAX_TITLE_LENGTH = 50
+
+        // Find the first line that has visible characters
+        val firstLine = content.lines().firstOrNull { it.isNotBlank() } ?: return ""
+
+        val stripped = firstLine
+            .trim()
+            // Strip markdown heading prefixes (### ## #)
+            .removePrefix("### ").removePrefix("## ").removePrefix("# ")
+            // Strip bold markers (**text** or __text__)
+            .removePrefix("**").removeSuffix("**")
+            .removePrefix("__").removeSuffix("__")
+            // Strip italic markers (*text* or _text_)
+            .removePrefix("*").removeSuffix("*")
+            .removePrefix("_").removeSuffix("_")
+            // Strip unordered list prefixes (- or •)
+            .removePrefix("- ").removePrefix("• ")
+            // Strip blockquote marker
+            .removePrefix("> ")
+            .trim()
+
+        if (stripped.isEmpty()) return ""
+
+        // Truncate cleanly at a space boundary to avoid mid-word cuts
+        return if (stripped.length <= MAX_TITLE_LENGTH) {
+            stripped
+        } else {
+            // Walk back from MAX_TITLE_LENGTH to the nearest space
+            val cutAt = stripped.lastIndexOf(' ', MAX_TITLE_LENGTH)
+                .takeIf { it > MAX_TITLE_LENGTH / 2 }  // only if the space isn't too far back
+                ?: MAX_TITLE_LENGTH
+            stripped.take(cutAt).trimEnd() + "…"
+        }
+    }
+
+    /**
+     * Derive a title from the inline blocks present when body text is blank.
+     *
+     * Covers three common block-only note patterns:
+     *   • Voice note  — only AUDIO blocks                  → "Voice note"
+     *   • Photo note  — IMAGE blocks (no todo)             → "Note with image"
+     *   • Checklist   — any TODO block                     → "Checklist"
+     *   • Mixed       — multiple types                     → "Note" (generic)
+     *
+     * This is called only after deriveSmartTitle() returns empty, so a note
+     * that has both text and blocks will always use the text-derived title.
+     */
+    private fun deriveBlockTitle(blocks: List<InlineBlock>): String {
+        val hasImage = blocks.any { it.type == InlineBlockType.IMAGE }
+        val hasAudio = blocks.any { it.type == InlineBlockType.AUDIO }
+        val hasTodo  = blocks.any { it.type == InlineBlockType.TODO  }
+
+        return when {
+            hasAudio && !hasImage && !hasTodo -> "Voice note"
+            hasImage && !hasTodo              -> "Note with image"
+            hasTodo  && !hasImage && !hasAudio -> "Checklist"
+            else                              -> "Note"
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

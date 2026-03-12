@@ -105,6 +105,13 @@ class NoteRepositoryImpl @Inject constructor(
     override fun getNoteCount(): Flow<Int> =
         noteDao.getNoteCount()
 
+    // Count-only flows — pass straight through, no decryption needed (plain integers)
+    override fun getArchivedNoteCount(): Flow<Int> =
+        noteDao.getArchivedNoteCount()
+
+    override fun getTrashedNoteCount(): Flow<Int> =
+        noteDao.getTrashedNoteCount()
+
     // ─── Write ────────────────────────────────────────────────────────────────
 
     override suspend fun insertNote(note: Note, folderId: String?) {

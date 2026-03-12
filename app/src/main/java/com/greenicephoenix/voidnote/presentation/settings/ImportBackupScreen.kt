@@ -66,14 +66,13 @@ fun ImportBackupScreen(
     val context = LocalContext.current
 
     // ── File picker launcher ──────────────────────────────────────────────────
-    // "application/octet-stream" matches .vnbackup files.
-    // We also pass an array of MIME types for broader compatibility across
-    // file managers — some may not recognise the custom extension.
+    // Accepts .vnbackup, .md, and .zip files.
+    // Multiple MIME types cover different file managers — some report markdown
+    // as text/plain, others as text/markdown; "*/*" is the safe fallback.
     val fileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            // Try to get a human-readable filename from the URI
             val displayName = try {
                 val cursor = context.contentResolver.query(uri, null, null, null, null)
                 cursor?.use {
@@ -123,14 +122,19 @@ fun ImportBackupScreen(
                     IdleContent(
                         onChooseFile = {
                             fileLauncher.launch(
-                                // Both MIME types ensure maximum file manager compatibility
-                                arrayOf("application/octet-stream", "*/*")
+                                arrayOf(
+                                    "application/octet-stream", // .vnbackup
+                                    "application/zip",          // .zip
+                                    "text/markdown",            // .md (some file managers)
+                                    "text/plain",               // .md (other file managers)
+                                    "*/*"                       // safe fallback
+                                )
                             )
                         }
                     )
                 }
 
-                // ── READING HEADER: spinner while ZIP header is read ──────────
+                // ── READING HEADER: spinner while file type is detected ───────
                 is ImportBackupUiState.ReadingHeader -> {
                     Box(
                         modifier          = Modifier.fillMaxSize(),
@@ -142,7 +146,7 @@ fun ImportBackupScreen(
                         ) {
                             CircularProgressIndicator()
                             Text(
-                                text  = "Reading backup file…",
+                                text  = "Reading file…",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
@@ -150,16 +154,18 @@ fun ImportBackupScreen(
                     }
                 }
 
-                // ── FILE READY: info card + password entry ────────────────────
+                // ── FILE READY: .vnbackup — show info card + password entry ───
                 is ImportBackupUiState.FileReady -> {
                     FileReadyContent(
                         state        = state,
                         password     = password,
                         showPassword = showPassword,
                         onChooseFile = {
-                            fileLauncher.launch(arrayOf("application/octet-stream", "*/*"))
+                            fileLauncher.launch(
+                                arrayOf("application/octet-stream", "application/zip", "text/markdown", "text/plain", "*/*")
+                            )
                         },
-                        onPasswordChange    = viewModel::onPasswordChange,
+                        onPasswordChange     = viewModel::onPasswordChange,
                         onToggleShowPassword = viewModel::toggleShowPassword,
                         onImport = {
                             viewModel.confirmImport(context.contentResolver)
@@ -167,27 +173,41 @@ fun ImportBackupScreen(
                     )
                 }
 
+                // ── MARKDOWN READY: .md or .zip — no password needed ──────────
+                // Just show a preview card (file name + note count) and an
+                // "Import" button. No password step because markdown files
+                // are plain text — there is nothing to decrypt.
+                is ImportBackupUiState.MarkdownReady -> {
+                    MarkdownReadyContent(
+                        state        = state,
+                        onChooseFile = {
+                            fileLauncher.launch(
+                                arrayOf("application/octet-stream", "application/zip", "text/markdown", "text/plain", "*/*")
+                            )
+                        },
+                        onImport = {
+                            viewModel.confirmMarkdownImport(context.contentResolver)
+                        }
+                    )
+                }
+
                 // ── SUCCESS: show import summary ──────────────────────────────
                 is ImportBackupUiState.Success -> {
                     SuccessContent(
-                        state    = state,
-                        onDone   = onNavigateBack
+                        state  = state,
+                        onDone = onNavigateBack
                     )
                 }
 
                 // ── ERROR: show error and allow retry ─────────────────────────
                 is ImportBackupUiState.Error -> {
                     ErrorContent(
-                        message      = state.message,
-                        onTryAgain   = viewModel::resetToIdle,
+                        message        = state.message,
+                        onTryAgain     = viewModel::resetToIdle,
                         onNavigateBack = onNavigateBack
                     )
                 }
 
-                // ── IMPORTING: non-dismissible progress dialog ────────────────
-                // Note: this is rendered as a Dialog overlay BELOW in the same Box,
-                // not as a separate composable path, so the underlying FileReady
-                // content stays visible behind it.
                 else -> Unit
             }
 
@@ -230,9 +250,11 @@ private fun IdleContent(onChooseFile: () -> Unit) {
         )
 
         Text(
-            text      = "Merge notes from a .vnbackup file into your current vault.\n\n" +
+            text      = "Merge notes from a .vnbackup file into your current vault, " +
+                    "or import plain Markdown (.md) files and Markdown ZIPs from other apps.\n\n" +
                     "Your existing notes will not be deleted. " +
-                    "New notes will be added and duplicates will be skipped.",
+                    "For .vnbackup files, duplicates are skipped. " +
+                    "For Markdown files, each import always creates new notes.",
             style     = MaterialTheme.typography.bodyMedium,
             color     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             textAlign = TextAlign.Center
@@ -311,6 +333,134 @@ private fun MergeRuleRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
+    }
+}
+
+// ─── Markdown ready content ────────────────────────────────────────────────────
+//
+// Shown when a .md or .zip file is selected.
+// No password needed — just a preview card + one Import button.
+
+@Composable
+private fun MarkdownReadyContent(
+    state:        ImportBackupUiState.MarkdownReady,
+    onChooseFile: () -> Unit,
+    onImport:     () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(Spacing.large),
+        verticalArrangement = Arrangement.spacedBy(Spacing.medium)
+    ) {
+        Spacer(modifier = Modifier.height(Spacing.large))
+
+        // ── File preview card ─────────────────────────────────────────────────
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors   = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(
+                modifier            = Modifier.padding(Spacing.large),
+                verticalArrangement = Arrangement.spacedBy(Spacing.small)
+            ) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.small)
+                ) {
+                    Icon(
+                        imageVector        = Icons.Default.Description,
+                        contentDescription = null,
+                        modifier           = Modifier.size(20.dp),
+                        tint               = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text       = state.fileName,
+                        style      = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = Spacing.small),
+                    color    = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                )
+
+                // Note count line
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text  = "Notes found",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text       = if (state.noteCount > 0) state.noteCount.toString() else "—",
+                        style      = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        // ── Info chip — no password needed ────────────────────────────────────
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors   = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+            )
+        ) {
+            Row(
+                modifier              = Modifier.padding(Spacing.medium),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.small)
+            ) {
+                Icon(
+                    imageVector        = Icons.Default.Info,
+                    contentDescription = null,
+                    modifier           = Modifier.size(16.dp),
+                    tint               = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text  = "Markdown files are plain text — no password required. " +
+                            "Each import always creates new notes, so importing the same file twice will duplicate them.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // ── Actions ───────────────────────────────────────────────────────────
+        Button(
+            onClick  = onImport,
+            modifier = Modifier.fillMaxWidth(),
+            enabled  = state.noteCount > 0
+        ) {
+            Icon(
+                imageVector        = Icons.Default.Download,
+                contentDescription = null,
+                modifier           = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(Spacing.small))
+            Text("Import ${if (state.noteCount > 0) state.noteCount.toString() + " Notes" else ""}")
+        }
+
+        OutlinedButton(
+            onClick  = onChooseFile,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Choose Different File")
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.medium))
     }
 }
 

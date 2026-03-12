@@ -160,6 +160,20 @@ interface NoteDao {
     fun getNoteCount(): Flow<Int>
 
     /**
+     * Count of archived notes (not trashed). Shown on Settings storage card
+     * and as a badge on the Archive row in Data Management.
+     */
+    @Query("SELECT COUNT(*) FROM notes WHERE isArchived = 1 AND isTrashed = 0")
+    fun getArchivedNoteCount(): Flow<Int>
+
+    /**
+     * Count of notes currently in the trash. Shown on Settings storage card
+     * and as a badge on the Trash row in Data Management.
+     */
+    @Query("SELECT COUNT(*) FROM notes WHERE isTrashed = 1")
+    fun getTrashedNoteCount(): Flow<Int>
+
+    /**
      * One-shot count of non-trashed notes. Used to generate "Untitled Note N" titles.
      *
      * WHY NOT searchable by title pattern?

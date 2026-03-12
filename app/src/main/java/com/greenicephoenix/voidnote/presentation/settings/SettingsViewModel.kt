@@ -2,7 +2,6 @@ package com.greenicephoenix.voidnote.presentation.settings
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.greenicephoenix.voidnote.data.local.PreferencesManager
@@ -21,6 +20,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.core.net.toUri
 
 /**
  * SettingsViewModel — settings screen state and actions.
@@ -65,14 +65,26 @@ class SettingsViewModel @Inject constructor(
     private val _updateCheckState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        noteRepository.getNoteCount(),
-        folderRepository.getFolderCount(),
+        // Inner combine: the four DB count streams → one data class to keep
+        // the outer combine under the 5-parameter limit.
+        combine(
+            noteRepository.getNoteCount(),
+            folderRepository.getFolderCount(),
+            noteRepository.getArchivedNoteCount(),
+            noteRepository.getTrashedNoteCount()
+        ) { noteCount, folderCount, archiveCount, trashCount ->
+            // Pack all four counts into a simple array so the outer combine
+            // receives a single value instead of four separate parameters.
+            intArrayOf(noteCount, folderCount, archiveCount, trashCount)
+        },
         currentTheme,
         _updateCheckState
-    ) { noteCount: Int, folderCount: Int, theme: AppTheme, updateState: UpdateCheckState ->
+    ) { counts, theme, updateState ->
         SettingsUiState(
-            noteCount        = noteCount,
-            folderCount      = folderCount,
+            noteCount        = counts[0],
+            folderCount      = counts[1],
+            archiveCount     = counts[2],
+            trashCount       = counts[3],
             currentTheme     = theme,
             appVersion       = getAppVersion(),
             updateCheckState = updateState
@@ -104,14 +116,14 @@ class SettingsViewModel @Inject constructor(
     /** Opens the GitHub download URL in the device browser. */
     fun openDownloadUrl(url: String) {
         context.startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }
 
     /** Resets the update state to Idle after the user dismisses the result. */
     fun dismissUpdateResult() {
         _updateCheckState.update { current ->
-            if (current !is UpdateCheckState.Checking) UpdateCheckState.Idle else current
+            current as? UpdateCheckState.Checking ?: UpdateCheckState.Idle
         }
     }
 
