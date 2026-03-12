@@ -105,33 +105,67 @@ fun SettingsScreen(
             contentPadding = PaddingValues(vertical = Spacing.medium)
         ) {
 
-            // ── APPEARANCE ───────────────────────────────────────────────────
-            item { SectionHeader(text = "APPEARANCE") }
+            // ─────────────────────────────────────────────────────────────────
+            // GROUP 01 · DISPLAY
+            // Single item. Keeping it alone makes the section feel intentional
+            // rather than buried inside a bigger group.
+            // ─────────────────────────────────────────────────────────────────
+            item { SectionHeader(text = "DISPLAY") }
             item {
                 SettingsItem(
                     icon     = Icons.Default.Palette,
                     title    = "Theme",
-                    subtitle = currentTheme.displayName,
+                    // Uppercase value is the 20% Command Palette influence —
+                    // reads like key → VALUE, subtle but distinctive.
+                    subtitle = currentTheme.displayName.uppercase(),
                     onClick  = { showThemeDialog = true }
                 )
             }
 
-            item { Spacer(modifier = Modifier.height(Spacing.large)) }
+            // ─────────────────────────────────────────────────────────────────
+            // GROUP 02 · ACCESS
+            // Everything about getting into the app unified here.
+            // Previously: Biometric/Password in SECURITY, Camera/Mic in PERMISSIONS.
+            // Unified rationale: they all answer "who can open my notes".
+            // ─────────────────────────────────────────────────────────────────
+            item { SectionHeader(text = "ACCESS") }
 
-            // ── PERMISSIONS ──────────────────────────────────────────────────
-            item { SectionHeader(text = "PERMISSIONS") }
+            item {
+                val biometricAvailable = viewModel.isBiometricAvailable
+                SettingsToggleItem(
+                    icon     = Icons.Default.Lock,
+                    title    = "Biometric Lock",
+                    subtitle = if (biometricAvailable)
+                        "Fingerprint or PIN to open app"
+                    else
+                        "Set up a screen lock in Android Settings first",
+                    checked  = isBiometricEnabled && biometricAvailable,
+                    enabled  = biometricAvailable,
+                    onCheckedChange = { if (biometricAvailable) viewModel.setBiometricLock(it) }
+                )
+            }
 
+            item {
+                SettingsItem(
+                    icon     = Icons.Default.LockReset,
+                    title    = "Change Vault Password",
+                    subtitle = "Re-encrypts all notes with a new password",
+                    onClick  = onNavigateToChangePassword
+                )
+            }
+
+            // Camera permission
             item {
                 val permissionStatus = cameraPermissionState.status
                 val (subtitle, actionLabel) = when {
                     permissionStatus.isGranted ->
-                        "Granted — camera captures stay private, never in gallery" to null
+                        "Granted — captures stay private, never in gallery" to null
                     permissionStatus.shouldShowRationale ->
-                        "Denied — tap to allow (photos are encrypted, never in gallery)" to "Allow"
+                        "Denied — tap to allow (photos encrypted, never in gallery)" to "Allow"
                     hasRequestedFromSettings ->
                         "Permanently denied — tap to open App Settings" to "Open Settings"
                     else ->
-                        "Not yet granted — tap to allow camera for note photos" to "Allow"
+                        "Not yet granted — needed for note photos" to "Allow"
                 }
                 PermissionSettingsItem(
                     icon        = Icons.Default.CameraAlt,
@@ -159,17 +193,18 @@ fun SettingsScreen(
                 )
             }
 
+            // Microphone permission
             item {
                 val micStatus = micPermissionState.status
                 val (micSubtitle, micActionLabel) = when {
                     micStatus.isGranted ->
-                        "Granted — voice notes are encrypted immediately after recording" to null
+                        "Granted — recordings encrypted immediately after capture" to null
                     micStatus.shouldShowRationale ->
                         "Denied — tap to allow (audio encrypted before saving)" to "Allow"
                     hasRequestedMicFromSettings ->
                         "Permanently denied — tap to open App Settings" to "Open Settings"
                     else ->
-                        "Not yet granted — tap to allow microphone for voice notes" to "Allow"
+                        "Not yet granted — needed for voice notes" to "Allow"
                 }
                 PermissionSettingsItem(
                     icon        = Icons.Default.Mic,
@@ -196,71 +231,24 @@ fun SettingsScreen(
                 )
             }
 
-            item { Spacer(modifier = Modifier.height(Spacing.large)) }
+            // ─────────────────────────────────────────────────────────────────
+            // GROUP 03 · VAULT
+            // Storage stats sit at the top to give context before the user
+            // reaches Export/Import/Clear. All 4 stats shown so the card
+            // reflects real vault state.
+            // ─────────────────────────────────────────────────────────────────
+            item { SectionHeader(text = "VAULT") }
 
-            // ── STORAGE ──────────────────────────────────────────────────────
-            item { SectionHeader(text = "STORAGE") }
             item {
                 StorageInfoCard(
-                    noteCount   = uiState.noteCount,
-                    folderCount = uiState.folderCount
+                    noteCount    = uiState.noteCount,
+                    folderCount  = uiState.folderCount,
+                    archiveCount = uiState.archiveCount,
+                    trashCount   = uiState.trashCount
                 )
             }
 
-            item { Spacer(modifier = Modifier.height(Spacing.large)) }
-
-            // ── SECURITY ─────────────────────────────────────────────────────
-            item { SectionHeader(text = "SECURITY") }
-            item {
-                val biometricAvailable = viewModel.isBiometricAvailable
-                SettingsToggleItem(
-                    icon     = Icons.Default.Lock,
-                    title    = "Biometric Lock",
-                    subtitle = if (biometricAvailable)
-                        "Require fingerprint or PIN to open app"
-                    else
-                        "Set up a screen lock in Android Settings first",
-                    checked  = isBiometricEnabled && biometricAvailable,
-                    enabled  = biometricAvailable,
-                    onCheckedChange = { if (biometricAvailable) viewModel.setBiometricLock(it) }
-                )
-            }
-
-            item {
-                SettingsItem(
-                    icon     = Icons.Default.LockReset,
-                    title    = "Change Vault Password",
-                    subtitle = "Re-encrypts all notes with a new password",
-                    onClick  = onNavigateToChangePassword
-                )
-            }
-
-            item { Spacer(modifier = Modifier.height(Spacing.large)) }
-
-            // ── DATA MANAGEMENT ──────────────────────────────────────────────
-            item { SectionHeader(text = "DATA MANAGEMENT") }
-
-            item {
-                SettingsItem(
-                    icon     = Icons.Default.Delete,
-                    title    = "Trash",
-                    subtitle = "View and manage deleted notes",
-                    onClick  = onNavigateToTrash
-                )
-            }
-
-            item {
-                SettingsItem(
-                    icon     = Icons.Default.Archive,
-                    title    = "Archive",
-                    subtitle = "Notes kept out of the main list",
-                    onClick  = onNavigateToArchive
-                )
-            }
-
-            // ── Export — navigates to ExportNotesScreen ───────────────────────
-            // Previously called viewModel.onExportTapped() which opened dialogs.
-            // Now consistently navigates to a full screen like Import does.
+            // Export — navigates to ExportNotesScreen, no dialogs here
             item {
                 SettingsItem(
                     icon     = Icons.Default.Upload,
@@ -270,7 +258,6 @@ fun SettingsScreen(
                 )
             }
 
-            // ── Import Backup ─────────────────────────────────────────────────
             item {
                 SettingsItem(
                     icon     = Icons.Default.Download,
@@ -284,16 +271,53 @@ fun SettingsScreen(
                 SettingsItem(
                     icon          = Icons.Default.DeleteForever,
                     title         = "Clear All Data",
-                    subtitle      = "Delete all notes and folders",
+                    subtitle      = "Permanently deletes all notes, folders and tags",
                     onClick       = { showClearDataDialog = true },
                     isDestructive = true
                 )
             }
 
-            item { Spacer(modifier = Modifier.height(Spacing.large)) }
+            // ─────────────────────────────────────────────────────────────────
+            // GROUP 04 · NOTES
+            // Archive and Trash are note states, not data operations.
+            // Separate from VAULT so users know these navigate to lists.
+            // Live counts surface here before they tap in.
+            // ─────────────────────────────────────────────────────────────────
+            item { SectionHeader(text = "NOTES") }
 
-            // ── ABOUT ────────────────────────────────────────────────────────
-            item { SectionHeader(text = "ABOUT") }
+            item {
+                val archiveSubtitle = when (uiState.archiveCount) {
+                    0    -> "No archived notes"
+                    1    -> "1 archived note"
+                    else -> "${uiState.archiveCount} archived notes"
+                }
+                SettingsItem(
+                    icon     = Icons.Default.Archive,
+                    title    = "Archive",
+                    subtitle = archiveSubtitle,
+                    onClick  = onNavigateToArchive
+                )
+            }
+
+            item {
+                val trashSubtitle = when (uiState.trashCount) {
+                    0    -> "No deleted notes"
+                    1    -> "1 deleted note"
+                    else -> "${uiState.trashCount} deleted notes"
+                }
+                SettingsItem(
+                    icon     = Icons.Default.Delete,
+                    title    = "Trash",
+                    subtitle = trashSubtitle,
+                    onClick  = onNavigateToTrash
+                )
+            }
+
+            // ─────────────────────────────────────────────────────────────────
+            // GROUP 05 · SYSTEM
+            // App-internal meta: changelog, updates, website, privacy policy.
+            // ─────────────────────────────────────────────────────────────────
+            item { SectionHeader(text = "SYSTEM") }
 
             item {
                 SettingsItem(
@@ -304,17 +328,15 @@ fun SettingsScreen(
                 )
             }
 
-            // ── Check for Updates ─────────────────────────────────────────────
-            // Subtitle reflects live check state. While checking, a thin
-            // LinearProgressIndicator slides in below the row — the same
-            // pattern used by the Play Store. No spinning icons.
+            // Subtitle reflects live update check state.
+            // LinearProgressIndicator slides in while the request is in-flight.
             item {
-                val updateState = uiState.updateCheckState
-                val isChecking  = updateState == UpdateCheckState.Checking
+                val updateState    = uiState.updateCheckState
+                val isChecking     = updateState == UpdateCheckState.Checking
                 val updateSubtitle = when (updateState) {
                     is UpdateCheckState.Idle      -> "Installed: v$appVersion"
                     is UpdateCheckState.Checking  -> "Checking for updates..."
-                    is UpdateCheckState.UpToDate  -> "You’re up to date — v$appVersion"
+                    is UpdateCheckState.UpToDate  -> "Up to date — v$appVersion"
                     is UpdateCheckState.Available -> "v${updateState.version} available — tap to download"
                     is UpdateCheckState.Error     -> "Check failed — tap to retry"
                 }
@@ -325,8 +347,6 @@ fun SettingsScreen(
                         subtitle = updateSubtitle,
                         onClick  = { viewModel.checkForUpdates() }
                     )
-                    // 2dp indeterminate bar — only visible while the network request
-                    // is in flight. AnimatedVisibility handles the fade-in/out.
                     AnimatedVisibility(visible = isChecking) {
                         LinearProgressIndicator(
                             modifier   = Modifier.fillMaxWidth().padding(horizontal = Spacing.large).height(2.dp),
@@ -337,7 +357,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Website
             item {
                 SettingsItem(
                     icon     = Icons.Default.Language,
@@ -345,14 +364,13 @@ fun SettingsScreen(
                     subtitle = "voidnote.pages.dev",
                     onClick  = {
                         context.startActivity(
-                            Intent(Intent.ACTION_VIEW,
-                                "https://voidnote.pages.dev".toUri())
+                            Intent(Intent.ACTION_VIEW, "https://voidnote.pages.dev".toUri())
                         )
                     }
                 )
             }
 
-            // Privacy Policy — required by Play Store
+            // Privacy Policy — required by Play Store data safety section
             item {
                 SettingsItem(
                     icon     = Icons.Default.PrivacyTip,
@@ -367,15 +385,21 @@ fun SettingsScreen(
                 )
             }
 
+            // ─────────────────────────────────────────────────────────────────
+            // GROUP 06 · COMMUNITY
+            // Outward-facing links. Separate from SYSTEM (app-internal) and
+            // VAULT (data operations).
+            // ─────────────────────────────────────────────────────────────────
+            item { SectionHeader(text = "COMMUNITY") }
+
             item {
                 SettingsItem(
                     icon     = Icons.Default.Code,
                     title    = "GitHub",
-                    subtitle = "Source code — by GreenIcePhoenix",
+                    subtitle = "Source code — GreenIcePhoenix",
                     onClick  = {
                         context.startActivity(
-                            Intent(Intent.ACTION_VIEW,
-                                "https://github.com/NRoy9/VoidNote".toUri())
+                            Intent(Intent.ACTION_VIEW, "https://github.com/NRoy9/VoidNote".toUri())
                         )
                     }
                 )
@@ -384,33 +408,33 @@ fun SettingsScreen(
             item {
                 SettingsItem(
                     icon     = Icons.Default.Forum,
-                    title    = "Discord Community",
+                    title    = "Discord",
                     subtitle = "Bug reports, feedback & chat",
                     onClick  = {
                         context.startActivity(
-                            Intent(Intent.ACTION_VIEW,
-                                "https://discord.gg/yYgDNJKv".toUri())
+                            Intent(Intent.ACTION_VIEW, "https://discord.gg/yYgDNJKv".toUri())
                         )
                     }
                 )
             }
 
-//            item {
-//                SettingsItem(
-//                    icon     = Icons.Default.Favorite,
-//                    title    = "Support the Developer",
-//                    subtitle = "Buy Me a Coffee · Ko-fi",
-//                    onClick  = onNavigateToSupport
-//                )
-//            }
-//
-//            item { Spacer(modifier = Modifier.height(Spacing.extraLarge)) }
+            item {
+                SettingsItem(
+                    icon     = Icons.Default.Favorite,
+                    title    = "Support the Developer",
+                    subtitle = "PayPal · UPI",
+                    onClick  = onNavigateToSupport
+                )
+            }
+
+            // ── Footer ───────────────────────────────────────────────────────
+            item { Spacer(modifier = Modifier.height(Spacing.extraLarge)) }
 
             item {
                 Text(
                     text  = "Void Note • Notes that disappear into the void",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.25f),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = Spacing.large)
@@ -569,13 +593,27 @@ fun SettingsScreen(
 
 @Composable
 private fun SectionHeader(text: String) {
-    Text(
-        text       = text,
-        style      = MaterialTheme.typography.labelMedium,
-        color      = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.Bold,
-        modifier   = Modifier.padding(horizontal = Spacing.large, vertical = Spacing.small)
-    )
+    // 20% Command Palette influence: label on the left, thin hairline stretches to the right.
+    // Gives each section a separator feel without being heavy.
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = Spacing.large, end = Spacing.large, top = Spacing.large, bottom = Spacing.small),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.medium)
+    ) {
+        Text(
+            text  = text,
+            // labelSmall + wider tracking mimics the key names in a config file
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.5.sp),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+        )
+        HorizontalDivider(
+            modifier  = Modifier.weight(1f),
+            thickness = 0.5.dp,
+            color     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+        )
+    }
 }
 
 @Composable
@@ -728,39 +766,58 @@ private fun SettingsToggleItem(
 }
 
 @Composable
-private fun StorageInfoCard(noteCount: Int, folderCount: Int) {
+private fun StorageInfoCard(
+    noteCount: Int,
+    folderCount: Int,
+    archiveCount: Int,
+    trashCount: Int
+) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.large),
         colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
             modifier              = Modifier.fillMaxWidth().padding(Spacing.large),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment     = Alignment.CenterVertically
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text       = noteCount.toString(),
-                    style      = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text  = "Notes",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            // Helper so each stat column is identical
+            @Composable
+            fun StatColumn(value: Int, label: String) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text  = value.toString(),
+                        // headlineSmall keeps numbers prominent without being oversized
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        // Uppercase label — subtle command-palette flavour
+                        text  = label.uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
+                }
+            }
+
+            // Thin vertical dividers between the 4 stat columns
+            @Composable
+            fun StatDivider() {
+                VerticalDivider(
+                    modifier  = Modifier.height(32.dp),
+                    thickness = 0.5.dp,
+                    color     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                 )
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text       = folderCount.toString(),
-                    style      = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text  = "Folders",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
+
+            StatColumn(noteCount,    "Notes")
+            StatDivider()
+            StatColumn(folderCount,  "Folders")
+            StatDivider()
+            StatColumn(archiveCount, "Archived")
+            StatDivider()
+            StatColumn(trashCount,   "Trashed")
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.greenicephoenix.voidnote.presentation.settings
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,8 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Coffee
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -25,29 +25,47 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.greenicephoenix.voidnote.R
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SupportScreen — "Support the Developer"
 //
-// Three options:
-//   1. Buy Me a Coffee — external link to buymeacoffee.com
-//   2. Ko-fi           — external link to ko-fi.com
-//   3. Razorpay / UPI  — QR code image + UPI ID for direct payment
+// Two payment options:
+//   1. PayPal.me — international payments; you receive in INR after conversion
+//   2. Direct UPI — QR code + UPI ID for instant Indian payments (zero fees)
 //
-// HOW TO SET UP YOUR REAL LINKS:
-//   1. Replace BUYMEACOFFEE_URL with your actual Buy Me a Coffee page URL
-//   2. Replace KOFI_URL with your actual Ko-fi page URL
-//   3. Replace UPI_ID with your actual UPI ID (e.g. yourname@upi)
-//   4. For the QR code: generate your UPI QR from any UPI app or
-//      https://upiqr.in, save it as res/drawable/upi_qr.png, then
-//      replace the QrPlaceholder composable below with:
-//        Image(painterResource(R.drawable.upi_qr), "UPI QR Code",
-//              modifier = Modifier.size(200.dp))
+// HOW TO COMPLETE SETUP:
+//   1. Create a PayPal personal account at paypal.com if you don't have one.
+//      Then go to paypal.me and create your personal link (e.g. paypal.me/yourname).
+//      Paste that link into PAYPAL_URL below.
+//
+//   2. UPI_ID should already be set to your real UPI ID below.
+//
+//   3. For the UPI QR code image:
+//      a. Open Google Pay / PhonePe / Paytm → Profile → "My QR Code" → save it
+//         OR go to https://upiqr.in, enter your UPI ID, download the PNG.
+//      b. Name the file exactly: upi_qr.png
+//      c. In Android Studio: right-click app/src/main/res/drawable/ → Show in Explorer
+//         → paste upi_qr.png into that folder.
+//      d. In UpiCard() below, replace QrPlaceholder() with:
+//           Image(
+//               painter            = painterResource(R.drawable.upi_qr),
+//               contentDescription = "UPI QR Code",
+//               modifier           = Modifier
+//                                       .size(180.dp)
+//                                       .clip(RoundedCornerShape(8.dp))
+//           )
+//         and add to imports: import androidx.compose.ui.res.painterResource
+//                             import androidx.compose.foundation.Image
 // ─────────────────────────────────────────────────────────────────────────────
 
-private const val BUYMEACOFFEE_URL = "https://www.buymeacoffee.com/YOUR_USERNAME"
-private const val KOFI_URL         = "https://ko-fi.com/YOUR_USERNAME"
-private const val UPI_ID           = "yourname@upi"   // Replace with your UPI ID
+// TODO: Replace with your paypal.me link — e.g. "https://paypal.me/yourname"
+private const val PAYPAL_URL = "paypal.me/GreenIcePhoenix"
+
+// Your real UPI ID — replace if not already updated
+private const val UPI_ID = "greenicephoenix@axisb" // ← replace with your real UPI ID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,35 +138,41 @@ fun SupportScreen(
                 )
             }
 
-            // ── Buy Me a Coffee ───────────────────────────────────────────────
+            // ── PayPal — for international supporters ─────────────────────────
             item {
                 SupportOptionCard(
-                    icon     = Icons.Default.Coffee,
-                    title    = "Buy Me a Coffee",
-                    subtitle = "buymeacoffee.com",
+                    icon     = Icons.Default.AccountBalanceWallet,
+                    title    = "Support via PayPal",
+                    subtitle = "International · Cards · PayPal balance",
                     onClick  = {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, BUYMEACOFFEE_URL.toUri())
-                        )
+                        // Guard: if PAYPAL_URL is still a placeholder or empty,
+                        // show a toast instead of crashing with ActivityNotFoundException.
+                        val url = PAYPAL_URL.trim()
+                        if (url.isEmpty() || url.contains("YOUR_USERNAME")) {
+                            Toast.makeText(
+                                context,
+                                "PayPal link not set up yet — check back soon!",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            try {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, url.toUri())
+                                )
+                            } catch (e: android.content.ActivityNotFoundException) {
+                                // No browser installed — extremely rare but handled
+                                Toast.makeText(
+                                    context,
+                                    "No browser found. Visit: $url",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     }
                 )
             }
 
-            // ── Ko-fi ─────────────────────────────────────────────────────────
-            item {
-                SupportOptionCard(
-                    icon     = Icons.Default.Favorite,
-                    title    = "Ko-fi",
-                    subtitle = "ko-fi.com",
-                    onClick  = {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, KOFI_URL.toUri())
-                        )
-                    }
-                )
-            }
-
-            // ── Razorpay / UPI QR ─────────────────────────────────────────────
+            // ── UPI — for Indian supporters ───────────────────────────────────
             item {
                 UpiCard(upiId = UPI_ID)
             }
@@ -170,7 +194,7 @@ fun SupportScreen(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SupportOptionCard — reusable card for external link options (BMaC, Ko-fi)
+// SupportOptionCard — reusable tappable card for external payment links
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun SupportOptionCard(
@@ -236,17 +260,16 @@ private fun SupportOptionCard(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UpiCard — Razorpay / UPI card with QR placeholder and UPI ID
+// UpiCard — Direct UPI payment card.
 //
-// HOW TO ADD YOUR REAL QR CODE:
-//   1. Generate your UPI QR at https://upiqr.in or from your UPI app
-//   2. Save it as app/src/main/res/drawable/upi_qr.png
-//   3. Replace QrPlaceholder() with:
-//        Image(
-//            painter  = painterResource(R.drawable.upi_qr),
-//            contentDescription = "UPI QR Code",
-//            modifier = Modifier.size(180.dp).clip(RoundedCornerShape(8.dp))
-//        )
+// TO ADD YOUR REAL QR CODE (once you have upi_qr.png in res/drawable/):
+//   Replace QrPlaceholder() below with:
+//     Image(
+//         painter            = painterResource(R.drawable.upi_qr),
+//         contentDescription = "UPI QR Code",
+//         modifier           = Modifier.size(180.dp).clip(RoundedCornerShape(8.dp))
+//     )
+//   And add import: androidx.compose.ui.res.painterResource
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun UpiCard(upiId: String) {
@@ -286,7 +309,7 @@ private fun UpiCard(upiId: String) {
                 }
                 Column {
                     Text(
-                        text  = "UPI / Razorpay",
+                        text  = "UPI — Indian Payments",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -301,7 +324,13 @@ private fun UpiCard(upiId: String) {
             Spacer(Modifier.height(Spacing.large))
 
             // ── QR code — replace with real Image once drawable is ready ──────
-            QrPlaceholder()
+            Image(
+               painter            = painterResource(R.drawable.upi_qr),
+               contentDescription = "UPI QR Code",
+               modifier           = Modifier
+                                       .size(180.dp)
+                                       .clip(RoundedCornerShape(8.dp))
+            )
 
             Spacer(Modifier.height(Spacing.medium))
 
@@ -374,3 +403,9 @@ private fun QrPlaceholder() {
         }
     }
 }
+
+// TODO: Replace with your paypal.me link — e.g. "https://paypal.me/yourname"
+//private const val PAYPAL_URL = "paypal.me/GreenIcePhoenix"
+
+// Your real UPI ID — replace if not already updated
+//private const val UPI_ID = "greenicephoenix@axisb"

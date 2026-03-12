@@ -6,6 +6,8 @@ package com.greenicephoenix.voidnote.presentation.settings
 data class SettingsUiState(
     val noteCount: Int = 0,
     val folderCount: Int = 0,
+    val archiveCount: Int = 0,   // How many notes are currently archived
+    val trashCount: Int = 0,     // How many notes are currently in the trash
     val currentTheme: AppTheme = AppTheme.DARK,
     val appVersion: String = "1.0.0",
     val updateCheckState: UpdateCheckState = UpdateCheckState.Idle
