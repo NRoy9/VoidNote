@@ -67,13 +67,7 @@ sealed class ImportBackupUiState {
 
     /**
      * Header successfully read — show the file info card and password field.
-     *
-     * @param fileName    Display name of the chosen file
-     * @param noteCount   Number of notes in the backup
-     * @param folderCount Number of folders in the backup
-     * @param appVersion  Version of the app that created the backup
-     * @param errorMessage  Inline error for wrong password or other recoverable issues
-     * @param isVerifying   True while PBKDF2 + blob check is running (~300ms)
+     * Only used for .vnbackup files (which are encrypted and need a password).
      */
     data class FileReady(
         val fileName: String,
@@ -85,18 +79,28 @@ sealed class ImportBackupUiState {
     ) : ImportBackupUiState()
 
     /**
-     * importIntoExistingVault() is running.
+     * SPRINT 10 — A .md or .zip of .md files was selected.
+     *
+     * Unlike .vnbackup files, Markdown imports are NOT encrypted at rest — they are
+     * plain text files. No password is required. We just show a preview card with the
+     * note count and a single "Import" button.
+     *
+     * @param fileName   Display name of the chosen file
+     * @param noteCount  Number of .md files found (preview — 0 if counting failed)
+     */
+    data class MarkdownReady(
+        val fileName:  String,
+        val noteCount: Int
+    ) : ImportBackupUiState()
+
+    /**
+     * importIntoExistingVault() or importMarkdown() is running.
      * Non-dismissible progress dialog — user must not close the app.
-     * Re-encryption can take several seconds for large vaults.
      */
     object Importing : ImportBackupUiState()
 
     /**
      * Import completed successfully.
-     *
-     * @param notesImported      Notes that were new on this device
-     * @param foldersImported    Folders that were new on this device
-     * @param skippedDuplicates  Notes that already existed (same ID + same content)
      */
     data class Success(
         val notesImported: Int,
@@ -104,7 +108,7 @@ sealed class ImportBackupUiState {
         val skippedDuplicates: Int
     ) : ImportBackupUiState()
 
-    /** A non-recoverable error occurred (file unreadable, corrupted JSON, etc). */
+    /** A non-recoverable error occurred. */
     data class Error(val message: String) : ImportBackupUiState()
 }
 
@@ -170,37 +174,99 @@ class ImportBackupViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             _uiState.value = ImportBackupUiState.ReadingHeader
-            _password.value = ""  // reset password when a new file is chosen
+            _password.value = ""
 
-            try {
-                val header = importExportManager.readBackupHeader(contentResolver, uri)
+            val fileName = displayName ?: uri.lastPathSegment ?: "file"
 
-                if (header.salt.isEmpty()) {
-                    // Pre-v2 backup — no salt means no cross-device import support
-                    _uiState.value = ImportBackupUiState.Error(
-                        "This backup was created by an older version of Void Note " +
-                                "and cannot be imported here. Use the plain text export " +
-                                "from that device to recover your notes manually."
+            // ── Route by file type ────────────────────────────────────────────
+            // .vnbackup → encrypted vault backup, needs password → FileReady
+            // .md / .zip → plain text markdown → MarkdownReady (no password)
+            val lower = fileName.lowercase()
+            when {
+                lower.endsWith(".md") || lower.endsWith(".zip") -> {
+                    // Count how many notes we'll import — shows in the preview card.
+                    // countMarkdownNotes() is fast (no decryption, just walks entries).
+                    val count = try {
+                        importExportManager.countMarkdownNotes(contentResolver, uri)
+                    } catch (e: Exception) { 0 }
+
+                    selectedUri = uri
+                    _uiState.value = ImportBackupUiState.MarkdownReady(
+                        fileName  = fileName,
+                        noteCount = count
                     )
-                    return@launch
                 }
 
-                // Cache the cryptographic values — used by confirmImport()
-                cachedSalt = header.salt
-                cachedBlob = header.verificationBlob
-                selectedUri = uri
+                else -> {
+                    // Treat as .vnbackup (encrypted backup — requires password)
+                    try {
+                        val header = importExportManager.readBackupHeader(contentResolver, uri)
 
-                _uiState.value = ImportBackupUiState.FileReady(
-                    fileName    = displayName ?: uri.lastPathSegment ?: "backup.vnbackup",
-                    noteCount   = header.noteCount,
-                    folderCount = header.folderCount,
-                    appVersion  = header.appVersion
-                )
+                        if (header.salt.isEmpty()) {
+                            _uiState.value = ImportBackupUiState.Error(
+                                "This backup was created by an older version of Void Note " +
+                                        "and cannot be imported here. Use the plain text export " +
+                                        "from that device to recover your notes manually."
+                            )
+                            return@launch
+                        }
 
+                        cachedSalt  = header.salt
+                        cachedBlob  = header.verificationBlob
+                        selectedUri = uri
+
+                        _uiState.value = ImportBackupUiState.FileReady(
+                            fileName    = fileName,
+                            noteCount   = header.noteCount,
+                            folderCount = header.folderCount,
+                            appVersion  = header.appVersion
+                        )
+
+                    } catch (e: Exception) {
+                        _uiState.value = ImportBackupUiState.Error(
+                            "Could not read backup file. Make sure it is a valid .vnbackup file.\n" +
+                                    "(${e.message})"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Markdown import ───────────────────────────────────────────────────────
+
+    /**
+     * Called when the user taps "Import" on the MarkdownReady card.
+     *
+     * No password step — markdown files are plain text. We just parse, encrypt,
+     * and insert. Each note gets a fresh UUID (no dedup by ID).
+     *
+     * NOTE: Importing the same file twice WILL create duplicate notes.
+     * This is documented in the UI.
+     */
+    fun confirmMarkdownImport(contentResolver: ContentResolver) {
+        val uri = selectedUri ?: return
+        viewModelScope.launch {
+            _uiState.value = ImportBackupUiState.Importing
+
+            val result = try {
+                importExportManager.importMarkdown(contentResolver, uri)
             } catch (e: Exception) {
                 _uiState.value = ImportBackupUiState.Error(
-                    "Could not read backup file. Make sure it is a valid .vnbackup file.\n" +
-                            "(${e.message})"
+                    "Markdown import failed: ${e.message}"
+                )
+                return@launch
+            }
+
+            if (result.isSuccess) {
+                _uiState.value = ImportBackupUiState.Success(
+                    notesImported     = result.notesImported,
+                    foldersImported   = result.foldersImported,
+                    skippedDuplicates = 0   // markdown import never skips — always fresh UUIDs
+                )
+            } else {
+                _uiState.value = ImportBackupUiState.Error(
+                    result.error ?: "Import failed for an unknown reason."
                 )
             }
         }
