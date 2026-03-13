@@ -25,7 +25,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import com.greenicephoenix.voidnote.domain.model.NoteSort
+import com.greenicephoenix.voidnote.domain.model.NoteTemplate
+import com.greenicephoenix.voidnote.domain.model.BuiltInTemplates
 import com.greenicephoenix.voidnote.presentation.components.FolderCard
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import com.greenicephoenix.voidnote.presentation.components.ExpandableFab
@@ -38,6 +42,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import com.greenicephoenix.voidnote.presentation.components.NoteQuickActionsSheet
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
@@ -78,11 +83,35 @@ fun NotesListScreen(
     val context = LocalContext.current
 
     // Quick actions sheet state
-    var quickActionNote by remember { mutableStateOf<com.greenicephoenix.voidnote.domain.model.Note?>(null) }
+    var quickActionNote by remember { mutableStateOf<Note?>(null) }
+
+    // Sprint 11: template picker sheet visibility
+    var showTemplatePicker by remember { mutableStateOf(false) }
 
     // Snackbar for undo
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope    = rememberCoroutineScope()
+
+    // Sprint 11: collect one-shot navigation events from template/daily note creation.
+    // LaunchedEffect with Unit key runs once on composition — collectLatest means
+    // if two events fire rapidly, we only handle the latest (safe for navigation).
+    LaunchedEffect(Unit) {
+        viewModel.navigationEvent.collectLatest { noteId ->
+            onNavigateToEditor(noteId)
+        }
+    }
+
+    // Show template picker sheet when triggered
+    if (showTemplatePicker) {
+        TemplatePickerSheet(
+            templates = BuiltInTemplates.all,
+            onSelect  = { template ->
+                showTemplatePicker = false
+                viewModel.createNoteFromTemplate(template)
+            },
+            onDismiss = { showTemplatePicker = false }
+        )
+    }
 
     // ── Back press: minimise app instead of finishing the Activity ────────────
     BackHandler {
@@ -100,8 +129,10 @@ fun NotesListScreen(
         },
         floatingActionButton = {
             ExpandableFab(
-                onCreateNote   = { onNavigateToEditor("new") },
-                onCreateFolder = { viewModel.showCreateFolderDialog() }
+                onCreateNote    = { onNavigateToEditor("new") },
+                onCreateFolder  = { viewModel.showCreateFolderDialog() },
+                onOpenTemplates = { showTemplatePicker = true },
+                onDailyNote     = { viewModel.openOrCreateDailyNote() }
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }   // ← ADD THIS
@@ -145,7 +176,7 @@ fun NotesListScreen(
                                 val result = snackbarHostState.showSnackbar(
                                     message    = "\"${note.title.ifBlank { "Note" }}\" archived",
                                     actionLabel = "Undo",
-                                    duration   = androidx.compose.material3.SnackbarDuration.Short
+                                    duration   = SnackbarDuration.Short
                                 )
                                 if (result == SnackbarResult.ActionPerformed) {
                                     viewModel.undoArchive(note.id)
@@ -186,7 +217,7 @@ fun NotesListScreen(
                     val result = snackbarHostState.showSnackbar(
                         message     = "\"${note.title.ifBlank { "Note" }}\" archived",
                         actionLabel = "Undo",
-                        duration    = androidx.compose.material3.SnackbarDuration.Short
+                        duration    = SnackbarDuration.Short
                     )
                     if (result == SnackbarResult.ActionPerformed) {
                         viewModel.undoArchive(note.id)
@@ -605,5 +636,142 @@ private fun CreateFolderDialog(
                 }
             }
         }
+    }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// TEMPLATE PICKER SHEET  (Sprint 11)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * TemplatePickerSheet — ModalBottomSheet listing all built-in templates.
+ *
+ * DESIGN (list layout, not grid):
+ *   • Header label "START FROM A TEMPLATE" in Nothing-style all-caps
+ *   • Vertical list of rows, each row:
+ *       Left  — large emoji in a subtle rounded square container
+ *       Right — template name (bold) on top, description (muted) below
+ *   • Full-width tap target per row
+ *   • HorizontalDivider between rows
+ *   • Blank is always first so "no template" is the easiest choice
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TemplatePickerSheet(
+    templates: List<NoteTemplate>,
+    onSelect: (NoteTemplate) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor   = MaterialTheme.colorScheme.surface,
+        dragHandle       = {
+            Box(
+                modifier         = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.size(width = 32.dp, height = 3.dp),
+                    shape    = MaterialTheme.shapes.extraLarge,
+                    color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                ) {}
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = Spacing.large)
+        ) {
+            // Header
+            Text(
+                text     = "START FROM A TEMPLATE",
+                style    = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier = Modifier.padding(
+                    horizontal = Spacing.large,
+                    vertical   = Spacing.medium
+                )
+            )
+
+            // Template rows
+            templates.forEachIndexed { index, template ->
+                TemplateRow(
+                    template = template,
+                    onClick  = { onSelect(template) }
+                )
+                if (index < templates.lastIndex) {
+                    HorizontalDivider(
+                        color    = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+                        modifier = Modifier.padding(horizontal = Spacing.large)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * TemplateRow — a single row in the template picker list.
+ *
+ * Layout: [Emoji box] | [Name + Description] | Chevron]
+ *
+ * The emoji sits in a small rounded-square Surface so it has a subtle
+ * background tint and consistent sizing regardless of emoji dimensions.
+ */
+@Composable
+private fun TemplateRow(
+    template: NoteTemplate,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier              = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = Spacing.large, vertical = Spacing.medium),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.medium)
+    ) {
+        // Emoji container — rounded square with subtle surface tint
+        Surface(
+            shape          = MaterialTheme.shapes.small,
+            color          = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 1.dp,
+            modifier       = Modifier.size(48.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text  = template.emoji,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        }
+
+        // Name + description — fills remaining width
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text     = template.name,
+                style    = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color    = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
+            Text(
+                text     = template.description,
+                style    = MaterialTheme.typography.bodySmall,
+                color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                maxLines = 2
+            )
+        }
+
+        // Chevron — signals the row is tappable
+        Icon(
+            imageVector        = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint               = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+            modifier           = Modifier.size(16.dp)
+        )
     }
 }

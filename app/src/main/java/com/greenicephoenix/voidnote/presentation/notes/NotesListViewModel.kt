@@ -5,20 +5,34 @@ import androidx.lifecycle.viewModelScope
 import com.greenicephoenix.voidnote.BuildConfig
 import com.greenicephoenix.voidnote.data.local.PreferencesManager
 import com.greenicephoenix.voidnote.domain.model.Folder
+import com.greenicephoenix.voidnote.domain.model.InlineBlock
+import com.greenicephoenix.voidnote.domain.model.InlineBlockPayload
+import com.greenicephoenix.voidnote.domain.model.InlineBlockType
 import com.greenicephoenix.voidnote.domain.model.Note
 import com.greenicephoenix.voidnote.domain.model.NoteSort
+import com.greenicephoenix.voidnote.domain.model.NoteTemplate
+import com.greenicephoenix.voidnote.domain.model.TodoItem
 import com.greenicephoenix.voidnote.domain.repository.FolderRepository
+import com.greenicephoenix.voidnote.domain.repository.InlineBlockRepository
 import com.greenicephoenix.voidnote.domain.repository.NoteRepository
+import com.greenicephoenix.voidnote.presentation.editor.DocumentParser
 import com.greenicephoenix.voidnote.util.UpdateCheckerManager
 import com.greenicephoenix.voidnote.util.UpdateInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -53,6 +67,7 @@ import javax.inject.Inject
 class NotesListViewModel @Inject constructor(
     private val noteRepository: NoteRepository,
     private val folderRepository: FolderRepository,
+    private val inlineBlockRepository: InlineBlockRepository,
     private val preferencesManager: PreferencesManager,
     private val updateChecker: UpdateCheckerManager
 ) : ViewModel() {
@@ -263,6 +278,161 @@ class NotesListViewModel @Inject constructor(
     // Kept for compatibility — was in original, not actively used
     fun getNotesCountInFolder(folderId: String): Int = 0
     private fun getNotesInFolders(notes: List<Note>): Set<String> = emptySet()
+
+    // ─── Sprint 11: Templates + Daily Note ───────────────────────────────────
+
+    /**
+     * One-shot navigation events emitted after a note is created.
+     *
+     * WHY SharedFlow (not StateFlow)?
+     * StateFlow keeps the last value — if we used it, rotating the device after
+     * creating a note would re-navigate. SharedFlow with replay=0 fires once
+     * and is forgotten. The screen collects it with LaunchedEffect and calls
+     * onNavigateToEditor(noteId) exactly once.
+     */
+    private val _navigationEvent = MutableSharedFlow<String>(replay = 0)
+    val navigationEvent: SharedFlow<String> = _navigationEvent.asSharedFlow()
+
+    /**
+     * Create a new note from [template], then navigate to it.
+     *
+     * CRITICAL INSERT ORDER:
+     * inline_blocks has a FOREIGN KEY on noteId → notes.id.
+     * We must insert the Note FIRST, then the InlineBlocks.
+     * Inserting blocks before the note exists causes a FK constraint crash.
+     *
+     * For templates with todoSections:
+     *   1. Build content string with section headers + marker tokens (in memory)
+     *   2. Collect InlineBlock objects (in memory, not yet in DB)
+     *   3. Insert the Note with the final content
+     *   4. Insert all InlineBlocks (note now exists → FK satisfied)
+     *
+     * For plain-text templates: just insert the note with content as-is.
+     */
+    fun createNoteFromTemplate(template: NoteTemplate) {
+        viewModelScope.launch {
+            val noteId = UUID.randomUUID().toString()
+            val now    = System.currentTimeMillis()
+
+            val finalContent: String
+            val blocksToInsert = mutableListOf<InlineBlock>()
+
+            if (template.todoSections.isNotEmpty()) {
+                // ── Step 1: build content + collect blocks IN MEMORY ──────────
+                val contentBuilder = StringBuilder()
+
+                template.todoSections.forEachIndexed { index, section ->
+                    if (section.header.isNotBlank()) {
+                        if (index > 0) contentBuilder.append("\n")
+                        contentBuilder.append(section.header)
+                    }
+
+                    val blockId   = UUID.randomUUID().toString()
+                    val todoItems = section.items.mapIndexed { i, text ->
+                        TodoItem(
+                            id        = UUID.randomUUID().toString(),
+                            text      = text,
+                            isChecked = false,
+                            sortOrder = i
+                        )
+                    }
+                    // Collect block — do NOT insert yet (note doesn't exist yet)
+                    blocksToInsert.add(
+                        InlineBlock(
+                            id        = blockId,
+                            noteId    = noteId,
+                            type      = InlineBlockType.TODO,
+                            payload   = InlineBlockPayload.Todo(items = todoItems),
+                            createdAt = now
+                        )
+                    )
+                    contentBuilder.append("\n")
+                    contentBuilder.append(DocumentParser.createMarker(InlineBlockType.TODO, blockId))
+                }
+                finalContent = contentBuilder.toString()
+            } else {
+                finalContent = template.content
+            }
+
+            // ── Step 2: insert Note FIRST ─────────────────────────────────────
+            noteRepository.insertNote(
+                Note(
+                    id        = noteId,
+                    title     = template.titlePrefix,
+                    content   = finalContent,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            )
+
+            // ── Step 3: now insert blocks (FK satisfied) ──────────────────────
+            blocksToInsert.forEach { block ->
+                inlineBlockRepository.insertBlock(block)
+            }
+
+            _navigationEvent.emit(noteId)
+        }
+    }
+
+    /**
+     * Open today's Daily Note, or create it if it doesn't exist yet.
+     *
+     * Title format: "📅 March 14, 2026"
+     * Searches notes in-memory (titles are AES-256 ciphertext in SQLite —
+     * SQL LIKE can't match plaintext). If found, navigate. If not, create.
+     */
+    fun openOrCreateDailyNote() {
+        viewModelScope.launch {
+            val today      = SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()).format(Date())
+            val dailyTitle = "📅 $today"
+
+            // Look for an existing daily note with today's exact title
+            val existing = uiState.value.notes.firstOrNull { note ->
+                note.title.trim() == dailyTitle && !note.isTrashed
+            }
+
+            if (existing != null) {
+                _navigationEvent.emit(existing.id)
+            } else {
+                val noteId = UUID.randomUUID().toString()
+                val now    = System.currentTimeMillis()
+
+                // Starter content — same prompts as the Daily Journal template
+                // but auto-titled with today's date
+                val starterContent = """
+— — —
+
+How am I feeling right now?
+
+
+What happened today worth remembering?
+
+
+One thing I learned
+
+
+What am I grateful for?
+
+
+If I could redo one thing today, what would it be?
+
+
+— — —
+                """.trimIndent()
+
+                noteRepository.insertNote(
+                    Note(
+                        id        = noteId,
+                        title     = dailyTitle,
+                        content   = starterContent,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+                _navigationEvent.emit(noteId)
+            }
+        }
+    }
 }
 
 /**
