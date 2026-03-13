@@ -8,6 +8,7 @@ import com.greenicephoenix.voidnote.data.local.PreferencesManager
 import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase
 import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRATION_5_6
 import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRATION_6_7
+import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRATION_7_8
 import com.greenicephoenix.voidnote.data.local.dao.FolderDao
 import com.greenicephoenix.voidnote.data.local.dao.InlineBlockDao
 import com.greenicephoenix.voidnote.data.local.dao.NoteDao
@@ -72,7 +73,8 @@ object DatabaseModule {
             // Add new migrations here as you create them in VoidNoteDatabase.kt.
             .addMigrations(
                 MIGRATION_5_6,   // v5 → v6: no schema change (chain establishment)
-                MIGRATION_6_7    // v6 → v7: adds color TEXT column to notes
+                MIGRATION_6_7,   // v6 → v7: adds color TEXT column to notes
+                MIGRATION_7_8    // v7 → v8: adds linkedNoteIds TEXT column to notes
             )
 
             // ── SQLite foreign key enforcement ────────────────────────────────

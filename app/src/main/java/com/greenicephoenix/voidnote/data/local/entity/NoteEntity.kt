@@ -11,6 +11,7 @@ import com.greenicephoenix.voidnote.domain.model.FormatRange
  *
  * VERSION 5 CHANGE: Added trashedAt field.
  * VERSION 7 (Sprint 6): Added color column for note color coding.
+ * VERSION 8 (Sprint 11): Added linkedNoteIds column for note linking feature.
  *
  * WHY IS color A NULLABLE STRING?
  * We store the NoteColor enum name (e.g. "RED", "BLUE") as plain text.
@@ -19,11 +20,16 @@ import com.greenicephoenix.voidnote.domain.model.FormatRange
  *   without corrupting old data.
  * - NoteColor.fromString() handles unrecognised names gracefully (returns null).
  *
- * DB MIGRATION:
- * This column was added in MIGRATION_6_7 using:
- *   ALTER TABLE notes ADD COLUMN color TEXT
- * SQLite adds NULL for all existing rows — which correctly maps to "no color".
- * No existing data is affected.
+ * WHY IS linkedNoteIds A LIST (not a join table)?
+ * Note links are directional and personal — "this note references that note".
+ * A List<String> stored via StringListConverter keeps the schema simple.
+ * A separate join table would be over-engineering for this use case.
+ * The list is bounded (users won't link hundreds of notes to one note) so
+ * column storage is fine.
+ *
+ * DB MIGRATIONS:
+ * color       — added in MIGRATION_6_7: ALTER TABLE notes ADD COLUMN color TEXT
+ * linkedNoteIds — added in MIGRATION_7_8: ALTER TABLE notes ADD COLUMN linkedNoteIds TEXT NOT NULL DEFAULT ''
  */
 @Entity(tableName = "notes")
 @TypeConverters(StringListConverter::class)
@@ -64,5 +70,12 @@ data class NoteEntity(
      * Sprint 6: The NoteColor enum name (e.g. "RED") or null for no color.
      * Added via MIGRATION_6_7 — existing rows get NULL automatically.
      */
-    val color: String? = null
+    val color: String? = null,
+
+    /**
+     * Sprint 11: Comma-separated UUIDs of notes this note is linked to.
+     * Stored/read by StringListConverter. Empty string = no links.
+     * Added via MIGRATION_7_8 — existing rows get '' (empty string) automatically.
+     */
+    val linkedNoteIds: List<String> = emptyList()
 )

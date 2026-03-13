@@ -98,7 +98,25 @@ data class NoteBackup(
      * NOT ENCRYPTED: format ranges contain only character indices and a
      * FormatType enum value. No user content, nothing sensitive.
      */
-    val contentFormats: List<FormatRange> = emptyList()
+    val contentFormats: List<FormatRange> = emptyList(),
+
+    /**
+     * Sprint 11: IDs of notes this note is linked to.
+     *
+     * WHY DEFAULT emptyList():
+     * Old backups (pre-Sprint 11) don't have this field. The Json parser is
+     * configured with coerceInputValues = true, so the missing field falls
+     * back to emptyList() — old backups restore with no links (correct).
+     *
+     * NOT ENCRYPTED: note IDs are plain UUIDs containing no sensitive content.
+     * They are needed as plain text to restore referential integrity on import.
+     *
+     * IMPORT BEHAVIOUR:
+     * Since a .vnbackup restores ALL notes with their original UUIDs, all
+     * link IDs remain valid after restore. Dead links (IDs of deleted notes)
+     * are silently filtered at display time — stored but never shown.
+     */
+    val linkedNoteIds: List<String> = emptyList()
 )
 
 /**

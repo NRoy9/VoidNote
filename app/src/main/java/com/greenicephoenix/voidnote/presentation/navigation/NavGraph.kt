@@ -207,7 +207,13 @@ fun SetupNavGraph(navController: NavHostController) {
             route     = Screen.NoteEditor.route,
             arguments = listOf(navArgument("noteId") { type = NavType.StringType })
         ) {
-            NoteEditorScreen(onNavigateBack = { navController.popBackStack() })
+            NoteEditorScreen(
+                onNavigateBack     = { navController.popBackStack() },
+                // Sprint 11: wiki link chip/span tap → open the linked note
+                onNavigateToEditor = { noteId ->
+                    navController.navigate(Screen.NoteEditor.createRoute(noteId))
+                }
+            )
         }
 
         // ── Folder Notes ──────────────────────────────────────────────────────

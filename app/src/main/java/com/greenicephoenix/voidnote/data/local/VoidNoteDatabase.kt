@@ -25,6 +25,7 @@ import com.greenicephoenix.voidnote.data.local.entity.NoteEntity
  * v5 → Added trashedAt column to notes (nullable Long)
  * v6 → No schema change. Established the migration chain; removed fallbackToDestructiveMigration.
  * v7 → Added color column to notes (nullable String — stores NoteColor enum name)
+ * v8 → Added linkedNoteIds column to notes (TEXT NOT NULL DEFAULT '' — comma-separated UUIDs)
  *
  * HOW ROOM MIGRATIONS WORK:
  * Room stores the current schema version inside the database file itself.
@@ -35,9 +36,9 @@ import com.greenicephoenix.voidnote.data.local.entity.NoteEntity
  *
  * ADDING A MIGRATION IN A FUTURE SPRINT:
  * 1. Make your schema change in the relevant @Entity class.
- * 2. Bump `version` here (e.g. 7 → 8).
- * 3. Write a MIGRATION_7_8 val below with the SQL to apply the change.
- * 4. Add it to DatabaseModule.kt → .addMigrations(..., MIGRATION_7_8)
+ * 2. Bump `version` here (e.g. 8 → 9).
+ * 3. Write a MIGRATION_8_9 val below with the SQL to apply the change.
+ * 4. Add it to DatabaseModule.kt → .addMigrations(..., MIGRATION_8_9)
  */
 @Database(
     entities = [
@@ -45,7 +46,7 @@ import com.greenicephoenix.voidnote.data.local.entity.NoteEntity
         FolderEntity::class,
         InlineBlockEntity::class
     ],
-    version = 7,            // ← BUMPED from 6 to 7 (color column added)
+    version = 8,            // ← BUMPED from 7 to 8 (linkedNoteIds column added)
     exportSchema = false
 )
 @TypeConverters(
@@ -96,6 +97,27 @@ abstract class VoidNoteDatabase : RoomDatabase() {
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE notes ADD COLUMN color TEXT")
+            }
+        }
+
+        /**
+         * MIGRATION_7_8 — Adds the `linkedNoteIds` column to the notes table.
+         *
+         * WHY TEXT NOT NULL DEFAULT ''?
+         * StringListConverter serialises List<String> to a comma-separated string.
+         * An empty string '' correctly deserialises to emptyList().
+         * NOT NULL + DEFAULT '' means all existing notes simply start with
+         * no links, which is exactly correct — no data loss.
+         *
+         * WHY NOT A JOIN TABLE?
+         * Note links are directional (this note → that note) and low-cardinality
+         * (users won't link hundreds of notes to a single note). A comma-separated
+         * column in the notes table is simpler, faster, and avoids a schema
+         * redesign at this stage of the project.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN linkedNoteIds TEXT NOT NULL DEFAULT ''")
             }
         }
     }

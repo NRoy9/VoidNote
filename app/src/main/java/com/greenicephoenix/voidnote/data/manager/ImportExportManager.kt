@@ -137,21 +137,18 @@ class ImportExportManager @Inject constructor(
         // ── 3. Build NoteBackup objects (encrypted fields as-is) ──────────────
         val noteBackups = noteEntities.map { entity ->
             NoteBackup(
-                id           = entity.id,
-                title        = entity.title,    // ← already encrypted Base64
-                content      = entity.content,  // ← already encrypted Base64
-                createdAt    = entity.createdAt,
-                updatedAt    = entity.updatedAt,
-                isPinned     = entity.isPinned,
-                isArchived   = entity.isArchived,
-                isTrashed    = entity.isTrashed,
-                // trashedAt not referenced — NoteEntity may or may not have this
-                // field depending on which DB version is installed. It defaults
-                // to null on import, which is the correct behaviour for restored notes.
+                id             = entity.id,
+                title          = entity.title,    // ← already encrypted Base64
+                content        = entity.content,  // ← already encrypted Base64
+                createdAt      = entity.createdAt,
+                updatedAt      = entity.updatedAt,
+                isPinned       = entity.isPinned,
+                isArchived     = entity.isArchived,
+                isTrashed      = entity.isTrashed,
                 tags           = entity.tags,           // ← already encrypted Base64 list
                 folderId       = entity.folderId,
-                // contentFormats: indices + enum only, no sensitive content, not encrypted
                 contentFormats = entity.contentFormats,
+                linkedNoteIds  = entity.linkedNoteIds,  // Sprint 11: plain UUIDs, not encrypted
                 inlineBlocks   = (blocksByNote[entity.id] ?: emptyList()).map { block ->
                     InlineBlockBackup(
                         id        = block.id,
@@ -446,8 +443,6 @@ class ImportExportManager @Inject constructor(
                             id             = noteBackup.id,
                             title          = noteBackup.title,
                             content        = noteBackup.content,
-                            // Restored from backup — pre-Sprint 4 backups default to
-                            // emptyList() via the NoteBackup field default, correct behaviour.
                             contentFormats = noteBackup.contentFormats,
                             createdAt      = noteBackup.createdAt,
                             updatedAt      = noteBackup.updatedAt,
@@ -455,7 +450,12 @@ class ImportExportManager @Inject constructor(
                             isArchived     = noteBackup.isArchived,
                             isTrashed      = noteBackup.isTrashed,
                             tags           = noteBackup.tags,
-                            folderId       = noteBackup.folderId
+                            folderId       = noteBackup.folderId,
+                            // Sprint 11: restore link IDs. Because .vnbackup preserves
+                            // original UUIDs, all links survive a full restore.
+                            // If a linked note was deleted before the backup, its ID
+                            // is kept here but silently filtered at display time.
+                            linkedNoteIds  = noteBackup.linkedNoteIds
                         )
                     )
                     notesImported++

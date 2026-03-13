@@ -50,7 +50,21 @@ data class Note(
      * null = no color (default card appearance).
      * Set via the color picker in the note editor's settings panel.
      */
-    val color: NoteColor? = null
+    val color: NoteColor? = null,
+
+    /**
+     * Sprint 11: IDs of notes this note is linked to.
+     *
+     * Links are stored as note UUIDs (not titles). This means:
+     * - Links survive note renames (the UUID never changes)
+     * - Links survive full vault restores (.vnbackup keeps original UUIDs)
+     * - Dead links (pointing to deleted notes) are silently filtered at display time
+     *   — the ID stays in the list but resolves to null and is skipped in the UI
+     *
+     * Stored via StringListConverter as a comma-separated column in Room.
+     * emptyList() = no links (default for all pre-Sprint 11 notes).
+     */
+    val linkedNoteIds: List<String> = emptyList()
 ) {
 
     // ─── Marker parsing ───────────────────────────────────────────────────

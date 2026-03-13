@@ -212,9 +212,12 @@ class NoteEditorViewModel @Inject constructor(
                         tags              = note.tags,
                         isNewNote         = false,
                         isLoading         = false,
-                        currentFolderName = folderName,      // ← SPRINT 5
-                        noteColor         = note.color      // ← SPRINT 7 FIX: load saved color into UI state
+                        currentFolderName = folderName,
+                        noteColor         = note.color,
+                        linkedNoteIds     = note.linkedNoteIds  // Sprint 11: restore link IDs
                     )
+                    // Sprint 11: resolve IDs → titles for the linked-notes strip
+                    loadLinkedNotePreviews(note.linkedNoteIds)
                 } else {
                     currentNoteId = UUID.randomUUID().toString()
                     _uiState.value = _uiState.value.copy(isNewNote = true, isLoading = false)
@@ -734,7 +737,8 @@ class NoteEditorViewModel @Inject constructor(
             isTrashed      = false,
             tags           = state.tags,
             folderId       = currentFolderId,
-            color          = _uiState.value.noteColor
+            color          = _uiState.value.noteColor,
+            linkedNoteIds  = state.linkedNoteIds   // Sprint 11: persist linked note IDs
         )
 
         if (state.isNewNote) {
@@ -966,15 +970,15 @@ class NoteEditorViewModel @Inject constructor(
      *   Leading whitespace : "  text"       → "text"
      *
      * TRUNCATION:
-     *   If the stripped line is longer than MAX_TITLE_LENGTH characters it is
+     *   If the stripped line is longer than maxTitleLength characters it is
      *   trimmed at a word boundary (no mid-word cut) and "…" is appended.
-     *   MAX_TITLE_LENGTH = 50 matches the NoteCard preview width on most phones.
+     *   maxTitleLength = 50 matches the NoteCard preview width on most phones.
      *
      * EMPTY INPUT:
      *   Returns an empty string — callers are responsible for falling back.
      */
     private fun deriveSmartTitle(content: String): String {
-        val MAX_TITLE_LENGTH = 50
+        val maxTitleLength = 50
 
         // Find the first line that has visible characters
         val firstLine = content.lines().firstOrNull { it.isNotBlank() } ?: return ""
@@ -998,13 +1002,13 @@ class NoteEditorViewModel @Inject constructor(
         if (stripped.isEmpty()) return ""
 
         // Truncate cleanly at a space boundary to avoid mid-word cuts
-        return if (stripped.length <= MAX_TITLE_LENGTH) {
+        return if (stripped.length <= maxTitleLength) {
             stripped
         } else {
-            // Walk back from MAX_TITLE_LENGTH to the nearest space
-            val cutAt = stripped.lastIndexOf(' ', MAX_TITLE_LENGTH)
-                .takeIf { it > MAX_TITLE_LENGTH / 2 }  // only if the space isn't too far back
-                ?: MAX_TITLE_LENGTH
+            // Walk back from maxTitleLength to the nearest space
+            val cutAt = stripped.lastIndexOf(' ', maxTitleLength)
+                .takeIf { it > maxTitleLength / 2 }  // only if the space isn't too far back
+                ?: maxTitleLength
             stripped.take(cutAt).trimEnd() + "…"
         }
     }
@@ -1075,7 +1079,126 @@ class NoteEditorViewModel @Inject constructor(
             }
         }.filter { it.start < newText.length && it.end <= newText.length && it.start < it.end }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // WIKI LINK RESOLUTION  (Sprint 11)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Resolve a [[wiki link]] target and call back with the destination note ID.
+     *
+     * STEPS:
+     * 1. Save the current note immediately — we're about to navigate away and
+     *    we don't want the auto-save debounce to lose unsaved content.
+     * 2. Search all non-trashed, decrypted notes for one whose title matches
+     *    [linkTitle] (case-insensitive, leading/trailing whitespace ignored).
+     * 3. If found     → onResolved(existingNote.id)
+     * 4. If not found → insert a new blank note with linkTitle] as its title,
+     *                   then onResolved(newNoteId)
+     *
+     * WHY IN-MEMORY SEARCH?
+     * Note titles are AES-256-GCM ciphertext in SQLite.
+     * SQL LIKE compares against ciphertext — it can never match a plaintext
+     * pattern. NoteRepository.getAllNotes() returns fully decrypted domain
+     * models, so we search those instead.
+     *
+     * WHY flow.first()?
+     * getAllNotes() is a Flow. We only need a single snapshot here (we're not
+     * observing changes — we just need the current list to resolve one link).
+     * .first() collects exactly one emission and then cancels the upstream.
+     *
+     * @param [linkTitle  The inner text of [[...]]. Already trimmed by the caller.
+     * @param [onResolved Callback with the target note's ID. Always called on the
+     *                   main dispatcher (viewModelScope default).
+     */
+    // ─────────────────────────────────────────────────────────────────────────
+    // NOTE LINKING  (Sprint 11)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Load all non-trashed notes for the link picker bottom sheet.
+     *
+     * Called once when the user taps "Link" in the overflow menu — we fetch the
+     * current list at that moment so the picker always shows fresh data.
+     * The current note is excluded (can't link a note to itself).
+     *
+     * WHY in-memory search?
+     * Titles are AES-256-GCM encrypted in the DB — SQL LIKE can't match
+     * plaintext. We decrypt via getAllNotes() and filter in Kotlin.
+     */
+    fun loadAllNotesForLinkPicker() {
+        viewModelScope.launch {
+            val all = noteRepository.getAllNotes().first()
+            val previews = all
+                .filter { it.id != currentNoteId }   // exclude self
+                .map { LinkedNotePreview(id = it.id, title = it.title.ifBlank { "Untitled" }) }
+            _uiState.value = _uiState.value.copy(allNotesForPicker = previews)
+        }
+    }
+
+    /**
+     * Add [targetNoteId] to this note's linked set and persist immediately.
+     * No-op if already linked.
+     */
+    fun linkNote(targetNoteId: String) {
+        val current = _uiState.value.linkedNoteIds
+        if (targetNoteId in current) return
+        val updated = current + targetNoteId
+        _uiState.value = _uiState.value.copy(linkedNoteIds = updated)
+        // Reload resolved previews so the strip refreshes
+        loadLinkedNotePreviews(updated)
+        viewModelScope.launch { saveNote() }
+    }
+
+    /**
+     * Remove [targetNoteId] from this note's linked set and persist immediately.
+     */
+    fun unlinkNote(targetNoteId: String) {
+        val updated = _uiState.value.linkedNoteIds - targetNoteId
+        _uiState.value = _uiState.value.copy(linkedNoteIds = updated)
+        loadLinkedNotePreviews(updated)
+        viewModelScope.launch { saveNote() }
+    }
+
+    /**
+     * Resolve [ids] to their decrypted titles for display in the linked-notes
+     * strip above the tags section. Dead IDs (deleted notes) are silently
+     * dropped — the ID stays in linkedNoteIds but never shows in the UI.
+     */
+    private fun loadLinkedNotePreviews(ids: List<String>) {
+        if (ids.isEmpty()) {
+            _uiState.value = _uiState.value.copy(linkedNotePreviews = emptyList())
+            return
+        }
+        viewModelScope.launch {
+            val all      = noteRepository.getAllNotes().first()
+            val byId     = all.associateBy { it.id }
+            val previews = ids.mapNotNull { id ->
+                byId[id]?.let { note ->
+                    LinkedNotePreview(id = note.id, title = note.title.ifBlank { "Untitled" })
+                }
+            }
+            _uiState.value = _uiState.value.copy(linkedNotePreviews = previews)
+        }
+    }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPPORTING DATA CLASSES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lightweight note reference used in two places:
+ *   1. The link picker list (allNotesForPicker) — all notes the user can link to
+ *   2. The linked-notes strip (linkedNotePreviews) — notes already linked to this one
+ *
+ * We only need id + title; no content, no blocks, no formatting.
+ * This keeps memory usage tiny even with hundreds of notes.
+ */
+data class LinkedNotePreview(
+    val id: String,
+    val title: String
+)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UI STATE
@@ -1102,21 +1225,43 @@ data class NoteEditorUiState(
     val activeHeading: FormatType? = null,
 
     // Camera capture state
-    val cameraCaptureTempPath: String? = null,  // path of temp JPEG during camera capture
-    val pendingCameraUri: Uri? = null,           // URI to launch after permission granted
+    val cameraCaptureTempPath: String? = null,
+    val pendingCameraUri: Uri? = null,
 
     // Voice recording state
-    val isRecording: Boolean = false,            // true while MediaRecorder is active
-    val recordingElapsedMs: Long = 0L,           // elapsed recording time, updated every 100ms
-    val recordingTempPath: String? = null,       // path of plain .aac during active recording
+    val isRecording: Boolean = false,
+    val recordingElapsedMs: Long = 0L,
+    val recordingTempPath: String? = null,
 
-    // Preview toggle — shows rendered formatted text instead of the editor
+    // Preview toggle
     val showPreview: Boolean = false,
 
-    // ── SPRINT 5 ADDITION ─────────────────────────────────────────────────────
-    // The name of the folder this note currently lives in.
-    // Null means the note is at root level (no folder).
-    // Used by TopBar to show "In: My Notes" in the overflow menu.
+    // Sprint 5: folder name for TopBar display
     val currentFolderName: String? = null,
-    val noteColor: NoteColor? = null    // Sprint 6: current note color
+
+    // Sprint 6: note color accent
+    val noteColor: NoteColor? = null,
+
+    // ── Sprint 11: Note Linking ───────────────────────────────────────────────
+
+    /**
+     * The raw list of linked note IDs persisted to the DB.
+     * Loaded from note.linkedNoteIds on open; updated by linkNote/unlinkNote.
+     * Written back to DB on every saveNote() call.
+     */
+    val linkedNoteIds: List<String> = emptyList(),
+
+    /**
+     * Resolved previews (id + title) for linked notes — shown in the strip
+     * above the tags section. Derived from linkedNoteIds by loadLinkedNotePreviews().
+     * Dead links (deleted notes) are silently absent here even if still in linkedNoteIds.
+     */
+    val linkedNotePreviews: List<LinkedNotePreview> = emptyList(),
+
+    /**
+     * All notes available for the link picker bottom sheet.
+     * Populated on demand when the user taps "Link" in the overflow menu.
+     * Empty list = picker not yet loaded (shows a loading state).
+     */
+    val allNotesForPicker: List<LinkedNotePreview> = emptyList()
 )
