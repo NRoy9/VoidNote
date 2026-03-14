@@ -74,6 +74,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import com.greenicephoenix.voidnote.domain.model.InlineBlock
 import com.greenicephoenix.voidnote.domain.model.InlineBlockPayload
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 
 /**
  * Note Editor Screen.
@@ -103,8 +107,10 @@ import com.greenicephoenix.voidnote.domain.model.InlineBlockPayload
 @Composable
 fun NoteEditorScreen(
     onNavigateBack: () -> Unit,
-    // Sprint 11: navigate to a linked note when user taps a chip
+    // Navigate to a linked note (pushes on to back stack — back returns here)
     onNavigateToEditor: (noteId: String) -> Unit = {},
+    // Navigate to a diary neighbour (replaces current editor — back returns to calendar)
+    onNavigateToDiaryEntry: (noteId: String) -> Unit = {},
     viewModel: NoteEditorViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -302,53 +308,76 @@ fun NoteEditorScreen(
             contentFieldValue.copy(text = uiState.content)
     }
 
+    // Sprint 12: collect diary prev/next navigation events from ViewModel
+    LaunchedEffect(Unit) {
+        viewModel.diaryNavEvent.collectLatest { noteId ->
+            onNavigateToDiaryEntry(noteId)
+        }
+    }
+
     val hasSelection = contentFieldValue.selection.start != contentFieldValue.selection.end
     val sortedBlocks = remember(uiState.blocks) { uiState.blocks.values.sortedBy { it.createdAt } }
 
     // ── Layout ────────────────────────────────────────────────────────────────
     Scaffold(
+        // Fix: The outer NavGraph Scaffold already consumes all system window insets
+        // (status bar, nav bar) via innerPadding passed to the NavHost.
+        // Telling this inner Scaffold to use zero insets prevents double-padding
+        // which was causing the black gap below the formatting toolbar.
+        contentWindowInsets = WindowInsets(0),
         topBar = {
-            // Focus Mode: TopBar slides up and out. AnimatedVisibility handles
-            // the animation; when invisible Scaffold applies zero top inset so
-            // the content fills the space the TopBar previously occupied.
             AnimatedVisibility(
                 visible = !isFocusMode,
                 enter = fadeIn(tween(220)) + expandVertically(tween(220)),
                 exit = fadeOut(tween(180)) + shrinkVertically(tween(180))
             ) {
-                TopBar(
-                    onBackClick = onNavigateBack,
-                    isPinned = uiState.isPinned,
-                    isArchived = uiState.isArchived,
-                    onPinClick = { viewModel.togglePin() },
-                    onArchiveClick = { viewModel.archiveNote(); onNavigateBack() },
-                    onDeleteClick = { showDeleteDialog = true },
-                    onShareClick = {
-                        shareNote(
-                            context,
-                            uiState.title.ifBlank { "Untitled" },
-                            uiState.content,
-                            uiState.tags,
-                            uiState.blocks
-                        )
-                    },
-                    lastSaved = uiState.lastSaved,
-                    // SPRINT 5: pass the folder name for display and the callback to open the dialog
-                    currentFolderName = uiState.currentFolderName,
-                    onMoveToFolderClick = { showMoveToFolderDialog = true },
-                    currentColor = noteColor,
-                    onColorClick = { showColorDialog = true },
-                    // Sprint 11: load picker notes then show the sheet
-                    onLinkClick = {
-                        viewModel.loadAllNotesForLinkPicker()
-                        showLinkSheet = true
-                    },
-                    // SPRINT 10: Preview + Focus now live in the TopBar
-                    showPreview = uiState.showPreview,
-                    isFocusMode = isFocusMode,
-                    onPreviewClick = { viewModel.togglePreview() },
-                    onFocusToggle = { isFocusMode = !isFocusMode }
-                )
+                // While loading: show a minimal back-arrow bar so the screen
+                // never flashes between "normal note" and "diary note" states.
+                // isLoading takes ~1 frame to resolve — this eliminates the flash.
+                if (uiState.isLoading) {
+                    LoadingTopBar(onBackClick = onNavigateBack)
+                } else if (uiState.isDiaryEntry) {
+                    DiaryTopBar(
+                        title = uiState.title,
+                        onBackClick = onNavigateBack,
+                        prevDateKey = uiState.prevDiaryDateKey,
+                        nextDateKey = uiState.nextDiaryDateKey,
+                        onNavigateToDate = { dateKey ->
+                            viewModel.openOrCreateDiaryNeighbour(dateKey)
+                        }
+                    )
+                } else {
+                    TopBar(
+                        onBackClick = onNavigateBack,
+                        isPinned = uiState.isPinned,
+                        isArchived = uiState.isArchived,
+                        onPinClick = { viewModel.togglePin() },
+                        onArchiveClick = { viewModel.archiveNote(); onNavigateBack() },
+                        onDeleteClick = { showDeleteDialog = true },
+                        onShareClick = {
+                            shareNote(
+                                context,
+                                uiState.title.ifBlank { "Untitled" },
+                                uiState.content,
+                                uiState.tags,
+                                uiState.blocks
+                            )
+                        },
+                        lastSaved = uiState.lastSaved,
+                        currentFolderName = uiState.currentFolderName,
+                        onMoveToFolderClick = { showMoveToFolderDialog = true },
+                        currentColor = noteColor,
+                        onColorClick = { showColorDialog = true },
+                        onLinkClick = {
+                            viewModel.loadAllNotesForLinkPicker()
+                            showLinkSheet = true
+                        },
+                        showPreview = uiState.showPreview,
+                        isFocusMode = isFocusMode,
+                        onPreviewClick = { viewModel.togglePreview() },
+                        onFocusToggle = { isFocusMode = !isFocusMode }
+                    )
+                }
             }
         },
         bottomBar = {
@@ -369,9 +398,9 @@ fun NoteEditorScreen(
                         .imePadding()
                         .navigationBarsPadding()
                 ) {
-                    // Sprint 11: linked notes strip — hidden when no links exist.
-                    // Appears just above the tags bar so it's always visible while editing.
-                    if (uiState.linkedNotePreviews.isNotEmpty()) {
+                    // Sprint 11: linked notes strip — hidden for diary entries
+                    // and when no links exist
+                    if (!uiState.isDiaryEntry && uiState.linkedNotePreviews.isNotEmpty()) {
                         LinkedNotesStrip(
                             notes = uiState.linkedNotePreviews,
                             onNoteClick = { noteId -> onNavigateToEditor(noteId) },
@@ -380,11 +409,15 @@ fun NoteEditorScreen(
                         )
                     }
 
-                    TagsSection(
-                        tags = uiState.tags,
-                        onAddTag = { viewModel.addTag(it) },
-                        onRemoveTag = { viewModel.removeTag(it) }
-                    )
+                    // Sprint 12: tags hidden for diary entries — journal is
+                    // its own space, not mixed with the notes tag system
+                    if (!uiState.isDiaryEntry) {
+                        TagsSection(
+                            tags = uiState.tags,
+                            onAddTag = { viewModel.addTag(it) },
+                            onRemoveTag = { viewModel.removeTag(it) }
+                        )
+                    }
 
                     FormattingToolbar(
                         isBoldActive = if (hasSelection) hasFormat(
@@ -509,22 +542,26 @@ fun NoteEditorScreen(
                 ) {
                     Spacer(Modifier.height(Spacing.small))
 
-                    RichTextEditor(
-                        value = titleFieldValue,
-                        onValueChange = { newValue ->
-                            if (newValue.text.length <= 100) {
-                                titleFieldValue = newValue
-                                viewModel.onTitleChange(newValue.text)
-                            }
-                        },
-                        placeholder = "Note title",
-                        textStyle = TextStyle(
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 32.sp
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // In diary mode, the title is the date — shown in DiaryTopBar.
+                    // No title field or label needed in the content area.
+                    if (!uiState.isDiaryEntry) {
+                        RichTextEditor(
+                            value = titleFieldValue,
+                            onValueChange = { newValue ->
+                                if (newValue.text.length <= 100) {
+                                    titleFieldValue = newValue
+                                    viewModel.onTitleChange(newValue.text)
+                                }
+                            },
+                            placeholder = "Note title",
+                            textStyle = TextStyle(
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 32.sp
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
                     Spacer(Modifier.height(Spacing.medium))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
@@ -2125,7 +2162,7 @@ fun NoteEditorScreen(
             modifier          = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 420.dp),   // cap height so sheet doesn't fill screen
-            contentPadding    = androidx.compose.foundation.layout.PaddingValues(
+            contentPadding    = PaddingValues(
                 bottom = Spacing.large
             )
         ) {
@@ -2182,6 +2219,150 @@ fun NoteEditorScreen(
                     modifier           = Modifier
                         .padding(start = Spacing.medium)
                         .size(20.dp)
+                )
+            }
+        }
+    }
+// ─────────────────────────────────────────────────────────────────────────────
+// LOADING TOP BAR  (Sprint 12 — prevents flash on diary navigation)
+// ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Minimal TopBar shown during isLoading to prevent flashing the wrong variant.
+     */
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    private fun LoadingTopBar(onBackClick: () -> Unit) {
+        TopAppBar(
+            title = {},
+            navigationIcon = {
+                IconButton(onClick = onBackClick) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background
+            )
+        )
+    }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DIARY TOP BAR  (Sprint 12)
+// ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * DiaryTopBar — two-row header shown when editing a diary entry.
+     *
+     * ROW 1:  [←]  JOURNAL ENTRY
+     *   Standard back arrow + muted label — matches back-navigation on all screens.
+     *
+     * ROW 2:  [‹]  Saturday, March 14  [›]
+     *   ChevronLeft / ChevronRight — visually distinct from the back arrow.
+     *   Prev is always shown (dimmed if today is the first entry ever).
+     *   Next is null on today's entry (no future entries).
+     *   Both create the adjacent entry if it doesn't exist yet.
+     */
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    private fun DiaryTopBar(
+        title: String,
+        onBackClick: () -> Unit,
+        prevDateKey: String?,
+        nextDateKey: String?,
+        onNavigateToDate: (dateKey: String) -> Unit
+    ) {
+        val displayDate = remember(title) {
+            try {
+                val stripped = title.removePrefix("📅 ").trim()
+                val parsed   = SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()).parse(stripped)
+                if (parsed != null)
+                    SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(parsed)
+                else stripped
+            } catch (_: Exception) { title }
+        }
+
+        val onSurface = MaterialTheme.colorScheme.onSurface
+        val dimmed    = onSurface.copy(alpha = 0.25f)
+
+        Surface(
+            color    = MaterialTheme.colorScheme.background,
+            modifier = Modifier.fillMaxWidth().statusBarsPadding()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+
+                // ── Row 1: back arrow + JOURNAL ENTRY label ───────────────────────
+                Row(
+                    modifier          = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to journal",
+                            tint               = onSurface
+                        )
+                    }
+                    Text(
+                        text  = "JOURNAL ENTRY",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            letterSpacing = 2.sp,
+                            fontWeight    = FontWeight.SemiBold
+                        ),
+                        color = onSurface.copy(alpha = 0.45f)
+                    )
+                }
+
+                // ── Row 2: [‹]  date  [›] ────────────────────────────────────────
+                Row(
+                    modifier              = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(
+                        onClick = { prevDateKey?.let { onNavigateToDate(it) } },
+                        enabled = prevDateKey != null
+                    ) {
+                        Icon(
+                            imageVector        = Icons.Default.ChevronLeft,
+                            contentDescription = "Previous day",
+                            tint               = if (prevDateKey != null) onSurface else dimmed,
+                            modifier           = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Text(
+                        text      = displayDate,
+                        style     = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color     = onSurface,
+                        maxLines  = 1,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier  = Modifier.weight(1f)
+                    )
+
+                    IconButton(
+                        onClick = { nextDateKey?.let { onNavigateToDate(it) } },
+                        enabled = nextDateKey != null
+                    ) {
+                        Icon(
+                            imageVector        = Icons.Default.ChevronRight,
+                            contentDescription = "Next day",
+                            tint               = if (nextDateKey != null) onSurface else dimmed,
+                            modifier           = Modifier.size(28.dp)
+                        )
+                    }
+                }
+
+                HorizontalDivider(
+                    color     = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                    thickness = 0.5.dp
                 )
             }
         }

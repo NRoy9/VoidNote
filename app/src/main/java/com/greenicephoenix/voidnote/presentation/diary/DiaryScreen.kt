@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -90,6 +92,7 @@ fun DiaryScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             DiaryTopBar(onNavigateBack = onNavigateBack)
         },
@@ -120,7 +123,8 @@ fun DiaryScreen(
                 year       = uiState.displayYear,
                 month      = uiState.displayMonth,
                 onPrevious = { viewModel.previousMonth() },
-                onNext     = { viewModel.nextMonth() }
+                onNext     = { viewModel.nextMonth() },
+                onJumpTo   = { y, m -> viewModel.jumpToMonth(y, m) }
             )
 
             Spacer(Modifier.height(Spacing.large))
@@ -198,30 +202,43 @@ private fun DiaryTopBar(onNavigateBack: () -> Unit) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Month header row: [←]  March 2026  [→]
- * Tapping the arrows calls onPrevious/onNext in the ViewModel.
+ * Month header row with tappable label that opens the month/year picker.
+ *
+ *   [←]   March 2026 ▾   [→]
+ *
+ * The ▾ chevron signals the label is tappable. Tapping opens a dialog
+ * to jump to any month from 5 years ago through the current month.
  */
 @Composable
 private fun MonthHeader(
     year: Int,
     month: Int,
     onPrevious: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    onJumpTo: (year: Int, month: Int) -> Unit
 ) {
-    val monthName = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(
-        Calendar.getInstance().apply {
-            set(Calendar.YEAR, year)
-            set(Calendar.MONTH, month)
-            set(Calendar.DAY_OF_MONTH, 1)
-        }.time
-    )
+    var showPicker by remember { mutableStateOf(false) }
+
+    val monthName = remember(year, month) {
+        SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(
+            Calendar.getInstance().apply {
+                set(Calendar.YEAR, year)
+                set(Calendar.MONTH, month)
+                set(Calendar.DAY_OF_MONTH, 1)
+            }.time
+        )
+    }
+
+    // Prevent navigating past the current month into the future
+    val todayCal    = remember { Calendar.getInstance() }
+    val isCurrentMonth = year == todayCal.get(Calendar.YEAR) &&
+            month == todayCal.get(Calendar.MONTH)
 
     Row(
         modifier              = Modifier.fillMaxWidth(),
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Previous month arrow
         IconButton(onClick = onPrevious) {
             Icon(
                 imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
@@ -230,23 +247,198 @@ private fun MonthHeader(
             )
         }
 
-        // Month + year label — centred, bold
-        Text(
-            text      = monthName,
-            style     = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            color     = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
-        )
+        // Tappable month + year label — subtle pill with dropdown chevron
+        Surface(
+            onClick = { showPicker = true },
+            shape   = RoundedCornerShape(8.dp),
+            color   = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            border  = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+        ) {
+            Row(
+                modifier              = Modifier.padding(horizontal = Spacing.medium, vertical = Spacing.small),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text      = monthName,
+                    style     = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color     = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Center
+                )
+                Icon(
+                    imageVector        = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Pick month and year",
+                    tint               = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier           = Modifier.size(20.dp)
+                )
+            }
+        }
 
-        // Next month arrow
-        IconButton(onClick = onNext) {
+        IconButton(
+            onClick  = onNext,
+            enabled  = !isCurrentMonth
+        ) {
             Icon(
                 imageVector        = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = "Next month",
-                tint               = MaterialTheme.colorScheme.onSurface
+                tint               = if (!isCurrentMonth) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
             )
         }
     }
+
+    if (showPicker) {
+        MonthYearPickerDialog(
+            currentYear  = year,
+            currentMonth = month,
+            onConfirm    = { y, m ->
+                onJumpTo(y, m)
+                showPicker = false
+            },
+            onDismiss    = { showPicker = false }
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MONTH / YEAR PICKER DIALOG
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * MonthYearPickerDialog — lets the user jump to any month/year.
+ *
+ * DESIGN:
+ *   • Year row at top — scroll left/right through years (5 years back → today)
+ *   • 3×4 month grid below — 12 month chips
+ *   • Current selection highlighted in primary color
+ *   • Future months are disabled (greyed out)
+ *   • "Go" button confirms
+ *
+ * RANGE: 5 years back from today's year through today's month.
+ * We don't allow future months — diary entries can only be written for
+ * today or the past.
+ */
+@Composable
+private fun MonthYearPickerDialog(
+    currentYear: Int,
+    currentMonth: Int,
+    onConfirm: (year: Int, month: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val todayCal   = remember { Calendar.getInstance() }
+    val todayYear  = todayCal.get(Calendar.YEAR)
+    val todayMonth = todayCal.get(Calendar.MONTH)
+    val minYear    = todayYear - 5
+
+    var selectedYear  by remember { mutableIntStateOf(currentYear) }
+    var selectedMonth by remember { mutableIntStateOf(currentMonth) }
+
+    val monthNames = remember {
+        val fmt = SimpleDateFormat("MMM", Locale.getDefault())
+        (0..11).map { m ->
+            fmt.format(Calendar.getInstance().apply {
+                set(Calendar.MONTH, m)
+                set(Calendar.DAY_OF_MONTH, 1)
+            }.time)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text  = "Go to",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.medium)) {
+
+                // ── Year selector ─────────────────────────────────────────────
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(
+                        onClick  = { if (selectedYear > minYear) selectedYear-- },
+                        enabled  = selectedYear > minYear
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Previous year",
+                            tint = if (selectedYear > minYear) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f))
+                    }
+
+                    Text(
+                        text  = selectedYear.toString(),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    IconButton(
+                        onClick  = { if (selectedYear < todayYear) selectedYear++ },
+                        enabled  = selectedYear < todayYear
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, "Next year",
+                            tint = if (selectedYear < todayYear) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f))
+                    }
+                }
+
+                // ── Month grid — 3 columns × 4 rows ──────────────────────────
+                // A month is disabled if it's in the future
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.small)) {
+                    (0..11).chunked(3).forEach { rowMonths ->
+                        Row(
+                            modifier              = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.small)
+                        ) {
+                            rowMonths.forEach { m ->
+                                val isFuture  = selectedYear == todayYear && m > todayMonth
+                                val isSelected = m == selectedMonth
+                                val chipColor  = when {
+                                    isSelected -> MaterialTheme.colorScheme.primary
+                                    isFuture   -> MaterialTheme.colorScheme.surfaceVariant
+                                    else       -> MaterialTheme.colorScheme.surfaceVariant
+                                }
+                                val textColor  = when {
+                                    isSelected -> MaterialTheme.colorScheme.onPrimary
+                                    isFuture   -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                    else       -> MaterialTheme.colorScheme.onSurface
+                                }
+
+                                Surface(
+                                    onClick  = { if (!isFuture) selectedMonth = m },
+                                    enabled  = !isFuture,
+                                    modifier = Modifier.weight(1f),
+                                    shape    = RoundedCornerShape(8.dp),
+                                    color    = chipColor
+                                ) {
+                                    Text(
+                                        text      = monthNames[m],
+                                        style     = MaterialTheme.typography.bodySmall.copy(
+                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                        ),
+                                        color     = textColor,
+                                        textAlign = TextAlign.Center,
+                                        modifier  = Modifier.padding(vertical = 10.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selectedYear, selectedMonth) }) {
+                Text("Go", fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

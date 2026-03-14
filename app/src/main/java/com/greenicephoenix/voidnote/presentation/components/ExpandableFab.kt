@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -90,14 +92,14 @@ fun ExpandableFab(
                 // Templates — opens the template picker sheet
                 FabMenuItem(
                     text    = "Templates",
-                    icon    = Icons.Default.Article,
+                    icon    = Icons.AutoMirrored.Filled.Article,
                     onClick = { expanded = false; onOpenTemplates() }
                 )
 
                 // New Note — closest to the main FAB, most common action
                 FabMenuItem(
                     text    = "New Note",
-                    icon    = Icons.Default.NoteAdd,
+                    icon    = Icons.AutoMirrored.Filled.NoteAdd,
                     onClick = { expanded = false; onCreateNote() }
                 )
             }

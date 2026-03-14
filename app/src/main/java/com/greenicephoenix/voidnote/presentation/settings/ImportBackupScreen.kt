@@ -9,8 +9,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -507,7 +509,7 @@ private fun FileReadyContent(
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(
-                            imageVector        = Icons.Default.InsertDriveFile,
+                            imageVector        = Icons.AutoMirrored.Filled.InsertDriveFile,
                             contentDescription = null,
                             modifier           = Modifier.size(20.dp),
                             tint               = MaterialTheme.colorScheme.primary
@@ -525,9 +527,9 @@ private fun FileReadyContent(
                     }
                 }
 
-                Divider(
+                HorizontalDivider(
                     modifier = Modifier.padding(vertical = Spacing.small),
-                    color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                    thickness = DividerDefaults.Thickness, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                 )
 
                 // Note and folder count row

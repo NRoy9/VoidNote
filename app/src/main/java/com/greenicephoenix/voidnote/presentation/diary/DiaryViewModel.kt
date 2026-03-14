@@ -146,6 +146,14 @@ class DiaryViewModel @Inject constructor(
         )
     }
 
+    /** Jump directly to a specific month/year — called from the picker dialog. */
+    fun jumpToMonth(year: Int, month: Int) {
+        _uiState.value = _uiState.value.copy(
+            displayYear  = year,
+            displayMonth = month
+        )
+    }
+
     /**
      * Open an existing diary entry for [dateKey], or create a new one.
      *

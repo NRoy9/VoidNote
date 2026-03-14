@@ -14,8 +14,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -67,12 +65,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun NotesListScreen(
     onNavigateToEditor: (String) -> Unit = {},
-    onNavigateToSearch: () -> Unit = {},
-    onNavigateToSettings: () -> Unit = {},
     onNavigateToFolders: () -> Unit = {},
     onNavigateToFolderNotes: (String) -> Unit = {},
     onNavigateToTags: () -> Unit = {},
-    onCreateFolder: () -> Unit = {},
     viewModel: NotesListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -119,12 +114,11 @@ fun NotesListScreen(
     }
 
     Scaffold(
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         topBar = {
             NotesListTopBar(
-                onSearchClick   = onNavigateToSearch,
-                onSettingsClick = onNavigateToSettings,
-                currentSort     = noteSort,
-                onSortSelected  = { viewModel.onSortSelected(it) }
+                currentSort    = noteSort,
+                onSortSelected = { viewModel.onSortSelected(it) }
             )
         },
         floatingActionButton = {
@@ -244,8 +238,6 @@ fun NotesListScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotesListTopBar(
-    onSearchClick: () -> Unit,
-    onSettingsClick: () -> Unit,
     currentSort: NoteSort,
     onSortSelected: (NoteSort) -> Unit
 ) {
@@ -262,12 +254,7 @@ private fun NotesListTopBar(
             )
         },
         actions = {
-            // Search button
-            IconButton(onClick = onSearchClick) {
-                Icon(Icons.Default.Search, contentDescription = "Search")
-            }
-
-            // Sort button + dropdown
+            // Sort button + dropdown (Search moved to bottom nav)
             Box {
                 IconButton(onClick = { showSortMenu = true }) {
                     Icon(
@@ -310,10 +297,6 @@ private fun NotesListTopBar(
                 }
             }
 
-            // Settings button
-            IconButton(onClick = onSettingsClick) {
-                Icon(Icons.Default.Settings, contentDescription = "Settings")
-            }
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor    = MaterialTheme.colorScheme.background,

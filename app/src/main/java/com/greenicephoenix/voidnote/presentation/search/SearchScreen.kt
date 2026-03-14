@@ -69,6 +69,7 @@ fun SearchScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             SearchTopBar(
                 searchQuery = searchQuery,

@@ -78,6 +78,7 @@ fun SettingsScreen(
 
     // ── Main scaffold ─────────────────────────────────────────────────────────
     Scaffold(
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },

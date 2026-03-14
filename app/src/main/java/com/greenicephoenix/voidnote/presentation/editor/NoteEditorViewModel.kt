@@ -26,9 +26,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -87,6 +90,13 @@ class NoteEditorViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(NoteEditorUiState())
     val uiState: StateFlow<NoteEditorUiState> = _uiState.asStateFlow()
 
+    /**
+     * Sprint 12 — one-shot event to navigate to a diary entry (prev/next day).
+     * SharedFlow with replay=0 so rotation doesn't re-trigger.
+     */
+    private val _diaryNavEvent = MutableSharedFlow<String>(replay = 0)
+    val diaryNavEvent: SharedFlow<String> = _diaryNavEvent.asSharedFlow()
+
     private var autoSaveJob: Job? = null
     private var recordingTimerJob: Job? = null
     private var currentNoteId: String = noteId
@@ -120,9 +130,9 @@ class NoteEditorViewModel @Inject constructor(
     // for 5 seconds after the last subscriber disappears — handles config changes.
     val folders: StateFlow<List<Folder>> = folderRepository.getAllFolders()
         .stateIn(
-            scope            = viewModelScope,
-            started          = SharingStarted.WhileSubscribed(5_000),
-            initialValue     = emptyList()
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
         )
 
     init {
@@ -163,10 +173,19 @@ class NoteEditorViewModel @Inject constructor(
                 state.content.isBlank() &&
                 state.blocks.isEmpty()
 
-        if (isGhostNote) {
+        // Sprint 12: diary entries created by tapping an empty calendar day
+        // should also be cleaned up if the user leaves without writing anything.
+        // A diary entry is "empty" when content is blank and no blocks exist,
+        // regardless of wasNewOnOpen (diary notes are always pre-created with a title).
+        val isEmptyDiaryEntry = state.isDiaryEntry &&
+                !state.isNewNote &&
+                state.content.isBlank() &&
+                state.blocks.isEmpty()
+
+        if (isGhostNote || isEmptyDiaryEntry) {
             cleanupScope.launch {
                 noteRepository.deleteNotePermanently(currentNoteId)
-                cleanupScope.cancel()  // release scope once cleanup is done
+                cleanupScope.cancel()
             }
         } else {
             cleanupScope.cancel()
@@ -191,7 +210,7 @@ class NoteEditorViewModel @Inject constructor(
             viewModelScope.launch {
                 val note = noteRepository.getNoteById(noteId)
                 if (note != null) {
-                    currentNoteId   = note.id
+                    currentNoteId = note.id
                     currentFolderId = note.folderId
 
                     val logicalContent = DocumentParser.extractLogicalContent(note.content)
@@ -204,20 +223,23 @@ class NoteEditorViewModel @Inject constructor(
                     }
 
                     _uiState.value = _uiState.value.copy(
-                        title             = note.title,
-                        content           = logicalContent,
-                        contentFormats    = note.contentFormats,
-                        isPinned          = note.isPinned,
-                        isArchived        = note.isArchived,
-                        tags              = note.tags,
-                        isNewNote         = false,
-                        isLoading         = false,
+                        title = note.title,
+                        content = logicalContent,
+                        contentFormats = note.contentFormats,
+                        isPinned = note.isPinned,
+                        isArchived = note.isArchived,
+                        tags = note.tags,
+                        isNewNote = false,
+                        isLoading = false,
                         currentFolderName = folderName,
-                        noteColor         = note.color,
-                        linkedNoteIds     = note.linkedNoteIds  // Sprint 11: restore link IDs
+                        noteColor = note.color,
+                        linkedNoteIds = note.linkedNoteIds,
+                        isDiaryEntry = note.isDiaryEntry   // Sprint 12
                     )
                     // Sprint 11: resolve IDs → titles for the linked-notes strip
                     loadLinkedNotePreviews(note.linkedNoteIds)
+                    // Sprint 12: if this is a diary entry, load prev/next navigation
+                    if (note.isDiaryEntry) loadDiaryNeighbours(note.title)
                 } else {
                     currentNoteId = UUID.randomUUID().toString()
                     _uiState.value = _uiState.value.copy(isNewNote = true, isLoading = false)
@@ -246,13 +268,20 @@ class NoteEditorViewModel @Inject constructor(
         viewModelScope.launch {
             ensureNotePersisted()
             val blockId = UUID.randomUUID().toString()
-            val itemId  = UUID.randomUUID().toString()
+            val itemId = UUID.randomUUID().toString()
             val newBlock = InlineBlock(
-                id        = blockId,
-                noteId    = currentNoteId,
-                type      = InlineBlockType.TODO,
-                payload   = InlineBlockPayload.Todo(
-                    items = listOf(TodoItem(id = itemId, text = "", isChecked = false, sortOrder = 0))
+                id = blockId,
+                noteId = currentNoteId,
+                type = InlineBlockType.TODO,
+                payload = InlineBlockPayload.Todo(
+                    items = listOf(
+                        TodoItem(
+                            id = itemId,
+                            text = "",
+                            isChecked = false,
+                            sortOrder = 0
+                        )
+                    )
                 ),
                 createdAt = System.currentTimeMillis()
             )
@@ -276,12 +305,12 @@ class NoteEditorViewModel @Inject constructor(
     fun insertCodeBlock() {
         viewModelScope.launch {
             ensureNotePersisted()
-            val blockId  = UUID.randomUUID().toString()
+            val blockId = UUID.randomUUID().toString()
             val newBlock = InlineBlock(
-                id        = blockId,
-                noteId    = currentNoteId,
-                type      = InlineBlockType.CODE,
-                payload   = InlineBlockPayload.Code(code = "", language = ""),
+                id = blockId,
+                noteId = currentNoteId,
+                type = InlineBlockType.CODE,
+                payload = InlineBlockPayload.Code(code = "", language = ""),
                 createdAt = System.currentTimeMillis()
             )
             inlineBlockRepository.insertBlock(newBlock)
@@ -296,7 +325,7 @@ class NoteEditorViewModel @Inject constructor(
      */
     fun updateCodeBlock(blockId: String, code: String) {
         viewModelScope.launch {
-            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val block = _uiState.value.blocks[blockId] ?: return@launch
             val payload = block.payload as? InlineBlockPayload.Code ?: return@launch
             inlineBlockRepository.updateBlock(
                 block.copy(payload = payload.copy(code = code))
@@ -310,7 +339,7 @@ class NoteEditorViewModel @Inject constructor(
      */
     fun updateCodeBlockLanguage(blockId: String, language: String) {
         viewModelScope.launch {
-            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val block = _uiState.value.blocks[blockId] ?: return@launch
             val payload = block.payload as? InlineBlockPayload.Code ?: return@launch
             inlineBlockRepository.updateBlock(
                 block.copy(payload = payload.copy(language = language))
@@ -320,7 +349,7 @@ class NoteEditorViewModel @Inject constructor(
 
     fun toggleTodoItem(blockId: String, itemId: String) {
         viewModelScope.launch {
-            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val block = _uiState.value.blocks[blockId] ?: return@launch
             val payload = block.payload as? InlineBlockPayload.Todo ?: return@launch
             val updated = block.copy(
                 payload = payload.copy(
@@ -333,10 +362,15 @@ class NoteEditorViewModel @Inject constructor(
 
     fun addTodoItem(blockId: String) {
         viewModelScope.launch {
-            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val block = _uiState.value.blocks[blockId] ?: return@launch
             val payload = block.payload as? InlineBlockPayload.Todo ?: return@launch
             val maxOrder = payload.items.maxOfOrNull { it.sortOrder } ?: -1
-            val newItem  = TodoItem(id = UUID.randomUUID().toString(), text = "", isChecked = false, sortOrder = maxOrder + 1)
+            val newItem = TodoItem(
+                id = UUID.randomUUID().toString(),
+                text = "",
+                isChecked = false,
+                sortOrder = maxOrder + 1
+            )
             inlineBlockRepository.updateBlock(block.copy(payload = payload.copy(items = payload.items + newItem)))
         }
     }
@@ -373,7 +407,7 @@ class NoteEditorViewModel @Inject constructor(
         remainingLines: List<String>
     ) {
         viewModelScope.launch {
-            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val block = _uiState.value.blocks[blockId] ?: return@launch
             val payload = block.payload as? InlineBlockPayload.Todo ?: return@launch
 
             // Sort by sortOrder for stable, predictable insertion position
@@ -389,8 +423,8 @@ class NoteEditorViewModel @Inject constructor(
             // Build new items for lines 2..N, inserting after the current item
             val newItems = remainingLines.mapIndexed { i, line ->
                 TodoItem(
-                    id        = UUID.randomUUID().toString(),
-                    text      = line,
+                    id = UUID.randomUUID().toString(),
+                    text = line,
                     isChecked = false,
                     sortOrder = insertIndex + 1 + i  // placeholder — renumbered below
                 )
@@ -413,10 +447,11 @@ class NoteEditorViewModel @Inject constructor(
 
     fun updateTodoItemText(blockId: String, itemId: String, newText: String) {
         viewModelScope.launch {
-            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val block = _uiState.value.blocks[blockId] ?: return@launch
             val payload = block.payload as? InlineBlockPayload.Todo ?: return@launch
             inlineBlockRepository.updateBlock(
-                block.copy(payload = payload.copy(
+                block.copy(
+                    payload = payload.copy(
                     items = payload.items.map { if (it.id == itemId) it.copy(text = newText) else it }
                 ))
             )
@@ -425,10 +460,12 @@ class NoteEditorViewModel @Inject constructor(
 
     fun deleteTodoItem(blockId: String, itemId: String) {
         viewModelScope.launch {
-            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val block = _uiState.value.blocks[blockId] ?: return@launch
             val payload = block.payload as? InlineBlockPayload.Todo ?: return@launch
             val remaining = payload.items.filter { it.id != itemId }
-            if (remaining.isEmpty()) { deleteBlock(blockId); return@launch }
+            if (remaining.isEmpty()) {
+                deleteBlock(blockId); return@launch
+            }
             inlineBlockRepository.updateBlock(block.copy(payload = payload.copy(items = remaining)))
         }
     }
@@ -455,10 +492,15 @@ class NoteEditorViewModel @Inject constructor(
 
             val (width, height) = imageStorage.readDimensions(encFilePath)
             val newBlock = InlineBlock(
-                id        = blockId,
-                noteId    = currentNoteId,
-                type      = InlineBlockType.IMAGE,
-                payload   = InlineBlockPayload.Image(filePath = encFilePath, caption = "", width = width, height = height),
+                id = blockId,
+                noteId = currentNoteId,
+                type = InlineBlockType.IMAGE,
+                payload = InlineBlockPayload.Image(
+                    filePath = encFilePath,
+                    caption = "",
+                    width = width,
+                    height = height
+                ),
                 createdAt = System.currentTimeMillis()
             )
             inlineBlockRepository.insertBlock(newBlock)
@@ -485,10 +527,15 @@ class NoteEditorViewModel @Inject constructor(
 
             val (width, height) = imageStorage.readDimensions(encFilePath)
             val newBlock = InlineBlock(
-                id        = blockId,
-                noteId    = currentNoteId,
-                type      = InlineBlockType.IMAGE,
-                payload   = InlineBlockPayload.Image(filePath = encFilePath, caption = "", width = width, height = height),
+                id = blockId,
+                noteId = currentNoteId,
+                type = InlineBlockType.IMAGE,
+                payload = InlineBlockPayload.Image(
+                    filePath = encFilePath,
+                    caption = "",
+                    width = width,
+                    height = height
+                ),
                 createdAt = System.currentTimeMillis()
             )
             inlineBlockRepository.insertBlock(newBlock)
@@ -499,7 +546,7 @@ class NoteEditorViewModel @Inject constructor(
 
     fun updateImageCaption(blockId: String, newCaption: String) {
         viewModelScope.launch {
-            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val block = _uiState.value.blocks[blockId] ?: return@launch
             val payload = block.payload as? InlineBlockPayload.Image ?: return@launch
             inlineBlockRepository.updateBlock(block.copy(payload = payload.copy(caption = newCaption)))
         }
@@ -546,7 +593,7 @@ class NoteEditorViewModel @Inject constructor(
             ensureNotePersisted()
 
             val tempPath = audioStorage.createRecordingTempFile()
-            val started  = voiceRecorder.startRecording(tempPath)
+            val started = voiceRecorder.startRecording(tempPath)
 
             if (!started) {
                 android.util.Log.e("NoteEditor", "startRecording: MediaRecorder failed to start")
@@ -554,9 +601,9 @@ class NoteEditorViewModel @Inject constructor(
             }
 
             _uiState.value = _uiState.value.copy(
-                isRecording        = true,
+                isRecording = true,
                 recordingElapsedMs = 0L,
-                recordingTempPath  = tempPath
+                recordingTempPath = tempPath
             )
 
             // Timer: increment elapsed time every 100ms while recording
@@ -584,7 +631,7 @@ class NoteEditorViewModel @Inject constructor(
      * Called when user taps the Stop button in RecordingSheet.
      */
     fun stopRecording() {
-        val tempPath   = _uiState.value.recordingTempPath ?: return
+        val tempPath = _uiState.value.recordingTempPath ?: return
         val durationMs = _uiState.value.recordingElapsedMs
 
         // Stop the timer first
@@ -615,11 +662,11 @@ class NoteEditorViewModel @Inject constructor(
             }
 
             val newBlock = InlineBlock(
-                id        = blockId,
-                noteId    = currentNoteId,
-                type      = InlineBlockType.AUDIO,
-                payload   = InlineBlockPayload.Audio(
-                    filePath   = encFilePath,
+                id = blockId,
+                noteId = currentNoteId,
+                type = InlineBlockType.AUDIO,
+                payload = InlineBlockPayload.Audio(
+                    filePath = encFilePath,
                     durationMs = durationMs.coerceAtLeast(0L)
                 ),
                 createdAt = System.currentTimeMillis()
@@ -631,8 +678,8 @@ class NoteEditorViewModel @Inject constructor(
 
             // Clear recording state — UI returns to normal
             _uiState.value = _uiState.value.copy(
-                isRecording        = false,
-                recordingTempPath  = null,
+                isRecording = false,
+                recordingTempPath = null,
                 recordingElapsedMs = 0L
             )
         }
@@ -680,11 +727,14 @@ class NoteEditorViewModel @Inject constructor(
                     val path = (block.payload as? InlineBlockPayload.Image)?.filePath
                     path?.let { imageStorage.deleteEncFile(it) }
                 }
+
                 InlineBlockType.AUDIO -> {
                     val path = (block.payload as? InlineBlockPayload.Audio)?.filePath
                     path?.let { audioStorage.deleteEncFile(it) }
                 }
-                else -> { /* TODO — no file */ }
+
+                else -> { /* TODO — no file */
+                }
             }
 
             inlineBlockRepository.deleteBlock(blockId)
@@ -751,7 +801,7 @@ class NoteEditorViewModel @Inject constructor(
             userTypedTitle -> state.title
 
             // Existing note loaded from DB — never auto-rename retroactively
-            !wasNewOnOpen  -> state.title
+            !wasNewOnOpen -> state.title
 
             // Body text exists → derive from first meaningful line
             state.content.isNotBlank() -> deriveSmartTitle(state.content)
@@ -778,28 +828,30 @@ class NoteEditorViewModel @Inject constructor(
 
         val rawContent = DocumentParser.buildRawContent(
             logicalContent = state.content,
-            blocks         = currentBlocks
+            blocks = currentBlocks
         )
 
         val note = Note(
-            id             = currentNoteId,
-            title          = resolvedTitle,
-            content        = rawContent,
+            id = currentNoteId,
+            title = resolvedTitle,
+            content = rawContent,
             contentFormats = state.contentFormats,
-            createdAt      = System.currentTimeMillis(),
-            updatedAt      = System.currentTimeMillis(),
-            isPinned       = state.isPinned,
-            isArchived     = state.isArchived,
-            isTrashed      = false,
-            tags           = state.tags,
-            folderId       = currentFolderId,
-            color          = _uiState.value.noteColor,
-            linkedNoteIds  = state.linkedNoteIds   // Sprint 11: persist linked note IDs
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            isPinned = state.isPinned,
+            isArchived = state.isArchived,
+            isTrashed = false,
+            tags = state.tags,
+            folderId = currentFolderId,
+            color = _uiState.value.noteColor,
+            linkedNoteIds = state.linkedNoteIds,
+            isDiaryEntry = state.isDiaryEntry   // Sprint 12: preserve diary flag
         )
 
         if (state.isNewNote) {
             noteRepository.insertNote(note, folderId = currentFolderId)
-            _uiState.value = _uiState.value.copy(isNewNote = false, lastSaved = System.currentTimeMillis())
+            _uiState.value =
+                _uiState.value.copy(isNewNote = false, lastSaved = System.currentTimeMillis())
         } else {
             noteRepository.updateNote(note)
             _uiState.value = _uiState.value.copy(lastSaved = System.currentTimeMillis())
@@ -809,18 +861,18 @@ class NoteEditorViewModel @Inject constructor(
     private suspend fun ensureNotePersisted() {
         if (!_uiState.value.isNewNote) return
         val state = _uiState.value
-        val note  = Note(
-            id             = currentNoteId,
-            title          = state.title,
-            content        = state.content,
+        val note = Note(
+            id = currentNoteId,
+            title = state.title,
+            content = state.content,
             contentFormats = state.contentFormats,
-            createdAt      = System.currentTimeMillis(),
-            updatedAt      = System.currentTimeMillis(),
-            isPinned       = state.isPinned,
-            isArchived     = state.isArchived,
-            isTrashed      = false,
-            tags           = state.tags,
-            folderId       = currentFolderId
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            isPinned = state.isPinned,
+            isArchived = state.isArchived,
+            isTrashed = false,
+            tags = state.tags,
+            folderId = currentFolderId
         )
         noteRepository.insertNote(note, folderId = currentFolderId)
         _uiState.value = _uiState.value.copy(isNewNote = false)
@@ -843,22 +895,28 @@ class NoteEditorViewModel @Inject constructor(
         val oldFormats = _uiState.value.contentFormats
 
         if (newContent.length > oldContent.length) {
-            val insertPos    = findInsertPosition(oldContent, newContent)
+            val insertPos = findInsertPosition(oldContent, newContent)
             val insertLength = newContent.length - oldContent.length
-            var newFormats   = adjustFormatsForTextChange(oldFormats, oldContent, newContent)
+            var newFormats = adjustFormatsForTextChange(oldFormats, oldContent, newContent)
 
             if (insertPos >= 0 && insertLength > 0) {
                 val insertEnd = insertPos + insertLength
-                if (_uiState.value.activeBold)          newFormats = addFormat(newFormats, insertPos, insertEnd, FormatType.BOLD)
-                if (_uiState.value.activeItalic)         newFormats = addFormat(newFormats, insertPos, insertEnd, FormatType.ITALIC)
-                if (_uiState.value.activeUnderline)      newFormats = addFormat(newFormats, insertPos, insertEnd, FormatType.UNDERLINE)
-                if (_uiState.value.activeStrikethrough)  newFormats = addFormat(newFormats, insertPos, insertEnd, FormatType.STRIKETHROUGH)
-                _uiState.value.activeHeading?.let { newFormats = addFormat(newFormats, insertPos, insertEnd, it) }
+                if (_uiState.value.activeBold) newFormats =
+                    addFormat(newFormats, insertPos, insertEnd, FormatType.BOLD)
+                if (_uiState.value.activeItalic) newFormats =
+                    addFormat(newFormats, insertPos, insertEnd, FormatType.ITALIC)
+                if (_uiState.value.activeUnderline) newFormats =
+                    addFormat(newFormats, insertPos, insertEnd, FormatType.UNDERLINE)
+                if (_uiState.value.activeStrikethrough) newFormats =
+                    addFormat(newFormats, insertPos, insertEnd, FormatType.STRIKETHROUGH)
+                _uiState.value.activeHeading?.let {
+                    newFormats = addFormat(newFormats, insertPos, insertEnd, it)
+                }
             }
             _uiState.value = _uiState.value.copy(content = newContent, contentFormats = newFormats)
         } else {
             _uiState.value = _uiState.value.copy(
-                content        = newContent,
+                content = newContent,
                 contentFormats = adjustFormatsForTextChange(oldFormats, oldContent, newContent)
             )
         }
@@ -871,19 +929,34 @@ class NoteEditorViewModel @Inject constructor(
 
     fun applyFormatting(start: Int, end: Int, type: FormatType) {
         val current = _uiState.value.contentFormats
-        val hasFmt  = hasFormat(current, start, end, type)
+        val hasFmt = hasFormat(current, start, end, type)
         _uiState.value = _uiState.value.copy(
             contentFormats = if (hasFmt) removeFormat(current, start, end, type)
-            else        addFormat(current, start, end, type)
+            else addFormat(current, start, end, type)
         )
         scheduleAutoSave()
     }
 
-    fun toggleActiveBold()          { _uiState.value = _uiState.value.copy(activeBold = !_uiState.value.activeBold) }
-    fun toggleActiveItalic()        { _uiState.value = _uiState.value.copy(activeItalic = !_uiState.value.activeItalic) }
-    fun toggleActiveUnderline()     { _uiState.value = _uiState.value.copy(activeUnderline = !_uiState.value.activeUnderline) }
-    fun toggleActiveStrikethrough() { _uiState.value = _uiState.value.copy(activeStrikethrough = !_uiState.value.activeStrikethrough) }
-    fun setActiveHeading(type: FormatType?) { _uiState.value = _uiState.value.copy(activeHeading = type) }
+    fun toggleActiveBold() {
+        _uiState.value = _uiState.value.copy(activeBold = !_uiState.value.activeBold)
+    }
+
+    fun toggleActiveItalic() {
+        _uiState.value = _uiState.value.copy(activeItalic = !_uiState.value.activeItalic)
+    }
+
+    fun toggleActiveUnderline() {
+        _uiState.value = _uiState.value.copy(activeUnderline = !_uiState.value.activeUnderline)
+    }
+
+    fun toggleActiveStrikethrough() {
+        _uiState.value =
+            _uiState.value.copy(activeStrikethrough = !_uiState.value.activeStrikethrough)
+    }
+
+    fun setActiveHeading(type: FormatType?) {
+        _uiState.value = _uiState.value.copy(activeHeading = type)
+    }
 
     fun clearAllFormatting() {
         _uiState.value = _uiState.value.copy(
@@ -917,7 +990,8 @@ class NoteEditorViewModel @Inject constructor(
             isDeleting = true
             autoSaveJob?.cancel()
             if (_uiState.value.isNewNote &&
-                (_uiState.value.title.isNotBlank() || _uiState.value.content.isNotBlank())) {
+                (_uiState.value.title.isNotBlank() || _uiState.value.content.isNotBlank())
+            ) {
                 saveNote()
             }
             delay(100)
@@ -1084,13 +1158,13 @@ class NoteEditorViewModel @Inject constructor(
     private fun deriveBlockTitle(blocks: List<InlineBlock>): String {
         val hasImage = blocks.any { it.type == InlineBlockType.IMAGE }
         val hasAudio = blocks.any { it.type == InlineBlockType.AUDIO }
-        val hasTodo  = blocks.any { it.type == InlineBlockType.TODO  }
+        val hasTodo = blocks.any { it.type == InlineBlockType.TODO }
 
         return when {
             hasAudio && !hasImage && !hasTodo -> "Voice note"
-            hasImage && !hasTodo              -> "Note with image"
-            hasTodo  && !hasImage && !hasAudio -> "Checklist"
-            else                              -> "Note"
+            hasImage && !hasTodo -> "Note with image"
+            hasTodo && !hasImage && !hasAudio -> "Checklist"
+            else -> "Note"
         }
     }
 
@@ -1127,6 +1201,7 @@ class NoteEditorViewModel @Inject constructor(
                     (range.end + lengthDiff).coerceAtLeast(range.start + 1),
                     range.type
                 )
+
                 else -> FormatRange(
                     range.start,
                     (range.end + lengthDiff).coerceAtLeast(range.start + 1),
@@ -1227,8 +1302,8 @@ class NoteEditorViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            val all      = noteRepository.getAllNotes().first()
-            val byId     = all.associateBy { it.id }
+            val all = noteRepository.getAllNotes().first()
+            val byId = all.associateBy { it.id }
             val previews = ids.mapNotNull { id ->
                 byId[id]?.let { note ->
                     LinkedNotePreview(id = note.id, title = note.title.ifBlank { "Untitled" })
@@ -1237,87 +1312,231 @@ class NoteEditorViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(linkedNotePreviews = previews)
         }
     }
+
+    /**
+     * Load the previous and next diary entries relative to the current one.
+     * (Sprint 12)
+     *
+     * WHY USE THE TITLE TO FIND NEIGHBOURS?
+     * Diary entry titles follow the format "📅 March 14, 2026".
+     * We parse them into Calendar objects to find the entries for
+     * yesterday and tomorrow. SQL can't help here — titles are ciphertext.
+     *
+     * The results populate prevDiaryNoteId and nextDiaryNoteId in uiState,
+     * which the DiaryTopBar uses to show/hide the ← → navigation arrows.
+     *
+     * @param currentTitle  The title of the current diary entry (used to find date)
+     */
+    /**
+     * Load the adjacent calendar days for the diary prev/next arrows.
+     * (Sprint 12)
+     *
+     * ALWAYS sets prevDiaryDateKey (yesterday) and nextDiaryDateKey (tomorrow),
+     * UNLESS today is the current entry — then nextDiaryDateKey is null because
+     * we don't let users create future diary entries.
+     *
+     * The dateKey (not noteId) is stored so the arrows can create new entries
+     * for days that don't have one yet, matching how top diary apps work.
+     */
+    private fun loadDiaryNeighbours(currentTitle: String) {
+        viewModelScope.launch {
+            val titleFormatter =
+                java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.getDefault())
+            val keyFormatter =
+                java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+
+            val stripped = currentTitle.removePrefix("📅 ").trim()
+            val currentDate = try {
+                titleFormatter.parse(stripped)
+            } catch (_: Exception) {
+                null
+            }
+                ?: return@launch
+
+            val todayKey = keyFormatter.format(java.util.Date())
+            val currentKey = keyFormatter.format(currentDate)
+
+            val currentCal = java.util.Calendar.getInstance().apply { time = currentDate }
+            val prevCal = (currentCal.clone() as java.util.Calendar).apply {
+                add(
+                    java.util.Calendar.DAY_OF_YEAR,
+                    -1
+                )
+            }
+            val nextCal = (currentCal.clone() as java.util.Calendar).apply {
+                add(
+                    java.util.Calendar.DAY_OF_YEAR,
+                    +1
+                )
+            }
+
+            _uiState.value = _uiState.value.copy(
+                // Previous day: always available (users can write back-entries)
+                prevDiaryDateKey = keyFormatter.format(prevCal.time),
+                // Next day: only available up to today — no future entries
+                nextDiaryDateKey = if (currentKey < todayKey) keyFormatter.format(nextCal.time) else null
+            )
+        }
+    }
+
+    /**
+     * Navigate to a diary entry for [dateKey], creating it if it doesn't exist.
+     * Called by the prev/next arrows in DiaryTopBar.
+     * Emits the target noteId via diaryNavEvent — the screen handles navigation.
+     */
+    fun openOrCreateDiaryNeighbour(dateKey: String) {
+        viewModelScope.launch {
+            // First save the current note so no content is lost
+            saveNote()
+
+            val titleFormatter =
+                java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.getDefault())
+            val keyFormatter =
+                java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+
+            // Check if an entry already exists for this date
+            val allDiary = noteRepository.getDiaryEntries().first()
+            val existing = allDiary.firstOrNull { note ->
+                val stripped = note.title.removePrefix("📅 ").trim()
+                try {
+                    keyFormatter.format(titleFormatter.parse(stripped)!!) == dateKey
+                } catch (_: Exception) {
+                    false
+                }
+            }
+
+            if (existing != null) {
+                _diaryNavEvent.emit(existing.id)
+                return@launch
+            }
+
+            // Create a new entry for this date
+            val date = try {
+                keyFormatter.parse(dateKey)
+            } catch (_: Exception) {
+                null
+            }
+                ?: return@launch
+            val title = "📅 ${titleFormatter.format(date)}"
+            val noteId = UUID.randomUUID().toString()
+            val now = System.currentTimeMillis()
+
+            noteRepository.insertNote(
+                com.greenicephoenix.voidnote.domain.model.Note(
+                    id = noteId,
+                    title = title,
+                    content = "",
+                    createdAt = now,
+                    updatedAt = now,
+                    isDiaryEntry = true
+                )
+            )
+            _diaryNavEvent.emit(noteId)
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUPPORTING DATA CLASSES
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Lightweight note reference used in two places:
- *   1. The link picker list (allNotesForPicker) — all notes the user can link to
- *   2. The linked-notes strip (linkedNotePreviews) — notes already linked to this one
- *
- * We only need id + title; no content, no blocks, no formatting.
- * This keeps memory usage tiny even with hundreds of notes.
- */
-data class LinkedNotePreview(
-    val id: String,
-    val title: String
-)
+    /**
+     * Lightweight note reference used in two places:
+     *   1. The link picker list (allNotesForPicker) — all notes the user can link to
+     *   2. The linked-notes strip (linkedNotePreviews) — notes already linked to this one
+     *
+     * We only need id + title; no content, no blocks, no formatting.
+     * This keeps memory usage tiny even with hundreds of notes.
+     */
+    data class LinkedNotePreview(
+        val id: String,
+        val title: String
+    )
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UI STATE
 // ─────────────────────────────────────────────────────────────────────────────
 
-data class NoteEditorUiState(
-    val title: String = "",
-    val content: String = "",
-    val contentFormats: List<FormatRange> = emptyList(),
-    val blocks: Map<String, InlineBlock> = emptyMap(),
-    val isPinned: Boolean = false,
-    val isArchived: Boolean = false,
-    val tags: List<String> = emptyList(),
-    val isNewNote: Boolean = true,
-    val isLoading: Boolean = true,
-    val isSaving: Boolean = false,
-    val lastSaved: Long = 0L,
+    data class NoteEditorUiState(
+        val title: String = "",
+        val content: String = "",
+        val contentFormats: List<FormatRange> = emptyList(),
+        val blocks: Map<String, InlineBlock> = emptyMap(),
+        val isPinned: Boolean = false,
+        val isArchived: Boolean = false,
+        val tags: List<String> = emptyList(),
+        val isNewNote: Boolean = true,
+        val isLoading: Boolean = true,
+        val isSaving: Boolean = false,
+        val lastSaved: Long = 0L,
 
-    // Active formatting for new typed characters
-    val activeBold: Boolean = false,
-    val activeItalic: Boolean = false,
-    val activeUnderline: Boolean = false,
-    val activeStrikethrough: Boolean = false,
-    val activeHeading: FormatType? = null,
+        // Active formatting for new typed characters
+        val activeBold: Boolean = false,
+        val activeItalic: Boolean = false,
+        val activeUnderline: Boolean = false,
+        val activeStrikethrough: Boolean = false,
+        val activeHeading: FormatType? = null,
 
-    // Camera capture state
-    val cameraCaptureTempPath: String? = null,
-    val pendingCameraUri: Uri? = null,
+        // Camera capture state
+        val cameraCaptureTempPath: String? = null,
+        val pendingCameraUri: Uri? = null,
 
-    // Voice recording state
-    val isRecording: Boolean = false,
-    val recordingElapsedMs: Long = 0L,
-    val recordingTempPath: String? = null,
+        // Voice recording state
+        val isRecording: Boolean = false,
+        val recordingElapsedMs: Long = 0L,
+        val recordingTempPath: String? = null,
 
-    // Preview toggle
-    val showPreview: Boolean = false,
+        // Preview toggle
+        val showPreview: Boolean = false,
 
-    // Sprint 5: folder name for TopBar display
-    val currentFolderName: String? = null,
+        // Sprint 5: folder name for TopBar display
+        val currentFolderName: String? = null,
 
-    // Sprint 6: note color accent
-    val noteColor: NoteColor? = null,
+        // Sprint 6: note color accent
+        val noteColor: NoteColor? = null,
 
-    // ── Sprint 11: Note Linking ───────────────────────────────────────────────
+        // ── Sprint 11: Note Linking ───────────────────────────────────────────────
 
-    /**
-     * The raw list of linked note IDs persisted to the DB.
-     * Loaded from note.linkedNoteIds on open; updated by linkNote/unlinkNote.
-     * Written back to DB on every saveNote() call.
-     */
-    val linkedNoteIds: List<String> = emptyList(),
+        /**
+         * The raw list of linked note IDs persisted to the DB.
+         * Loaded from note.linkedNoteIds on open; updated by linkNote/unlinkNote.
+         * Written back to DB on every saveNote() call.
+         */
+        val linkedNoteIds: List<String> = emptyList(),
 
-    /**
-     * Resolved previews (id + title) for linked notes — shown in the strip
-     * above the tags section. Derived from linkedNoteIds by loadLinkedNotePreviews().
-     * Dead links (deleted notes) are silently absent here even if still in linkedNoteIds.
-     */
-    val linkedNotePreviews: List<LinkedNotePreview> = emptyList(),
+        /**
+         * Resolved previews (id + title) for linked notes — shown in the strip
+         * above the tags section. Derived from linkedNoteIds by loadLinkedNotePreviews().
+         * Dead links (deleted notes) are silently absent here even if still in linkedNoteIds.
+         */
+        val linkedNotePreviews: List<LinkedNotePreview> = emptyList(),
 
-    /**
-     * All notes available for the link picker bottom sheet.
-     * Populated on demand when the user taps "Link" in the overflow menu.
-     * Empty list = picker not yet loaded (shows a loading state).
-     */
-    val allNotesForPicker: List<LinkedNotePreview> = emptyList()
-)
+        /**
+         * All notes available for the link picker bottom sheet.
+         * Populated on demand when the user taps "Link" in the overflow menu.
+         * Empty list = picker not yet loaded (shows a loading state).
+         */
+        val allNotesForPicker: List<LinkedNotePreview> = emptyList(),
+
+        // ── Sprint 12: Diary mode ─────────────────────────────────────────────────
+
+        /**
+         * True when this note is a diary entry (isDiaryEntry = true in the DB).
+         * When true the editor TopBar shows a locked date label and prev/next arrows
+         * instead of the normal title field and overflow menu.
+         */
+        val isDiaryEntry: Boolean = false,
+
+        /**
+         * The date key "yyyy-MM-dd" of the previous calendar day.
+         * Always set when isDiaryEntry=true — tapping navigates to that day's
+         * entry (creating it if it doesn't exist yet).
+         */
+        val prevDiaryDateKey: String? = null,
+
+        /**
+         * The date key "yyyy-MM-dd" of the next calendar day.
+         * null when today is the current entry (can't navigate to the future).
+         */
+        val nextDiaryDateKey: String? = null
+    )
