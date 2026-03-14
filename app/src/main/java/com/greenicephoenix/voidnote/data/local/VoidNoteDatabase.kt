@@ -46,7 +46,7 @@ import com.greenicephoenix.voidnote.data.local.entity.NoteEntity
         FolderEntity::class,
         InlineBlockEntity::class
     ],
-    version = 8,            // ← BUMPED from 7 to 8 (linkedNoteIds column added)
+    version = 9,            // ← BUMPED from 8 to 9 (isDiaryEntry column added)
     exportSchema = false
 )
 @TypeConverters(
@@ -118,6 +118,27 @@ abstract class VoidNoteDatabase : RoomDatabase() {
         val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE notes ADD COLUMN linkedNoteIds TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /**
+         * MIGRATION_8_9 — Adds the `isDiaryEntry` column to the notes table.
+         *
+         * WHY INTEGER NOT NULL DEFAULT 0?
+         * Room maps Boolean to SQLite INTEGER (0 = false, 1 = true).
+         * DEFAULT 0 means all existing notes start as non-diary entries,
+         * which is exactly correct — no data loss.
+         *
+         * WHY A SEPARATE FLAG (not a folder, not a tag)?
+         * Diary entries need to be excluded from the main notes list and
+         * search results at the SQL layer for performance. A dedicated
+         * boolean column lets us filter with a simple WHERE clause.
+         * A tag or folder approach would require a JOIN or an in-memory
+         * filter on every query.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN isDiaryEntry INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

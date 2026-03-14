@@ -40,8 +40,21 @@ interface NoteRepository {
     /** All trashed notes as a reactive stream. */
     fun getTrashedNotes(): Flow<List<Note>>
 
-    /** Search notes by title or content (excludes trash). */
+    /** Search notes by title or content (excludes trash and diary entries). */
     fun searchNotes(query: String): Flow<List<Note>>
+
+    /**
+     * Sprint 12 — Search including diary entries.
+     * Used when the user enables "Include Journal entries" in search filters.
+     */
+    fun searchNotesWithDiary(query: String): Flow<List<Note>>
+
+    /**
+     * Sprint 12 — All diary entries as a reactive stream.
+     * Ordered by createdAt descending. Excludes trashed entries.
+     * Used by DiaryViewModel to build the calendar dot indicators.
+     */
+    fun getDiaryEntries(): Flow<List<Note>>
 
     /** Insert or update a note. */
     suspend fun insertNote(note: Note, folderId: String? = null)

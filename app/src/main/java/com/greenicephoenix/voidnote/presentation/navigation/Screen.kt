@@ -35,4 +35,7 @@ sealed class Screen(val route: String) {
     data object Trash       : Screen("trash")
     data object Archive     : Screen("archive")
     data object Changelog   : Screen("changelog")
+
+    // Sprint 12 — Journal / Diary calendar screen
+    data object Diary       : Screen("diary")
 }

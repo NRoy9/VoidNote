@@ -116,7 +116,19 @@ data class NoteBackup(
      * link IDs remain valid after restore. Dead links (IDs of deleted notes)
      * are silently filtered at display time — stored but never shown.
      */
-    val linkedNoteIds: List<String> = emptyList()
+    val linkedNoteIds: List<String> = emptyList(),
+
+    /**
+     * Sprint 12: Journal feature flag.
+     *
+     * WHY DEFAULT false:
+     * Old backups (pre-Sprint 12) don't have this field. The Json parser
+     * coerces missing fields to their default — false means the note is
+     * treated as a regular note on restore, which is correct.
+     *
+     * NOT ENCRYPTED: a boolean flag, no user content.
+     */
+    val isDiaryEntry: Boolean = false
 )
 
 /**

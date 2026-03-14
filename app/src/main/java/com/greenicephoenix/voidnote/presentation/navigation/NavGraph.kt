@@ -24,6 +24,7 @@ import com.greenicephoenix.voidnote.presentation.vault.RestoreBackupScreen
 import com.greenicephoenix.voidnote.presentation.tags.TagsScreen
 import com.greenicephoenix.voidnote.presentation.settings.ExportNotesScreen
 import com.greenicephoenix.voidnote.presentation.settings.SupportScreen
+import com.greenicephoenix.voidnote.presentation.diary.DiaryScreen
 
 /**
  * SetupNavGraph — the complete navigation map for Void Note.
@@ -322,6 +323,18 @@ fun SetupNavGraph(navController: NavHostController) {
         // ── Changelog ─────────────────────────────────────────────────────────
         composable(Screen.Changelog.route) {
             ChangelogScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        // ── Journal / Diary (Sprint 12) ───────────────────────────────────────
+        // The calendar screen. Tapping any day (with or without entry) navigates
+        // to the note editor. DiaryViewModel handles create-or-open logic.
+        composable(Screen.Diary.route) {
+            DiaryScreen(
+                onNavigateToEditor = { noteId ->
+                    navController.navigate(Screen.NoteEditor.createRoute(noteId))
+                },
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
     }
 }

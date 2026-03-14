@@ -13,6 +13,7 @@ import com.greenicephoenix.voidnote.domain.model.NoteColor
  * VERSION 5: trashedAt field added to both models and mapped here.
  * VERSION 7 (Sprint 6): color field added — stored as String, mapped to NoteColor enum.
  * VERSION 8 (Sprint 11): linkedNoteIds field added — List<String>, stored via StringListConverter.
+ * VERSION 9 (Sprint 12): isDiaryEntry field added — Boolean, stored as INTEGER 0/1.
  */
 
 /**
@@ -34,7 +35,8 @@ fun NoteEntity.toDomainModel(): Note {
         tags           = this.tags,
         folderId       = this.folderId,
         color          = NoteColor.fromString(this.color),
-        linkedNoteIds  = this.linkedNoteIds      // v8: note link IDs
+        linkedNoteIds  = this.linkedNoteIds,
+        isDiaryEntry   = this.isDiaryEntry   // v9: journal flag
     )
 }
 
@@ -60,8 +62,9 @@ fun Note.toEntity(folderId: String? = null): NoteEntity {
         trashedAt      = this.trashedAt,
         tags           = this.tags,
         folderId       = this.folderId ?: folderId,
-        color          = this.color?.name,         // v7: store enum name as String (e.g. "RED"), or null
-        linkedNoteIds  = this.linkedNoteIds         // v8: pass through as-is
+        color          = this.color?.name,
+        linkedNoteIds  = this.linkedNoteIds,
+        isDiaryEntry   = this.isDiaryEntry   // v9: journal flag
     )
 }
 

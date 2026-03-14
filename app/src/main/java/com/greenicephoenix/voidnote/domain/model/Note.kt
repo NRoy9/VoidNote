@@ -22,6 +22,8 @@ package com.greenicephoenix.voidnote.domain.model
  * Used by TrashCleanupWorker to auto-delete notes after 30 days.
  *
  * VERSION 7 (Sprint 6): Added color field for note color coding.
+ * VERSION 8 (Sprint 11): Added linkedNoteIds for note linking.
+ * VERSION 9 (Sprint 12): Added isDiaryEntry flag for Journal feature.
  * null = default card appearance (no tint applied).
  */
 data class Note(
@@ -64,7 +66,15 @@ data class Note(
      * Stored via StringListConverter as a comma-separated column in Room.
      * emptyList() = no links (default for all pre-Sprint 11 notes).
      */
-    val linkedNoteIds: List<String> = emptyList()
+    val linkedNoteIds: List<String> = emptyList(),
+
+    /**
+     * Sprint 12 — Journal feature.
+     * True for notes created via the Diary calendar (one per day).
+     * Diary entries are excluded from the main note list and search
+     * results by default — they live in the Journal screen only.
+     */
+    val isDiaryEntry: Boolean = false
 ) {
 
     // ─── Marker parsing ───────────────────────────────────────────────────

@@ -77,5 +77,14 @@ data class NoteEntity(
      * Stored/read by StringListConverter. Empty string = no links.
      * Added via MIGRATION_7_8 — existing rows get '' (empty string) automatically.
      */
-    val linkedNoteIds: List<String> = emptyList()
+    val linkedNoteIds: List<String> = emptyList(),
+
+    /**
+     * Sprint 12: Journal feature flag.
+     * True = this note was created via the Diary calendar.
+     * Diary entries are excluded from getAllNotes() and searchNotes()
+     * so they don't pollute the main notes list.
+     * Added via MIGRATION_8_9 — existing rows default to 0 (false).
+     */
+    val isDiaryEntry: Boolean = false
 )

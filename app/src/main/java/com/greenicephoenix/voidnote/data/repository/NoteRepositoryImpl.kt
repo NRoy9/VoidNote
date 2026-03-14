@@ -97,9 +97,20 @@ class NoteRepositoryImpl @Inject constructor(
      * SQL-based search — NOT the primary search path.
      * SearchViewModel uses getAllNotes() + in-memory Kotlin filter instead,
      * because SQL LIKE cannot match against encrypted ciphertext.
+     * Diary entries excluded by default (isDiaryEntry = 0 in the query).
      */
     override fun searchNotes(query: String): Flow<List<Note>> =
         noteDao.searchNotes(query)
+            .map { entities -> entities.toDomainModels().map { it.decrypted() } }
+
+    /** Sprint 12 — search including diary entries. */
+    override fun searchNotesWithDiary(query: String): Flow<List<Note>> =
+        noteDao.searchNotesWithDiary(query)
+            .map { entities -> entities.toDomainModels().map { it.decrypted() } }
+
+    /** Sprint 12 — all diary entries as a decrypted domain flow. */
+    override fun getDiaryEntries(): Flow<List<Note>> =
+        noteDao.getDiaryEntries()
             .map { entities -> entities.toDomainModels().map { it.decrypted() } }
 
     override fun getNoteCount(): Flow<Int> =

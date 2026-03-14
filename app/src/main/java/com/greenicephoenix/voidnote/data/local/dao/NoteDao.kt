@@ -35,7 +35,8 @@ interface NoteDao {
      */
     @Query("""
         SELECT * FROM notes 
-        WHERE isTrashed = 0 
+        WHERE isTrashed = 0
+        AND isDiaryEntry = 0
         ORDER BY isPinned DESC, updatedAt DESC
     """)
     fun getAllNotes(): Flow<List<NoteEntity>>
@@ -57,6 +58,18 @@ interface NoteDao {
     // For secure backup — includes trashed notes (user may want to restore them)
     @Query("SELECT * FROM notes ORDER BY updatedAt DESC")
     suspend fun getAllNotesWithTrash(): List<NoteEntity>
+
+    /**
+     * All diary entries ordered by createdAt descending (newest day first).
+     * Used by DiaryViewModel to populate the calendar dot indicators.
+     * Excludes trashed entries — a deleted diary entry has no dot on the calendar.
+     */
+    @Query("""
+        SELECT * FROM notes
+        WHERE isDiaryEntry = 1 AND isTrashed = 0
+        ORDER BY createdAt DESC
+    """)
+    fun getDiaryEntries(): Flow<List<NoteEntity>>
 
     /**
      * Notes inside a specific folder (non-trashed, non-archived).
@@ -105,13 +118,31 @@ interface NoteDao {
     """)
     fun getTrashedNotes(): Flow<List<NoteEntity>>
 
+    /**
+     * Search non-trashed, non-diary notes by title or content.
+     * Diary entries are excluded by default — they live in the Journal screen.
+     * Task 04 will add a UI toggle that calls searchNotesWithDiary() instead.
+     */
+    @Query("""
+        SELECT * FROM notes 
+        WHERE (title LIKE '%' || :query || '%' OR content LIKE '%' || :query || '%')
+        AND isTrashed = 0
+        AND isDiaryEntry = 0
+        ORDER BY isPinned DESC, updatedAt DESC
+    """)
+    fun searchNotes(query: String): Flow<List<NoteEntity>>
+
+    /**
+     * Search including diary entries — used when the user enables
+     * "Include Journal entries" toggle in the search screen (Task 04).
+     */
     @Query("""
         SELECT * FROM notes 
         WHERE (title LIKE '%' || :query || '%' OR content LIKE '%' || :query || '%')
         AND isTrashed = 0
         ORDER BY isPinned DESC, updatedAt DESC
     """)
-    fun searchNotes(query: String): Flow<List<NoteEntity>>
+    fun searchNotesWithDiary(query: String): Flow<List<NoteEntity>>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertNote(note: NoteEntity)

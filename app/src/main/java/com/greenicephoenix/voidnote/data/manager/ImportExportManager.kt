@@ -11,7 +11,6 @@ import com.greenicephoenix.voidnote.data.local.entity.FolderEntity
 import com.greenicephoenix.voidnote.data.local.entity.InlineBlockEntity
 import com.greenicephoenix.voidnote.data.local.entity.NoteEntity
 import com.greenicephoenix.voidnote.data.security.NoteEncryptionManager
-import com.greenicephoenix.voidnote.domain.model.FormatRange
 import com.greenicephoenix.voidnote.presentation.settings.BackupHeader
 import com.greenicephoenix.voidnote.presentation.settings.FolderBackup
 import com.greenicephoenix.voidnote.presentation.settings.ImportResult
@@ -149,6 +148,7 @@ class ImportExportManager @Inject constructor(
                 folderId       = entity.folderId,
                 contentFormats = entity.contentFormats,
                 linkedNoteIds  = entity.linkedNoteIds,  // Sprint 11: plain UUIDs, not encrypted
+                isDiaryEntry   = entity.isDiaryEntry,   // Sprint 12: journal flag
                 inlineBlocks   = (blocksByNote[entity.id] ?: emptyList()).map { block ->
                     InlineBlockBackup(
                         id        = block.id,
@@ -455,7 +455,8 @@ class ImportExportManager @Inject constructor(
                             // original UUIDs, all links survive a full restore.
                             // If a linked note was deleted before the backup, its ID
                             // is kept here but silently filtered at display time.
-                            linkedNoteIds  = noteBackup.linkedNoteIds
+                            linkedNoteIds  = noteBackup.linkedNoteIds,
+                            isDiaryEntry   = noteBackup.isDiaryEntry   // Sprint 12: journal flag
                         )
                     )
                     notesImported++
@@ -554,7 +555,7 @@ class ImportExportManager @Inject constructor(
             val mediaFiles = mutableMapOf<String, File>()
 
             contentResolver.openInputStream(uri)?.use { inputStream ->
-                java.util.zip.ZipInputStream(inputStream).use { zip ->
+                ZipInputStream(inputStream).use { zip ->
                     var entry = zip.nextEntry
                     while (entry != null) {
                         when {
@@ -688,7 +689,7 @@ class ImportExportManager @Inject constructor(
      *
      * @return The number of .md files found (each becomes one note).
      */
-    suspend fun countMarkdownNotes(contentResolver: ContentResolver, uri: Uri): Int {
+    fun countMarkdownNotes(contentResolver: ContentResolver, uri: Uri): Int {
         return try {
             val name = uri.lastPathSegment?.lowercase() ?: ""
             contentResolver.openInputStream(uri)?.use { stream ->
@@ -1042,7 +1043,7 @@ class ImportExportManager @Inject constructor(
      * Called by RestoreBackupViewModel so it can show note/folder counts and
      * verify the password before committing to the full import.
      */
-    suspend fun readBackupHeader(contentResolver: ContentResolver, uri: Uri): BackupHeader {
+    fun readBackupHeader(contentResolver: ContentResolver, uri: Uri): BackupHeader {
         val backupJson = readBackupJson(contentResolver, uri)
             ?: throw IllegalArgumentException("backup.json not found in ZIP")
         val backup = json.decodeFromString(VoidNoteBackup.serializer(), backupJson)
@@ -1061,7 +1062,7 @@ class ImportExportManager @Inject constructor(
      */
     private fun readBackupJson(contentResolver: ContentResolver, uri: Uri): String? {
         contentResolver.openInputStream(uri)?.use { inputStream ->
-            java.util.zip.ZipInputStream(inputStream).use { zip ->
+            ZipInputStream(inputStream).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
                     if (entry.name == "backup.json") {
