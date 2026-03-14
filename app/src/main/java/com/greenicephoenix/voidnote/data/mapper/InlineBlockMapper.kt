@@ -73,6 +73,9 @@ fun InlineBlockEntity.toDomainModel(): InlineBlock {
             // This case should not occur in production yet
             InlineBlockPayload.Todo(items = emptyList())
         }
+        InlineBlockType.CODE -> {
+            json.decodeFromString<InlineBlockPayload.Code>(this.payload)
+        }
     }
 
     return InlineBlock(
@@ -102,6 +105,7 @@ fun InlineBlock.toEntity(): InlineBlockEntity {
         is InlineBlockPayload.Todo -> json.encodeToString(p)
         is InlineBlockPayload.Image -> json.encodeToString(p)
         is InlineBlockPayload.Audio -> json.encodeToString(p)
+        is InlineBlockPayload.Code -> json.encodeToString(p)
     }
 
     return InlineBlockEntity(

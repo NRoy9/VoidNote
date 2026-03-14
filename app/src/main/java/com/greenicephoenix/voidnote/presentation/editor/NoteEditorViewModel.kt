@@ -262,6 +262,62 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Insert a blank CODE block at the end of the current note. (Sprint 12)
+     *
+     * A code block is an InlineBlock with type=CODE and an empty Code payload.
+     * The user fills in the code text and optional language label directly
+     * inside the CodeBlockComposable.
+     *
+     * WHY ensureNotePersisted() first?
+     * InlineBlocks have a FK on noteId → notes.id. The note must exist
+     * in the DB before we can insert a block referencing it.
+     */
+    fun insertCodeBlock() {
+        viewModelScope.launch {
+            ensureNotePersisted()
+            val blockId  = UUID.randomUUID().toString()
+            val newBlock = InlineBlock(
+                id        = blockId,
+                noteId    = currentNoteId,
+                type      = InlineBlockType.CODE,
+                payload   = InlineBlockPayload.Code(code = "", language = ""),
+                createdAt = System.currentTimeMillis()
+            )
+            inlineBlockRepository.insertBlock(newBlock)
+            delay(50)
+            saveNote()
+        }
+    }
+
+    /**
+     * Update the code text inside a CODE block. (Sprint 12)
+     * Called every time the user types in the CodeBlockComposable's text field.
+     */
+    fun updateCodeBlock(blockId: String, code: String) {
+        viewModelScope.launch {
+            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val payload = block.payload as? InlineBlockPayload.Code ?: return@launch
+            inlineBlockRepository.updateBlock(
+                block.copy(payload = payload.copy(code = code))
+            )
+        }
+    }
+
+    /**
+     * Update the language label of a CODE block. (Sprint 12)
+     * Called when the user edits the language chip in the top-right corner.
+     */
+    fun updateCodeBlockLanguage(blockId: String, language: String) {
+        viewModelScope.launch {
+            val block   = _uiState.value.blocks[blockId] ?: return@launch
+            val payload = block.payload as? InlineBlockPayload.Code ?: return@launch
+            inlineBlockRepository.updateBlock(
+                block.copy(payload = payload.copy(language = language))
+            )
+        }
+    }
+
     fun toggleTodoItem(blockId: String, itemId: String) {
         viewModelScope.launch {
             val block   = _uiState.value.blocks[blockId] ?: return@launch
@@ -970,15 +1026,15 @@ class NoteEditorViewModel @Inject constructor(
      *   Leading whitespace : "  text"       → "text"
      *
      * TRUNCATION:
-     *   If the stripped line is longer than maxTitleLength characters it is
+     *   If the stripped line is longer than MAX_TITLE_LENGTH characters it is
      *   trimmed at a word boundary (no mid-word cut) and "…" is appended.
-     *   maxTitleLength = 50 matches the NoteCard preview width on most phones.
+     *   MAX_TITLE_LENGTH = 50 matches the NoteCard preview width on most phones.
      *
      * EMPTY INPUT:
      *   Returns an empty string — callers are responsible for falling back.
      */
     private fun deriveSmartTitle(content: String): String {
-        val maxTitleLength = 50
+        val MAX_TITLE_LENGTH = 50
 
         // Find the first line that has visible characters
         val firstLine = content.lines().firstOrNull { it.isNotBlank() } ?: return ""
@@ -1002,13 +1058,13 @@ class NoteEditorViewModel @Inject constructor(
         if (stripped.isEmpty()) return ""
 
         // Truncate cleanly at a space boundary to avoid mid-word cuts
-        return if (stripped.length <= maxTitleLength) {
+        return if (stripped.length <= MAX_TITLE_LENGTH) {
             stripped
         } else {
-            // Walk back from maxTitleLength to the nearest space
-            val cutAt = stripped.lastIndexOf(' ', maxTitleLength)
-                .takeIf { it > maxTitleLength / 2 }  // only if the space isn't too far back
-                ?: maxTitleLength
+            // Walk back from MAX_TITLE_LENGTH to the nearest space
+            val cutAt = stripped.lastIndexOf(' ', MAX_TITLE_LENGTH)
+                .takeIf { it > MAX_TITLE_LENGTH / 2 }  // only if the space isn't too far back
+                ?: MAX_TITLE_LENGTH
             stripped.take(cutAt).trimEnd() + "…"
         }
     }
@@ -1093,7 +1149,7 @@ class NoteEditorViewModel @Inject constructor(
      * 2. Search all non-trashed, decrypted notes for one whose title matches
      *    [linkTitle] (case-insensitive, leading/trailing whitespace ignored).
      * 3. If found     → onResolved(existingNote.id)
-     * 4. If not found → insert a new blank note with linkTitle] as its title,
+     * 4. If not found → insert a new blank note with [linkTitle] as its title,
      *                   then onResolved(newNoteId)
      *
      * WHY IN-MEMORY SEARCH?
@@ -1107,8 +1163,8 @@ class NoteEditorViewModel @Inject constructor(
      * observing changes — we just need the current list to resolve one link).
      * .first() collects exactly one emission and then cancels the upstream.
      *
-     * @param [linkTitle  The inner text of [[...]]. Already trimmed by the caller.
-     * @param [onResolved Callback with the target note's ID. Always called on the
+     * @param linkTitle  The inner text of [[...]]. Already trimmed by the caller.
+     * @param onResolved Callback with the target note's ID. Always called on the
      *                   main dispatcher (viewModelScope default).
      */
     // ─────────────────────────────────────────────────────────────────────────

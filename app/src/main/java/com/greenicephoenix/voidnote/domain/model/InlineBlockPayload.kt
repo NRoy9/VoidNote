@@ -68,4 +68,27 @@ sealed class InlineBlockPayload {
         val filePath: String,
         val durationMs: Long = 0L
     ) : InlineBlockPayload()
+
+    /**
+     * Payload for a CODE block. (Sprint 12)
+     *
+     * Stores the raw code text and an optional language label shown
+     * in the top-right corner of the block (e.g. "Kotlin", "Python").
+     * Rendering is monospace font on a dark surface — no syntax
+     * highlighting library required.
+     *
+     * WHY store language as a String (not an enum)?
+     * An open string lets users type any label they like ("SQL", "Bash",
+     * "pseudo-code") without us maintaining an exhaustive enum.
+     * Syntax highlighting can be layered on top in a future sprint
+     * without a schema change.
+     *
+     * @param code      The raw code text. May contain newlines.
+     * @param language  Optional label e.g. "Kotlin". Empty = no label shown.
+     */
+    @Serializable
+    data class Code(
+        val code: String = "",
+        val language: String = ""
+    ) : InlineBlockPayload()
 }

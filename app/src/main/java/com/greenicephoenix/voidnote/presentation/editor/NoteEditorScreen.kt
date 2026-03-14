@@ -474,7 +474,8 @@ fun NoteEditorScreen(
                             )
                         },
                         onCameraClick = { showInsertSheet = false; onCameraClick() },
-                        onVoiceClick = { showInsertSheet = false; onVoiceClick() }
+                        onVoiceClick = { showInsertSheet = false; onVoiceClick() },
+                        onCodeClick = { showInsertSheet = false; viewModel.insertCodeBlock() }
                     )
                 }
             }
@@ -646,10 +647,34 @@ fun NoteEditorScreen(
                                     )
                                 }
 
+                                InlineBlockType.CODE -> {
+                                    // CodeBlockComposable — monospace dark-surface code editor.
+                                    // Payload is safe to cast: we only create CODE blocks with
+                                    // Code payloads, and the mapper enforces this on read.
+                                    val codePayload = block.payload as? InlineBlockPayload.Code
+                                    if (codePayload != null) {
+                                        CodeBlockComposable(
+                                            payload = codePayload,
+                                            onCodeChange = {
+                                                viewModel.updateCodeBlock(
+                                                    block.id,
+                                                    it
+                                                )
+                                            },
+                                            onLanguageChange = {
+                                                viewModel.updateCodeBlockLanguage(
+                                                    block.id,
+                                                    it
+                                                )
+                                            },
+                                            onDelete = { viewModel.deleteBlock(block.id) },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+
                                 else -> {
                                     // DRAWING and any future block types — not yet implemented.
-                                    // The else branch is required because InlineBlockType is an enum
-                                    // and Kotlin's when must be exhaustive when used as an expression.
                                 }
                             }
                             Spacer(Modifier.height(Spacing.small))
@@ -1006,7 +1031,8 @@ fun NoteEditorScreen(
         onChecklistClick: () -> Unit,
         onGalleryClick: () -> Unit,
         onCameraClick: () -> Unit,
-        onVoiceClick: () -> Unit          // ← VOICE NOW ACTIVE
+        onVoiceClick: () -> Unit,
+        onCodeClick: () -> Unit            // Sprint 12
     ) {
         AnimatedVisibility(
             visible = visible,
@@ -1023,10 +1049,11 @@ fun NoteEditorScreen(
                     }
                     Spacer(Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        InsertBlockButton(Icons.Default.CheckBox,     "Checklist", true,  onChecklistClick)
-                        InsertBlockButton(Icons.Default.Image,        "Gallery",   true,  onGalleryClick)
-                        InsertBlockButton(Icons.Default.CameraAlt,    "Camera",    true,  onCameraClick)
-                        InsertBlockButton(Icons.Default.Mic,          "Voice",     true,  onVoiceClick)  // ← NOW ACTIVE
+                        InsertBlockButton(Icons.Default.CheckBox,     "Checklist", true, onChecklistClick)
+                        InsertBlockButton(Icons.Default.Image,        "Gallery",   true, onGalleryClick)
+                        InsertBlockButton(Icons.Default.CameraAlt,    "Camera",    true, onCameraClick)
+                        InsertBlockButton(Icons.Default.Mic,          "Voice",     true, onVoiceClick)
+                        InsertBlockButton(Icons.Default.Code,         "Code",      true, onCodeClick)  // Sprint 12
                     }
                 }
             }
@@ -1602,6 +1629,15 @@ fun NoteEditorScreen(
                             InlineBlockType.IMAGE   -> appendLine("[Image]")
                             InlineBlockType.AUDIO   -> appendLine("[Voice note]")
                             InlineBlockType.DRAWING -> appendLine("[Drawing]")
+                            InlineBlockType.CODE    -> {
+                                val block = blocks[node.blockId]
+                                val payload = block?.payload as? InlineBlockPayload.Code
+                                if (payload != null) {
+                                    val label = if (payload.language.isNotBlank()) "Code (${payload.language})" else "Code"
+                                    appendLine("[$label]")
+                                    appendLine(payload.code)
+                                }
+                            }
                         }
                     }
                 }
@@ -2089,7 +2125,7 @@ fun NoteEditorScreen(
             modifier          = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 420.dp),   // cap height so sheet doesn't fill screen
-            contentPadding    = PaddingValues(
+            contentPadding    = androidx.compose.foundation.layout.PaddingValues(
                 bottom = Spacing.large
             )
         ) {

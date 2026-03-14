@@ -30,9 +30,11 @@ enum class InlineBlockType {
 
     TODO,
 
-    IMAGE,   // Reserved — not implemented yet
+    IMAGE,
 
-    AUDIO,   // Reserved — not implemented yet
+    AUDIO,
 
-    DRAWING  // Reserved — not implemented yet
+    DRAWING, // Reserved — deferred to post-Sprint 12
+
+    CODE     // Sprint 12 — monospace code block with language label
 }
