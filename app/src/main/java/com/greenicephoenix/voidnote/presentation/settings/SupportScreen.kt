@@ -62,7 +62,7 @@ import com.greenicephoenix.voidnote.R
 // ─────────────────────────────────────────────────────────────────────────────
 
 // TODO: Replace with your paypal.me link — e.g. "https://paypal.me/yourname"
-private const val PAYPAL_URL = "paypal.me/GreenIcePhoenix"
+private const val PAYPAL_URL = "https://paypal.me/GreenIcePhoenix"
 
 // Your real UPI ID — replace if not already updated
 private const val UPI_ID = "greenicephoenix@axisb" // ← replace with your real UPI ID
