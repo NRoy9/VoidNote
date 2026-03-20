@@ -62,7 +62,7 @@ fun OnboardingScreen(
         OnboardingPage(
             symbol      = "◈",
             title       = "EVERYTHING\nYOU NEED",
-            description = "Rich text. Checklists. Voice notes. Images.\nFolders, tags, and biometric lock.\nOffline-first. No account. No ads. Ever."
+            description = "Rich text. Checklists. Voice notes. Images. Code blocks.\nJournal, note linking, folders, tags, and biometric lock.\nOffline-first. No account. No ads. Ever."
         )
     )
 

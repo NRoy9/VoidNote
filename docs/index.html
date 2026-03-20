@@ -41,6 +41,109 @@
 
   <!-- Our main stylesheet -->
   <link rel="stylesheet" href="style.css">
+
+  <!-- Install guide styles — added for v1.1.0 sideload instructions -->
+  <style>
+    .install-guide {
+      margin-top: 48px;
+      text-align: left;
+      max-width: 560px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .install-guide__title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.2em;
+      color: #444;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .install-steps {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .install-step {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      padding: 18px 0;
+      border-top: 1px solid #1a1a1a;
+    }
+    .install-step:last-child { border-bottom: 1px solid #1a1a1a; }
+    .install-step__num {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.72rem;
+      color: #FF3B30;
+      letter-spacing: 0.08em;
+      min-width: 26px;
+      padding-top: 2px;
+      flex-shrink: 0;
+    }
+    .install-step__body { flex: 1; }
+    .install-step__body strong {
+      display: block;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.8rem;
+      color: #fff;
+      margin-bottom: 5px;
+      letter-spacing: 0.02em;
+    }
+    .install-step__body > p {
+      font-size: 0.84rem;
+      color: #888;
+      line-height: 1.65;
+      margin: 0;
+    }
+    .install-step__body code {
+      font-family: 'Share Tech Mono', monospace;
+      color: #FF3B30;
+      background: #111;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 0.8rem;
+    }
+    .install-detail {
+      margin-top: 10px;
+      border: 1px solid #222;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .install-detail summary {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      color: #555;
+      letter-spacing: 0.08em;
+      padding: 10px 14px;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      transition: color 0.15s, background 0.15s;
+    }
+    .install-detail summary::-webkit-details-marker { display: none; }
+    .install-detail summary::marker { display: none; }
+    .install-detail summary:hover { color: #aaa; background: #111; }
+    .install-detail__body {
+      padding: 14px 16px;
+      border-top: 1px solid #1a1a1a;
+      font-size: 0.84rem;
+      color: #888;
+      line-height: 1.7;
+    }
+    .install-detail__body ol {
+      list-style: decimal;
+      padding-left: 20px;
+      margin-top: 8px;
+    }
+    .install-detail__body li { margin-bottom: 6px; color: #888; }
+    .install-detail__body strong { color: #ccc; font-weight: 600; }
+    @media (max-width: 768px) {
+      .install-guide { padding: 0 4px; }
+      .install-step__num { min-width: 22px; }
+    }
+  </style>
 </head>
 <body>
 
@@ -70,6 +173,12 @@
       <li><a href="#features" class="nav__link">FEATURES</a></li>
       <li><a href="#security" class="nav__link">SECURITY</a></li>
       <li><a href="#download" class="nav__link">DOWNLOAD</a></li>
+      <li>
+        <a href="https://github.com/NRoy9/VoidNote"
+           class="nav__link"
+           target="_blank"
+           rel="noopener noreferrer">GITHUB</a>
+      </li>
       <li>
         <a href="#download" class="nav__cta">
           GET THE APP <span class="btn__arrow">↓</span>
@@ -127,11 +236,11 @@
         <a href="#download" class="btn btn--primary">
           DOWNLOAD APK <span class="btn__arrow">↓</span>
         </a>
-        <a href="https://discord.gg/yYgDNJKv"
+        <a href="https://github.com/NRoy9/VoidNote"
            class="btn btn--ghost"
            target="_blank"
            rel="noopener noreferrer">
-          JOIN DISCORD
+          ★ STAR ON GITHUB
         </a>
       </div>
 
@@ -338,6 +447,63 @@
           Swipe right to pin, swipe left to archive — directly from the list.
           Long-press any note for instant actions without opening it.
           Haptic feedback confirms every swipe.
+        </p>
+      </div>
+
+      <!-- Journal — wide card -->
+      <div class="feature-card feature-card--wide animate-in">
+        <div class="feature-card__icon">🗓</div>
+        <div class="feature-card__title">JOURNAL — CALENDAR DIARY</div>
+        <p class="feature-card__desc">
+          A dedicated diary completely separate from your regular notes.
+          Month-view calendar with dot indicators on days that have entries.
+          Tap any day to open or create that day's entry — tap Today to jump straight to now.
+          Flip between consecutive days with prev/next arrows right inside the editor.
+          Navigate to any past month with the month/year picker.
+        </p>
+      </div>
+
+      <!-- Note Linking -->
+      <div class="feature-card animate-in">
+        <div class="feature-card__icon">🔗</div>
+        <div class="feature-card__title">NOTE LINKING</div>
+        <p class="feature-card__desc">
+          Connect related notes with a tap.
+          Linked notes appear as chips above the tags bar — tap to jump, long-press to unlink.
+          Links survive encrypted backups and full restores.
+        </p>
+      </div>
+
+      <!-- Templates -->
+      <div class="feature-card animate-in">
+        <div class="feature-card__icon">📋</div>
+        <div class="feature-card__title">NOTE TEMPLATES</div>
+        <p class="feature-card__desc">
+          Five built-in structures: Meeting Notes, Self-Reflection,
+          Prioritised Todo List, Book/Movie Review, and Blank.
+          Pick from the speed-dial FAB when creating a note.
+        </p>
+      </div>
+
+      <!-- Code Blocks -->
+      <div class="feature-card animate-in">
+        <div class="feature-card__icon">💻</div>
+        <div class="feature-card__title">CODE BLOCKS</div>
+        <p class="feature-card__desc">
+          Monospace dark-surface blocks embedded right inside your notes — always dark regardless of theme.
+          Optional language label. Horizontal scroll for long lines.
+          Autocorrect and autocapitalise disabled inside the block.
+        </p>
+      </div>
+
+      <!-- Focus Mode + Format Preview -->
+      <div class="feature-card animate-in">
+        <div class="feature-card__icon">🎯</div>
+        <div class="feature-card__title">FOCUS MODE + PREVIEW</div>
+        <p class="feature-card__desc">
+          Focus Mode hides every UI element so it's just you and the canvas.
+          Format Preview renders bold, italic, and headings as styled text —
+          see the finished note without leaving the editor.
         </p>
       </div>
 
@@ -561,23 +727,107 @@
         </a>
 
         <!-- Secondary: View source -->
-        <a href="https://discord.gg/yYgDNJKv"
+        <a href="https://github.com/NRoy9/VoidNote"
            class="btn btn--ghost"
            target="_blank"
            rel="noopener noreferrer">
-          JOIN COMMUNITY
+          VIEW SOURCE CODE
         </a>
       </div>
 
       <!-- Installation note — updated dynamically by JS with live version -->
       <p class="download__note" id="download-version-note">
-        Android 8.0+ · Requires "Install unknown apps" permission for direct APK
+        Android 8.0+ · Free · No account required
       </p>
 
       <!-- Play Store coming soon notice -->
       <p style="margin-top: 12px; font-family: 'Share Tech Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em; color: #555;">
         GOOGLE PLAY STORE — COMING SOON
       </p>
+
+      <!-- ── Step-by-step sideload guide ──────────────────────────── -->
+      <div class="install-guide">
+        <p class="install-guide__title">HOW TO INSTALL THE APK</p>
+
+        <ol class="install-steps">
+
+          <li class="install-step">
+            <span class="install-step__num">01</span>
+            <div class="install-step__body">
+              <strong>TAP THE DOWNLOAD BUTTON ABOVE</strong>
+              <p>Your browser will download <code>voidnote.apk</code> to your device.
+                When it finishes, a notification appears — tap <strong>Open</strong> to go straight to step 3.
+                Or open your <strong>Downloads</strong> app and tap the file.</p>
+            </div>
+          </li>
+
+          <li class="install-step">
+            <span class="install-step__num">02</span>
+            <div class="install-step__body">
+              <strong>CHROME SAYS "THIS TYPE OF FILE CAN HARM YOUR DEVICE"</strong>
+              <p>This is a standard Chrome warning for all APK files — not specific to Void Note.
+                Tap <strong>Download anyway</strong> (or <strong>OK</strong> / <strong>Keep</strong> depending on your Android version) to continue.</p>
+            </div>
+          </li>
+
+          <li class="install-step">
+            <span class="install-step__num">03</span>
+            <div class="install-step__body">
+              <strong>TAP THE DOWNLOADED FILE</strong>
+              <p>Find <code>voidnote.apk</code> in your Downloads notification or in the <strong>Downloads</strong> app and tap it to begin installation.</p>
+
+              <!-- Unknown sources blocked -->
+              <details class="install-detail">
+                <summary>▸ IF YOU SEE "Install blocked" or "Not allowed to install unknown apps"</summary>
+                <div class="install-detail__body">
+                  Android blocks apps from outside the Play Store by default. Here's how to allow it:
+                  <ol>
+                    <li>Tap <strong>Settings</strong> in the prompt that appears.</li>
+                    <li>You'll land on <strong>Install unknown apps</strong> for your browser (e.g. Chrome or Files).</li>
+                    <li>Toggle <strong>Allow from this source</strong> ON.</li>
+                    <li>Press <strong>Back</strong> — the installer will resume automatically, or tap the APK again.</li>
+                  </ol>
+                  <strong>Note:</strong> You can turn this permission back off after installing if you prefer.
+                  On some Samsung devices look for <strong>Install unknown apps</strong> under Settings → Apps → Special access.
+                </div>
+              </details>
+            </div>
+          </li>
+
+          <li class="install-step">
+            <span class="install-step__num">04</span>
+            <div class="install-step__body">
+              <strong>TAP INSTALL</strong>
+              <p>Android shows you the app permissions. Void Note only requests Camera, Microphone, and Internet (for update checks). Tap <strong>Install</strong> to continue.</p>
+
+              <!-- Play Protect blocked -->
+              <details class="install-detail">
+                <summary>▸ IF PLAY PROTECT BLOCKS THE INSTALL</summary>
+                <div class="install-detail__body">
+                  Google Play Protect may flag apps not yet in the Play Store. Void Note is open source and safe — you can verify the code on GitHub. To proceed:
+                  <ol>
+                    <li>Tap <strong>More details</strong> (or the small arrow) on the Play Protect screen.</li>
+                    <li>Tap <strong>Install anyway</strong>.</li>
+                    <li>If asked to send the app to Google for review, tap <strong>Don't send</strong> — the app is open source and already public on GitHub.</li>
+                  </ol>
+                  Play Protect will stop flagging the app once it's on the Play Store.
+                </div>
+              </details>
+            </div>
+          </li>
+
+          <li class="install-step">
+            <span class="install-step__num">05</span>
+            <div class="install-step__body">
+              <strong>TAP OPEN — YOU'RE IN.</strong>
+              <p>Void Note will walk you through a quick onboarding and vault password setup. That's it — your encrypted notes vault is ready.</p>
+            </div>
+          </li>
+
+        </ol>
+      </div>
+      <!-- ── end sideload guide ──────────────────────────────────── -->
+
     </div>
   </div>
 </section>
@@ -621,19 +871,31 @@
         </div>
 
         <div>
-          <p class="footer__col-title">COMMUNITY</p>
+          <p class="footer__col-title">DEVELOPER</p>
           <ul class="footer__col-links" role="list">
+            <li>
+              <a href="https://github.com/NRoy9/VoidNote"
+                 class="footer__col-link"
+                 target="_blank"
+                 rel="noopener noreferrer">GitHub</a>
+            </li>
+            <li>
+              <a href="https://github.com/NRoy9/VoidNote/releases"
+                 class="footer__col-link"
+                 target="_blank"
+                 rel="noopener noreferrer">Releases</a>
+            </li>
+            <li>
+              <a href="https://github.com/NRoy9/VoidNote/issues"
+                 class="footer__col-link"
+                 target="_blank"
+                 rel="noopener noreferrer">Report a Bug</a>
+            </li>
             <li>
               <a href="https://discord.gg/yYgDNJKv"
                  class="footer__col-link"
                  target="_blank"
                  rel="noopener noreferrer">Discord</a>
-            </li>
-            <li>
-              <a href="#download" class="footer__col-link">Download APK</a>
-            </li>
-            <li>
-              <a href="privacy-policy.html" class="footer__col-link">Privacy Policy</a>
             </li>
           </ul>
         </div>
@@ -686,45 +948,67 @@
   // more than enough for a marketing page.
 
   (async function fetchLatestRelease() {
-    const VERSION_JSON = 'https://voidnote.pages.dev/version.json';
-    const FALLBACK_APK = 'https://voidnote.pages.dev/voidnote.apk';
+    const REPO          = 'NRoy9/VoidNote';
+    const API_URL       = `https://api.github.com/repos/${REPO}/releases/latest`;
+    const FALLBACK_URL  = `https://github.com/${REPO}/releases`;
 
-    const badgeEl     = document.getElementById('hero-version-badge');
-    const downloadBtn = document.getElementById('download-btn');
-    const versionNote = document.getElementById('download-version-note');
+    const badgeEl      = document.getElementById('hero-version-badge');
+    const downloadBtn  = document.getElementById('download-btn');
+    const versionNote  = document.getElementById('download-version-note');
 
     try {
-      const res = await fetch(VERSION_JSON + '?t=' + Date.now()); // bust cache
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res  = await fetch(API_URL, {
+        headers: { 'Accept': 'application/vnd.github+json' }
+      });
+
+      if (!res.ok) throw new Error(`GitHub API ${res.status}`);
 
       const data    = await res.json();
-      const version = (data.version || '').trim();
-      const apkUrl  = (data.apkUrl  || FALLBACK_APK).trim();
+      const tag     = data.tag_name || '';                 // e.g. "v1.0.1"
+      const version = tag.replace(/^v/, '');              // e.g. "1.0.1"
+      const assets  = data.assets || [];
 
+      // Find the APK asset — any asset whose name ends in ".apk"
+      const apkAsset = assets.find(a => a.name.endsWith('.apk'));
+      const apkUrl   = apkAsset ? apkAsset.browser_download_url : null;
+
+      // Update hero badge
       if (badgeEl && version) {
-        badgeEl.textContent = `V${version.toUpperCase()} — AVAILABLE NOW`;
+        badgeEl.textContent = `V${version.toUpperCase()} — AVAILABLE ON GITHUB`;
       }
 
+      // Update download button
       if (downloadBtn) {
-        downloadBtn.href        = apkUrl;
-        downloadBtn.textContent = `↓ DOWNLOAD APK  v${version}`;
-        downloadBtn.removeAttribute('target');
-        downloadBtn.removeAttribute('rel');
+        if (apkUrl) {
+          // Direct APK download — no extra click needed
+          downloadBtn.href             = apkUrl;
+          downloadBtn.textContent      = `↓ DOWNLOAD APK  v${version}`;
+          // Remove target="_blank" so the browser triggers a download directly
+          downloadBtn.removeAttribute('target');
+          downloadBtn.removeAttribute('rel');
+        } else {
+          // No APK asset found — fall back to releases page but update label
+          downloadBtn.href        = data.html_url || FALLBACK_URL;
+          downloadBtn.textContent = version
+            ? `↓ DOWNLOAD  v${version}`
+            : '↓ DOWNLOAD APK';
+        }
       }
 
+      // Update version note below the button
       if (versionNote && version) {
         versionNote.textContent =
-          `v${version} · Android 8.0+ · Tap Download, then allow "Install unknown apps"`;
+          `v${version} · Android 8.0+ · Requires "Install unknown apps" permission for direct APK`;
       }
 
     } catch (err) {
+      // Silent fallback — button already points to releases page by default.
+      // Badge shows a static label so the page still looks finished.
       console.warn('Version fetch failed (non-critical):', err.message);
-      if (badgeEl) badgeEl.textContent = 'AVAILABLE NOW';
-      if (downloadBtn) {
-        downloadBtn.href        = FALLBACK_APK;
-        downloadBtn.textContent = '↓ DOWNLOAD APK';
-        downloadBtn.removeAttribute('target');
-        downloadBtn.removeAttribute('rel');
+      if (badgeEl) badgeEl.textContent = 'AVAILABLE ON GITHUB';
+      if (versionNote) {
+        versionNote.textContent =
+          'Android 8.0+ · Requires "Install unknown apps" permission for direct APK';
       }
     }
   })();

@@ -400,7 +400,7 @@ fun SettingsScreen(
                     subtitle = "Bug reports, feedback & chat",
                     onClick  = {
                         context.startActivity(
-                            Intent(Intent.ACTION_VIEW, "https://discord.gg/yYgDNJKv".toUri())
+                            Intent(Intent.ACTION_VIEW, "https://discord.gg/NUZVzE9XGC".toUri())
                         )
                     }
                 )
