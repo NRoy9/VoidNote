@@ -10,135 +10,92 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * UpdateCheckerManager — checks GitHub Releases for a newer version of the app.
+ * UpdateCheckerManager — checks a hosted version.json for a newer version of the app.
  *
  * ─── HOW IT WORKS ────────────────────────────────────────────────────────────
  *
- * We use the public GitHub Releases API endpoint:
- *   GET https://api.github.com/repos/NRoy9/VoidNote/releases/latest
+ * We fetch a JSON file hosted on Cloudflare Pages:
+ *   GET https://voidnote.pages.dev/version.json
  *
- * The response is JSON. The only field we care about is `tag_name`, e.g.:
- *   { "tag_name": "v0.2.0-alpha", "html_url": "https://github.com/..." }
+ * The file format:
+ *   { "version": "1.1.0", "apkUrl": "https://voidnote.pages.dev/voidnote.apk" }
  *
- * We compare `tag_name` against the currently-installed version
- * (BuildConfig.VERSION_NAME, e.g. "0.1.0-alpha").
+ * We compare `version` against the currently-installed version.
+ * If the hosted version is strictly newer, we surface it to the UI.
  *
- * COMPARISON LOGIC:
- * GitHub tags are expected to be "v{VERSION_NAME}" (e.g. "v0.1.0-alpha").
- * We strip the leading "v" from tag_name before comparing.
- * If they differ, we treat the GitHub version as the newer one and return it.
- *
- * ─── WHY NOT SEMANTIC VERSION COMPARISON? ────────────────────────────────────
- * During pre-Play Store alpha, we tag in chronological order. The latest
- * GitHub release is always the newest version. Simple string inequality is
- * sufficient and avoids a semver parsing dependency.
- *
- * ─── INTERNET PERMISSION ─────────────────────────────────────────────────────
- * This class requires:
- *   <uses-permission android:name="android.permission.INTERNET" />
- * in AndroidManifest.xml. If it's missing, the request will silently fail
- * and checkForUpdate() will return null (safe — no crash).
+ * ─── UPDATING A RELEASE ──────────────────────────────────────────────────────
+ * 1. Upload the new APK as `voidnote.apk` to Cloudflare Pages
+ * 2. Update `version` in version.json to the new version string
+ * 3. Purge Cloudflare cache
+ * The download button in the app will always point to voidnote.pages.dev/voidnote.apk
  *
  * ─── PLAY STORE MIGRATION ────────────────────────────────────────────────────
- * When the app is published to the Play Store, replace this class with
- * Google's official Play In-App Update library (AppUpdateManager). That
- * library checks the Play Store directly and handles forced/flexible updates.
- * This GitHub-based checker is only for the pre-Play Store alpha phase.
- *
- * ─── ERROR HANDLING ──────────────────────────────────────────────────────────
- * Any network failure, JSON parse error, or unexpected response returns null.
- * The caller treats null as "no update available" — the user sees nothing.
- * We never crash or show an error for a failed update check.
+ * When published to Play Store, replace this class with AppUpdateManager
+ * (Google's official in-app update library). This checker is for the
+ * direct-APK distribution phase only.
  */
 @Singleton
 class UpdateCheckerManager @Inject constructor() {
 
     companion object {
-        // GitHub API endpoint for the latest release in the VoidNote repo
-        private const val GITHUB_API_URL =
-            "https://api.github.com/repos/NRoy9/VoidNote/releases/latest"
-
-        // Timeout values in milliseconds
-        private const val CONNECT_TIMEOUT_MS = 5_000   // 5 seconds to connect
-        private const val READ_TIMEOUT_MS    = 8_000   // 8 seconds to read the response
-
+        private const val VERSION_JSON_URL = "https://voidnote.pages.dev/version.json"
+        private const val CONNECT_TIMEOUT_MS = 5_000
+        private const val READ_TIMEOUT_MS    = 8_000
         private const val TAG = "UpdateChecker"
     }
 
     /**
-     * Check if a newer version is available on GitHub.
+     * Check if a newer version is available.
      *
-     * Runs on [Dispatchers.IO] — safe to call from a coroutine in any ViewModel.
-     *
-     * @param currentVersion  The currently installed version string, e.g. "0.1.0-alpha".
+     * @param currentVersion  The installed version string, e.g. "1.0.2".
      *                        Pass BuildConfig.VERSION_NAME from the caller.
-     *
-     * @return [UpdateInfo] if a newer version is available, or null if:
-     *         - The installed version matches the latest GitHub release
-     *         - The network call failed for any reason
-     *         - The JSON response was malformed
+     * @return [UpdateInfo] if a newer version is available, null otherwise.
      */
     suspend fun checkForUpdate(currentVersion: String): UpdateInfo? {
         return withContext(Dispatchers.IO) {
             try {
-                val connection = (URL(GITHUB_API_URL).openConnection() as HttpURLConnection).apply {
+                val connection = (URL(VERSION_JSON_URL).openConnection() as HttpURLConnection).apply {
                     connectTimeout = CONNECT_TIMEOUT_MS
                     readTimeout    = READ_TIMEOUT_MS
                     requestMethod  = "GET"
-                    // GitHub API requires a User-Agent header
                     setRequestProperty("User-Agent", "VoidNote-Android/$currentVersion")
-                    // Tell GitHub we accept JSON
-                    setRequestProperty("Accept", "application/vnd.github+json")
+                    setRequestProperty("Accept", "application/json")
+                    // Bypass Cloudflare cache for update checks
+                    setRequestProperty("Cache-Control", "no-cache")
                 }
 
-                // Only proceed if the server responded with HTTP 200
-                val responseCode = connection.responseCode
-                if (responseCode != HttpURLConnection.HTTP_OK) {
-                    Log.w(TAG, "GitHub API returned HTTP $responseCode — skipping update check")
+                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                    Log.w(TAG, "version.json returned HTTP ${connection.responseCode}")
                     return@withContext null
                 }
 
-                // Read the entire response body as a String
                 val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
                 connection.disconnect()
 
-                // Parse JSON — we only need two fields
                 val json       = JSONObject(responseBody)
-                val tagName    = json.optString("tag_name", "")    // e.g. "v0.2.0-alpha"
-                val downloadUrl = json.optString("html_url", "")   // e.g. GitHub release page URL
+                val latestVersion = json.optString("version", "").trim()
+                val apkUrl     = json.optString("apkUrl", "").trim()
 
-                if (tagName.isBlank()) {
-                    Log.w(TAG, "GitHub response had no tag_name — skipping")
+                if (latestVersion.isBlank()) {
+                    Log.w(TAG, "version.json had no version field")
                     return@withContext null
                 }
-
-                // Strip the leading "v" from the GitHub tag to get a bare version string
-                // "v0.2.0-alpha" → "0.2.0-alpha"
-                val latestVersion = tagName.removePrefix("v")
 
                 // Strip -DEBUG suffix from debug builds before comparing
-                // "0.2.0-alpha-DEBUG" → "0.2.0-alpha"
                 val normalizedCurrent = currentVersion.removeSuffix("-DEBUG")
 
-                // Only show banner if GitHub is strictly NEWER than what's installed.
-                // If local build is ahead of the latest release (e.g. dev build),
-                // isNewerVersion() returns false and we skip the banner.
                 if (!isNewerVersion(latestVersion, normalizedCurrent)) {
-                    Log.d(TAG, "No update needed — local: $normalizedCurrent, remote: $latestVersion")
+                    Log.d(TAG, "No update — local: $normalizedCurrent, remote: $latestVersion")
                     return@withContext null
                 }
 
-                // A different version is on GitHub — surface it to the UI
-                Log.i(TAG, "Update available: $currentVersion → $latestVersion")
+                Log.i(TAG, "Update available: $normalizedCurrent → $latestVersion")
                 UpdateInfo(
-                    latestVersion = latestVersion,   // e.g. "0.2.0-alpha"
-                    tagName       = tagName,         // e.g. "v0.2.0-alpha" (for dismiss key)
-                    downloadUrl   = downloadUrl      // GitHub release page URL
+                    latestVersion = latestVersion,
+                    downloadUrl   = apkUrl.ifBlank { "https://voidnote.pages.dev" }
                 )
 
             } catch (e: Exception) {
-                // Network unavailable, DNS failure, SSL error, JSON parse error, etc.
-                // Swallow silently — update check is non-critical.
                 Log.d(TAG, "Update check failed (non-critical): ${e.message}")
                 null
             }
@@ -147,13 +104,8 @@ class UpdateCheckerManager @Inject constructor() {
 
     /**
      * Returns true only if [remote] is strictly newer than [local].
-     * Compares each numeric segment (e.g. "0.2.0" → [0, 2, 0]).
-     * The suffix after "-" (e.g. "-alpha") is ignored for ordering.
-     *
-     * Examples:
-     *   "0.2.0" vs "0.1.0" → true  (remote is newer → show banner)
-     *   "0.1.0" vs "0.2.0" → false (local is ahead  → no banner)
-     *   "0.2.0" vs "0.2.0" → false (same version    → no banner)
+     * Compares each numeric segment (e.g. "1.1.0" vs "1.0.2").
+     * Suffix after "-" is ignored for ordering.
      */
     private fun isNewerVersion(remote: String, local: String): Boolean {
         fun parts(v: String) = v.substringBefore("-")
@@ -175,17 +127,15 @@ class UpdateCheckerManager @Inject constructor() {
 }
 
 /**
- * UpdateInfo — data returned when a newer version is available.
+ * UpdateInfo — returned when a newer version is available.
  *
- * @param latestVersion  Bare version string, e.g. "0.2.0-alpha". Used for display.
- * @param tagName        Full tag as it appears in GitHub, e.g. "v0.2.0-alpha".
- *                       Used as the dismiss key in PreferencesManager so the banner
- *                       doesn't re-appear for the same version.
- * @param downloadUrl    The HTML URL of the GitHub release page. Opened in browser
- *                       when the user taps "Download".
+ * NOTE: tagName field removed (was the GitHub tag). We now use
+ * latestVersion directly as the dismiss key in PreferencesManager.
+ *
+ * @param latestVersion  Version string from version.json, e.g. "1.1.0"
+ * @param downloadUrl    Direct APK download URL from version.json
  */
 data class UpdateInfo(
     val latestVersion: String,
-    val tagName: String,
     val downloadUrl: String
 )

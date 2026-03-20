@@ -71,12 +71,6 @@
       <li><a href="#security" class="nav__link">SECURITY</a></li>
       <li><a href="#download" class="nav__link">DOWNLOAD</a></li>
       <li>
-        <a href="https://github.com/NRoy9/VoidNote"
-           class="nav__link"
-           target="_blank"
-           rel="noopener noreferrer">GITHUB</a>
-      </li>
-      <li>
         <a href="#download" class="nav__cta">
           GET THE APP <span class="btn__arrow">↓</span>
         </a>
@@ -133,11 +127,11 @@
         <a href="#download" class="btn btn--primary">
           DOWNLOAD APK <span class="btn__arrow">↓</span>
         </a>
-        <a href="https://github.com/NRoy9/VoidNote"
+        <a href="https://discord.gg/yYgDNJKv"
            class="btn btn--ghost"
            target="_blank"
            rel="noopener noreferrer">
-          ★ STAR ON GITHUB
+          JOIN DISCORD
         </a>
       </div>
 
@@ -567,11 +561,11 @@
         </a>
 
         <!-- Secondary: View source -->
-        <a href="https://github.com/NRoy9/VoidNote"
+        <a href="https://discord.gg/yYgDNJKv"
            class="btn btn--ghost"
            target="_blank"
            rel="noopener noreferrer">
-          VIEW SOURCE CODE
+          JOIN COMMUNITY
         </a>
       </div>
 
@@ -627,31 +621,19 @@
         </div>
 
         <div>
-          <p class="footer__col-title">DEVELOPER</p>
+          <p class="footer__col-title">COMMUNITY</p>
           <ul class="footer__col-links" role="list">
-            <li>
-              <a href="https://github.com/NRoy9/VoidNote"
-                 class="footer__col-link"
-                 target="_blank"
-                 rel="noopener noreferrer">GitHub</a>
-            </li>
-            <li>
-              <a href="https://github.com/NRoy9/VoidNote/releases"
-                 class="footer__col-link"
-                 target="_blank"
-                 rel="noopener noreferrer">Releases</a>
-            </li>
-            <li>
-              <a href="https://github.com/NRoy9/VoidNote/issues"
-                 class="footer__col-link"
-                 target="_blank"
-                 rel="noopener noreferrer">Report a Bug</a>
-            </li>
             <li>
               <a href="https://discord.gg/yYgDNJKv"
                  class="footer__col-link"
                  target="_blank"
                  rel="noopener noreferrer">Discord</a>
+            </li>
+            <li>
+              <a href="#download" class="footer__col-link">Download APK</a>
+            </li>
+            <li>
+              <a href="privacy-policy.html" class="footer__col-link">Privacy Policy</a>
             </li>
           </ul>
         </div>
@@ -704,67 +686,45 @@
   // more than enough for a marketing page.
 
   (async function fetchLatestRelease() {
-    const REPO          = 'NRoy9/VoidNote';
-    const API_URL       = `https://api.github.com/repos/${REPO}/releases/latest`;
-    const FALLBACK_URL  = `https://github.com/${REPO}/releases`;
+    const VERSION_JSON = 'https://voidnote.pages.dev/version.json';
+    const FALLBACK_APK = 'https://voidnote.pages.dev/voidnote.apk';
 
-    const badgeEl      = document.getElementById('hero-version-badge');
-    const downloadBtn  = document.getElementById('download-btn');
-    const versionNote  = document.getElementById('download-version-note');
+    const badgeEl     = document.getElementById('hero-version-badge');
+    const downloadBtn = document.getElementById('download-btn');
+    const versionNote = document.getElementById('download-version-note');
 
     try {
-      const res  = await fetch(API_URL, {
-        headers: { 'Accept': 'application/vnd.github+json' }
-      });
-
-      if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+      const res = await fetch(VERSION_JSON + '?t=' + Date.now()); // bust cache
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data    = await res.json();
-      const tag     = data.tag_name || '';                 // e.g. "v1.0.1"
-      const version = tag.replace(/^v/, '');              // e.g. "1.0.1"
-      const assets  = data.assets || [];
+      const version = (data.version || '').trim();
+      const apkUrl  = (data.apkUrl  || FALLBACK_APK).trim();
 
-      // Find the APK asset — any asset whose name ends in ".apk"
-      const apkAsset = assets.find(a => a.name.endsWith('.apk'));
-      const apkUrl   = apkAsset ? apkAsset.browser_download_url : null;
-
-      // Update hero badge
       if (badgeEl && version) {
-        badgeEl.textContent = `V${version.toUpperCase()} — AVAILABLE ON GITHUB`;
+        badgeEl.textContent = `V${version.toUpperCase()} — AVAILABLE NOW`;
       }
 
-      // Update download button
       if (downloadBtn) {
-        if (apkUrl) {
-          // Direct APK download — no extra click needed
-          downloadBtn.href             = apkUrl;
-          downloadBtn.textContent      = `↓ DOWNLOAD APK  v${version}`;
-          // Remove target="_blank" so the browser triggers a download directly
-          downloadBtn.removeAttribute('target');
-          downloadBtn.removeAttribute('rel');
-        } else {
-          // No APK asset found — fall back to releases page but update label
-          downloadBtn.href        = data.html_url || FALLBACK_URL;
-          downloadBtn.textContent = version
-            ? `↓ DOWNLOAD  v${version}`
-            : '↓ DOWNLOAD APK';
-        }
+        downloadBtn.href        = apkUrl;
+        downloadBtn.textContent = `↓ DOWNLOAD APK  v${version}`;
+        downloadBtn.removeAttribute('target');
+        downloadBtn.removeAttribute('rel');
       }
 
-      // Update version note below the button
       if (versionNote && version) {
         versionNote.textContent =
-          `v${version} · Android 8.0+ · Requires "Install unknown apps" permission for direct APK`;
+          `v${version} · Android 8.0+ · Tap Download, then allow "Install unknown apps"`;
       }
 
     } catch (err) {
-      // Silent fallback — button already points to releases page by default.
-      // Badge shows a static label so the page still looks finished.
       console.warn('Version fetch failed (non-critical):', err.message);
-      if (badgeEl) badgeEl.textContent = 'AVAILABLE ON GITHUB';
-      if (versionNote) {
-        versionNote.textContent =
-          'Android 8.0+ · Requires "Install unknown apps" permission for direct APK';
+      if (badgeEl) badgeEl.textContent = 'AVAILABLE NOW';
+      if (downloadBtn) {
+        downloadBtn.href        = FALLBACK_APK;
+        downloadBtn.textContent = '↓ DOWNLOAD APK';
+        downloadBtn.removeAttribute('target');
+        downloadBtn.removeAttribute('rel');
       }
     }
   })();

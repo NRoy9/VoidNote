@@ -395,19 +395,6 @@ fun SettingsScreen(
 
             item {
                 SettingsItem(
-                    icon     = Icons.Default.Code,
-                    title    = "GitHub",
-                    subtitle = "Source code — GreenIcePhoenix",
-                    onClick  = {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, "https://github.com/NRoy9/VoidNote".toUri())
-                        )
-                    }
-                )
-            }
-
-            item {
-                SettingsItem(
                     icon     = Icons.Default.Forum,
                     title    = "Discord",
                     subtitle = "Bug reports, feedback & chat",

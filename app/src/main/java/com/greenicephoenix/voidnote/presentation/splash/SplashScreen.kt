@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
  * SplashScreen — startup animation + navigation decision point.
  *
  * CHANGES IN THIS UPDATE:
- * - Added [VoidNoteLogo] composable — draws the document logo via Compose Canvas.
+ * - Added VoidNoteLogo] composable — draws the document logo via Compose Canvas.
  *   This replaces the invisible system splash icon (which was white-on-white in light mode).
  * - The logo fades in alongside the text using the same alphaAnimation.
  * - Version number updated to match build.gradle.kts.
@@ -140,7 +140,7 @@ fun SplashScreen(
 
         // ── Version number — bottom of screen ─────────────────────────────────
         Text(
-            text     = "v1.0.1",   // Keep in sync with versionName in build.gradle.kts
+            text     = "v1.1.0",   // Keep in sync with versionName in build.gradle.kts
             style    = MaterialTheme.typography.labelSmall,
             color    = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
             modifier = Modifier
@@ -229,17 +229,17 @@ fun VoidNoteLogo(
                 lineTo(sx(58f), sy(16f))             // top edge → fold start
                 lineTo(sx(74f), sy(32f))             // diagonal cut (the folded corner)
                 lineTo(sx(74f), sy(79f))             // right edge down
-                quadraticBezierTo(                   // bottom-right rounded corner
+                quadraticTo(// bottom-right rounded corner
                     sx(74f), sy(82f),
                     sx(71f), sy(82f)
                 )
                 lineTo(sx(25f), sy(82f))             // bottom edge
-                quadraticBezierTo(                   // bottom-left rounded corner
+                quadraticTo(// bottom-left rounded corner
                     sx(22f), sy(82f),
                     sx(22f), sy(79f)
                 )
                 lineTo(sx(22f), sy(19f))             // left edge up
-                quadraticBezierTo(                   // top-left rounded corner
+                quadraticTo(// top-left rounded corner
                     sx(22f), sy(16f),
                     sx(25f), sy(16f)
                 )

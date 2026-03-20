@@ -51,6 +51,24 @@ object ChangelogData {
      */
     val entries: List<VersionEntry> = listOf(
 
+        // ── v1.1.0 — The biggest update yet ──────────────────────────────────
+        VersionEntry(
+            version     = "1.1.0",
+            releaseDate = "20 Mar 2026",
+            tagline     = "Journal, templates, linked notes, and a brand new home.",
+            changes     = listOf(
+                ChangeItem(ChangeType.NEW,      "Journal — a full calendar view for daily diary entries, one entry per day"),
+                ChangeItem(ChangeType.NEW,      "Note Templates — start from a blank, meeting notes, self-reflection, task list, or book review"),
+                ChangeItem(ChangeType.NEW,      "Daily Note — one tap from the + menu opens or creates today's dated note"),
+                ChangeItem(ChangeType.NEW,      "Note Linking — link notes to each other; linked chips appear above the tag bar"),
+                ChangeItem(ChangeType.NEW,      "Code Blocks — insert a dark monospace code block with optional language label"),
+                ChangeItem(ChangeType.NEW,      "Focus Mode — hides all chrome for distraction-free writing; ghost exit button to return"),
+                ChangeItem(ChangeType.NEW,      "Bottom navigation — Notes · Search · Journal · Settings always accessible"),
+                ChangeItem(ChangeType.IMPROVED, "Smart auto-title — notes without a title get one derived from the first line you type"),
+                ChangeItem(ChangeType.IMPROVED, "Import Backup now supports plain Markdown files and Markdown ZIP exports"),
+            )
+        ),
+
         // ── v1.0.2 — Share fix, community & support ───────────────────────────
         VersionEntry(
             version     = "1.0.2",

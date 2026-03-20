@@ -115,7 +115,7 @@ class NotesListViewModel @Inject constructor(
         val info = _updateInfo.value ?: return
         _updateInfo.value = null
         viewModelScope.launch {
-            preferencesManager.setDismissedUpdateVersion(info.tagName)
+            preferencesManager.setDismissedUpdateVersion(info.latestVersion)
         }
     }
 
@@ -233,7 +233,7 @@ class NotesListViewModel @Inject constructor(
 
                 val info = updateChecker.checkForUpdate(BuildConfig.VERSION_NAME)
 
-                if (info != null && info.tagName != dismissedVersion) {
+                if (info != null && info.latestVersion  != dismissedVersion) {
                     _updateInfo.value = info
                 }
             } catch (_: Exception) {
@@ -265,8 +265,8 @@ class NotesListViewModel @Inject constructor(
         val name = _newFolderName.value.trim()
         if (name.isBlank()) return
         viewModelScope.launch {
-            val folder = com.greenicephoenix.voidnote.domain.model.Folder(
-                id        = java.util.UUID.randomUUID().toString(),
+            val folder = Folder(
+                id        = UUID.randomUUID().toString(),
                 name      = name,
                 createdAt = System.currentTimeMillis()
             )
