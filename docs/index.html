@@ -174,10 +174,10 @@
       <li><a href="#security" class="nav__link">SECURITY</a></li>
       <li><a href="#download" class="nav__link">DOWNLOAD</a></li>
       <li>
-        <a href="https://github.com/NRoy9/VoidNote"
+        <a href="https://discord.gg/NUZVzE9XGC"
            class="nav__link"
            target="_blank"
-           rel="noopener noreferrer">GITHUB</a>
+           rel="noopener noreferrer">DISCORD</a>
       </li>
       <li>
         <a href="#download" class="nav__cta">
@@ -211,7 +211,7 @@
     <!-- Left: Text content -->
     <div class="hero__content">
 
-      <!-- Version badge — updated dynamically by JS from GitHub releases -->
+      <!-- Version badge — updated dynamically by JS from version.json -->
       <div class="hero__eyebrow">
           <span class="badge">
             <span class="dot" aria-hidden="true"></span>
@@ -231,16 +231,16 @@
         No ads. No tracking. No cloud. Just notes.
       </p>
 
-      <!-- Primary CTA + secondary GitHub link -->
+      <!-- Primary CTA + secondary Discord link -->
       <div class="hero__actions">
         <a href="#download" class="btn btn--primary">
           DOWNLOAD APK <span class="btn__arrow">↓</span>
         </a>
-        <a href="https://github.com/NRoy9/VoidNote"
+        <a href="https://discord.gg/NUZVzE9XGC"
            class="btn btn--ghost"
            target="_blank"
            rel="noopener noreferrer">
-          ★ STAR ON GITHUB
+          ♦ JOIN DISCORD
         </a>
       </div>
 
@@ -717,21 +717,19 @@
       </p>
 
       <div class="download__actions">
-        <!-- Primary: direct APK download — href and label set dynamically by JS -->
+        <!-- Primary: direct APK download — href and label updated dynamically by JS -->
         <a id="download-btn"
-           href="https://github.com/NRoy9/VoidNote/releases"
-           class="btn btn--primary"
-           target="_blank"
-           rel="noopener noreferrer">
+           href="https://voidnote.pages.dev/voidnote.apk"
+           class="btn btn--primary">
           ↓ DOWNLOAD APK
         </a>
 
-        <!-- Secondary: View source -->
-        <a href="https://github.com/NRoy9/VoidNote"
+        <!-- Secondary: community Discord -->
+        <a href="https://discord.gg/NUZVzE9XGC"
            class="btn btn--ghost"
            target="_blank"
            rel="noopener noreferrer">
-          VIEW SOURCE CODE
+          JOIN THE COMMUNITY
         </a>
       </div>
 
@@ -804,11 +802,11 @@
               <details class="install-detail">
                 <summary>▸ IF PLAY PROTECT BLOCKS THE INSTALL</summary>
                 <div class="install-detail__body">
-                  Google Play Protect may flag apps not yet in the Play Store. Void Note is open source and safe — you can verify the code on GitHub. To proceed:
+                  Google Play Protect may flag apps not yet in the Play Store. Void Note is safe — to proceed:
                   <ol>
                     <li>Tap <strong>More details</strong> (or the small arrow) on the Play Protect screen.</li>
                     <li>Tap <strong>Install anyway</strong>.</li>
-                    <li>If asked to send the app to Google for review, tap <strong>Don't send</strong> — the app is open source and already public on GitHub.</li>
+                    <li>If asked to send the app to Google for review, tap <strong>Don't send</strong>.</li>
                   </ol>
                   Play Protect will stop flagging the app once it's on the Play Store.
                 </div>
@@ -871,31 +869,19 @@
         </div>
 
         <div>
-          <p class="footer__col-title">DEVELOPER</p>
+          <p class="footer__col-title">COMMUNITY</p>
           <ul class="footer__col-links" role="list">
             <li>
-              <a href="https://github.com/NRoy9/VoidNote"
+              <a href="https://discord.gg/NUZVzE9XGC"
                  class="footer__col-link"
                  target="_blank"
-                 rel="noopener noreferrer">GitHub</a>
-            </li>
-            <li>
-              <a href="https://github.com/NRoy9/VoidNote/releases"
-                 class="footer__col-link"
-                 target="_blank"
-                 rel="noopener noreferrer">Releases</a>
+                 rel="noopener noreferrer">Discord</a>
             </li>
             <li>
               <a href="https://github.com/NRoy9/VoidNote/issues"
                  class="footer__col-link"
                  target="_blank"
                  rel="noopener noreferrer">Report a Bug</a>
-            </li>
-            <li>
-              <a href="https://discord.gg/yYgDNJKv"
-                 class="footer__col-link"
-                 target="_blank"
-                 rel="noopener noreferrer">Discord</a>
             </li>
           </ul>
         </div>
@@ -932,67 +918,50 @@
      3. Scroll animation (Intersection Observer — no library needed)
      ================================================================ -->
 <script>
-  // ── 1. GITHUB RELEASE FETCHER ─────────────────────────────────────────
+  // ── 1. VERSION.JSON FETCHER ───────────────────────────────────────────────
   //
-  // Calls the public GitHub Releases API on page load to get:
-  //   - tag_name  → displayed in the hero badge and version note
-  //   - assets[]  → we find the .apk asset and use its browser_download_url
-  //                 so the Download button goes straight to the file, not
-  //                 to the releases page.
+  // Fetches version.json hosted on Cloudflare Pages to get the latest version
+  // number and APK download URL. No GitHub API needed — no auth, no rate limits.
   //
-  // FALLBACK: if the API call fails (offline, rate-limited, no APK asset
-  // attached yet), the button keeps its default href (the releases page)
-  // and the badge shows a sensible static label. Nothing breaks.
+  // version.json format:
+  //   { "version": "1.1.0", "apkUrl": "https://voidnote.pages.dev/voidnote.apk" }
   //
-  // GitHub's unauthenticated API rate limit is 60 requests/hour per IP —
-  // more than enough for a marketing page.
+  // FALLBACK: if the fetch fails (offline, CDN issue), the button already
+  // points directly to the APK and the badge shows a sensible static label.
 
-  (async function fetchLatestRelease() {
-    const REPO          = 'NRoy9/VoidNote';
-    const API_URL       = `https://api.github.com/repos/${REPO}/releases/latest`;
-    const FALLBACK_URL  = `https://github.com/${REPO}/releases`;
+  (async function fetchVersionJson() {
+    const VERSION_URL   = 'https://voidnote.pages.dev/version.json';
+    const FALLBACK_URL  = 'https://voidnote.pages.dev/voidnote.apk';
 
     const badgeEl      = document.getElementById('hero-version-badge');
     const downloadBtn  = document.getElementById('download-btn');
     const versionNote  = document.getElementById('download-version-note');
 
     try {
-      const res  = await fetch(API_URL, {
-        headers: { 'Accept': 'application/vnd.github+json' }
+      const res = await fetch(VERSION_URL, {
+        headers: { 'Cache-Control': 'no-cache' }
       });
 
-      if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+      if (!res.ok) throw new Error(`version.json fetch: ${res.status}`);
 
       const data    = await res.json();
-      const tag     = data.tag_name || '';                 // e.g. "v1.0.1"
-      const version = tag.replace(/^v/, '');              // e.g. "1.0.1"
-      const assets  = data.assets || [];
-
-      // Find the APK asset — any asset whose name ends in ".apk"
-      const apkAsset = assets.find(a => a.name.endsWith('.apk'));
-      const apkUrl   = apkAsset ? apkAsset.browser_download_url : null;
+      const version = (data.version || '').trim();
+      const apkUrl  = (data.apkUrl  || '').trim() || FALLBACK_URL;
 
       // Update hero badge
       if (badgeEl && version) {
-        badgeEl.textContent = `V${version.toUpperCase()} — AVAILABLE ON GITHUB`;
+        badgeEl.textContent = `V${version.toUpperCase()} — AVAILABLE NOW`;
       }
 
       // Update download button
-      if (downloadBtn) {
-        if (apkUrl) {
-          // Direct APK download — no extra click needed
-          downloadBtn.href             = apkUrl;
-          downloadBtn.textContent      = `↓ DOWNLOAD APK  v${version}`;
-          // Remove target="_blank" so the browser triggers a download directly
-          downloadBtn.removeAttribute('target');
-          downloadBtn.removeAttribute('rel');
-        } else {
-          // No APK asset found — fall back to releases page but update label
-          downloadBtn.href        = data.html_url || FALLBACK_URL;
-          downloadBtn.textContent = version
-            ? `↓ DOWNLOAD  v${version}`
-            : '↓ DOWNLOAD APK';
-        }
+      if (downloadBtn && apkUrl) {
+        downloadBtn.href        = apkUrl;
+        downloadBtn.textContent = version
+          ? `↓ DOWNLOAD APK  v${version}`
+          : '↓ DOWNLOAD APK';
+        // Direct download — remove blank-tab attributes
+        downloadBtn.removeAttribute('target');
+        downloadBtn.removeAttribute('rel');
       }
 
       // Update version note below the button
@@ -1002,10 +971,9 @@
       }
 
     } catch (err) {
-      // Silent fallback — button already points to releases page by default.
-      // Badge shows a static label so the page still looks finished.
+      // Silent fallback — button already points to APK by default.
       console.warn('Version fetch failed (non-critical):', err.message);
-      if (badgeEl) badgeEl.textContent = 'AVAILABLE ON GITHUB';
+      if (badgeEl) badgeEl.textContent = 'AVAILABLE NOW';
       if (versionNote) {
         versionNote.textContent =
           'Android 8.0+ · Requires "Install unknown apps" permission for direct APK';

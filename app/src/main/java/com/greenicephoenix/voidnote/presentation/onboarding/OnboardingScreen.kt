@@ -21,23 +21,24 @@ import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import kotlinx.coroutines.launch
 
 /**
- * OnboardingScreen — 3-page introduction shown on first install only.
+ * OnboardingScreen — 4-page introduction shown on first install only.
  *
  * PAGE FLOW (enforced by button logic):
- *   Page 1 → [Next ]        → Page 2
- *   Page 2 → [Next ]        → Page 3
- *   Page 3 → [Get Started] → VaultSetup (marks onboarding complete)
+ *   Page 1 → [Next]         → Page 2
+ *   Page 2 → [Next]         → Page 3
+ *   Page 3 → [Next]         → Page 4
+ *   Page 4 → [Get Started] → VaultSetup (marks onboarding complete)
  *
- * Skip (top-right) is available on pages 1 and 2 only.
  * Swiping between pages is also supported via HorizontalPager.
  *
  * PAGES:
  * 1. Welcome       — what Void Note is
- * 2. Encrypted     — AES-256, zero-knowledge, your key
- * 3. Fully Featured — rich text, folders, tags, biometric lock
+ * 2. Private       — AES-256, vault password, biometric, zero cloud
+ * 3. Write         — rich text, headings, checklists, voice, images, code blocks
+ * 4. Organise      — folders, tags, journal, note linking, templates, daily note
  *
- * The three pages tell a complete story:
- *   what it is → why it's safe → what you can do with it
+ * The four pages tell a complete story:
+ *   what it is → why it's safe → what you can write → how you stay organised
  *
  * DESIGN: Nothing aesthetic — pure black/white, pill dot indicators,
  * high-contrast button, generous vertical breathing room.
@@ -56,13 +57,18 @@ fun OnboardingScreen(
         ),
         OnboardingPage(
             symbol      = "⬡",
-            title       = "ENCRYPTED\nBY DEFAULT",
-            description = "Every note is protected with AES-256 encryption before it's saved. We can't read your notes. Nobody can."
+            title       = "PRIVATE\nBY DESIGN",
+            description = "AES-256 encryption before anything touches storage.\nVault password you control. Biometric lock.\nZero cloud. Zero tracking. Zero compromise."
         ),
         OnboardingPage(
             symbol      = "◈",
-            title       = "EVERYTHING\nYOU NEED",
-            description = "Rich text. Checklists. Voice notes. Images. Code blocks.\nJournal, note linking, folders, tags, and biometric lock.\nOffline-first. No account. No ads. Ever."
+            title       = "WRITE WITHOUT\nLIMITS",
+            description = "Rich text. Headings. Numbered lists. Checklists.\nVoice notes. Images. Code blocks.\nFocus Mode for distraction-free writing."
+        ),
+        OnboardingPage(
+            symbol      = "⊞",
+            title       = "ORGANISE\nEVERYTHING",
+            description = "Folders, tags, and a full Journal calendar.\nLink notes together. Daily Note shortcut.\nTemplates to start faster. Offline-first. No account. No ads."
         )
     )
 
@@ -126,11 +132,11 @@ fun OnboardingScreen(
 
             // ── Primary button ────────────────────────────────────────────────
             //
-            // PAGES 1 & 2 → Label: "Next"
+            // PAGES 1–3 → Label: "Next"
             //   onClick: animate pager to next page (pagerState.animateScrollToPage)
             //   Does NOT call markOnboardingComplete — user stays in onboarding.
             //
-            // PAGE 3 (last) → Label: "Get Started"
+            // PAGE 4 (last) → Label: "Get Started"
             //   onClick: markOnboardingComplete → routes to VaultSetup
             //
             // WHY rememberCoroutineScope?
