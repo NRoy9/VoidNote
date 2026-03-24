@@ -172,6 +172,12 @@ class ImportExportManager @Inject constructor(
             }
         }
 
+        // Count notes vs diary entries separately for the backup header.
+        // noteBackups includes ALL notes (regular + diary + trashed).
+        // We count only non-trashed regular notes and non-trashed diary entries for the header.
+        val regularNoteCount = noteBackups.count { !it.isTrashed && !it.isDiaryEntry }
+        val diaryNoteCount   = noteBackups.count { !it.isTrashed && it.isDiaryEntry  }
+
         // ── 5. Build VoidNoteBackup with the salt included ────────────────────
         val backup = VoidNoteBackup(
             version     = "2.0",
@@ -179,8 +185,9 @@ class ImportExportManager @Inject constructor(
             verificationBlob = encryption.createVerificationBlob(),
             exportDate  = System.currentTimeMillis(),
             appVersion  = getAppVersion(),
-            noteCount   = noteBackups.size,
+            noteCount   = regularNoteCount,
             folderCount = folderEntities.size,
+            diaryCount  = diaryNoteCount,
             mediaCount  = mediaFilePaths.size,
             notes       = noteBackups,
             folders     = folderEntities.map { folder ->
@@ -689,9 +696,9 @@ class ImportExportManager @Inject constructor(
      *
      * @return The number of .md files found (each becomes one note).
      */
-    fun countMarkdownNotes(contentResolver: ContentResolver, uri: Uri): Int {
+    fun countMarkdownNotes(contentResolver: ContentResolver, uri: Uri, fileName: String = ""): Int {
         return try {
-            val name = uri.lastPathSegment?.lowercase() ?: ""
+            val name = fileName.lowercase().ifBlank { uri.lastPathSegment?.lowercase() ?: "" }
             contentResolver.openInputStream(uri)?.use { stream ->
                 if (name.endsWith(".zip")) {
                     // Count .md entries inside the ZIP
@@ -739,19 +746,16 @@ class ImportExportManager @Inject constructor(
      *
      * @return ImportResult with notesImported, foldersImported, skippedDuplicates (0 — see above)
      */
-    suspend fun importMarkdown(contentResolver: ContentResolver, uri: Uri): ImportResult {
+    suspend fun importMarkdown(contentResolver: ContentResolver, uri: Uri, fileName: String = ""): ImportResult {
         var notesImported  = 0
         var foldersCreated = 0
 
-        // Cache: folderName → folderId so we create each folder at most once per import
         val folderCache = mutableMapOf<String, String>()
-
-        // Pre-load all existing folder names to avoid duplicates
         val existingFolders = folderDao.getAllFoldersOnce()
         existingFolders.forEach { f -> folderCache[f.name.lowercase()] = f.id }
 
         try {
-            val name = uri.lastPathSegment?.lowercase() ?: ""
+            val name = fileName.lowercase().ifBlank { uri.lastPathSegment?.lowercase() ?: "" }
             contentResolver.openInputStream(uri)?.use { stream ->
                 if (name.endsWith(".zip")) {
                     ZipInputStream(stream).use { zip ->
@@ -1052,6 +1056,7 @@ class ImportExportManager @Inject constructor(
             verificationBlob   = backup.verificationBlob,
             noteCount          = backup.noteCount,
             folderCount        = backup.folderCount,
+            diaryCount         = backup.diaryCount,
             appVersion         = backup.appVersion
         )
     }
@@ -1074,5 +1079,341 @@ class ImportExportManager @Inject constructor(
             }
         }
         return null
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // SPRINT 13 — THE MIGRATOR
+    // ═════════════════════════════════════════════════════════════════════════
+
+    // ─── EVERNOTE (.enex) ─────────────────────────────────────────────────────
+    //
+    // .enex is a standard XML file. One <note> element per note.
+    // Relevant tags we read:
+    //   <title>        → Note.title
+    //   <content>      → ENML (Evernote Markup Language, a subset of XHTML)
+    //                    We strip all tags and keep inner text only.
+    //   <created>      → ISO-8601 timestamp e.g. "20240315T142300Z"
+    //   <tag>          → zero or more, becomes Note.tags (max 5)
+    //   <resource>     → binary attachment — we skip data but note its type
+    //
+    // WHY NOT A FULL XML PARSER LIBRARY?
+    // Android's built-in javax.xml.parsers.DocumentBuilder handles .enex correctly
+    // with zero additional dependencies. The files can be large (100 MB+) so we
+    // use a SAX-style approach via DocumentBuilder which loads into DOM — acceptable
+    // for files users are likely to export (typically < 20 MB for a .enex export).
+
+    /**
+     * Count <note> elements in an Evernote .enex file.
+     * Fast — just counts occurrences of "<note>" without full DOM parse.
+     */
+    fun countEvernoteNotes(contentResolver: ContentResolver, uri: Uri): Int {
+        return try {
+            contentResolver.openInputStream(uri)?.use { stream ->
+                // Read as text and count <note> opening tags.
+                // Each note is wrapped in <note>...</note> at depth 1 under <en-export>.
+                val text = stream.bufferedReader().readText()
+                Regex("<note>").findAll(text).count()
+            } ?: 0
+        } catch (e: Exception) { 0 }
+    }
+
+    /**
+     * Import all notes from an Evernote .enex file.
+     *
+     * ENML content stripping:
+     *   ENML wraps content in <!DOCTYPE en-note ...> + <en-note>...</en-note>.
+     *   We strip all XML/HTML tags, collapse whitespace, and store the plain text.
+     *   This is intentional — we don't render HTML; plain text in the editor is fine.
+     *
+     * Timestamp parsing:
+     *   Evernote timestamps are YYYYMMDDTHHmmssZ (e.g. "20240315T142300Z").
+     *   We parse these into Unix millis; fall back to now() on parse failure.
+     *
+     * Tags:
+     *   Each <tag> element becomes one tag string. Capped at 5 (Void Note limit).
+     *
+     * @return ImportResult with notesImported count (foldersImported always 0 — ENEX has no folders).
+     */
+    suspend fun importEvernote(contentResolver: ContentResolver, uri: Uri): ImportResult {
+        var imported = 0
+        try {
+            val xmlText = contentResolver.openInputStream(uri)
+                ?.use { it.bufferedReader().readText() }
+                ?: return ImportResult(0, 0, 0, 0, 0, error = "Could not open file")
+
+            // Parse using Android's built-in DOM parser
+            val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+            val builder = factory.newDocumentBuilder()
+            val doc     = builder.parse(xmlText.byteInputStream(Charsets.UTF_8))
+            doc.documentElement.normalize()
+
+            val noteNodes = doc.getElementsByTagName("note")
+
+            for (i in 0 until noteNodes.length) {
+                val noteEl = noteNodes.item(i) as? org.w3c.dom.Element ?: continue
+
+                // Title
+                val title = noteEl.getElementsByTagName("title").item(0)?.textContent?.trim()
+                    ?: "Imported Note"
+
+                // Content — ENML → strip tags → plain text
+                val rawContent = noteEl.getElementsByTagName("content").item(0)?.textContent ?: ""
+                val plainContent = stripXmlTags(rawContent)
+
+                // Created timestamp
+                val createdStr = noteEl.getElementsByTagName("created").item(0)?.textContent?.trim()
+                val createdAt  = parseEnexTimestamp(createdStr) ?: System.currentTimeMillis()
+
+                // Tags (max 5)
+                val tagNodes = noteEl.getElementsByTagName("tag")
+                val tags = (0 until minOf(tagNodes.length, 5))
+                    .mapNotNull { tagNodes.item(it)?.textContent?.trim()?.ifBlank { null } }
+
+                // Encrypt and insert
+                val noteId = java.util.UUID.randomUUID().toString()
+                noteDao.insertNote(
+                    NoteEntity(
+                        id             = noteId,
+                        title          = encryption.encrypt(title),
+                        content        = encryption.encrypt(plainContent),
+                        contentFormats = emptyList(),
+                        createdAt      = createdAt,
+                        updatedAt      = createdAt,
+                        tags           = tags.map { encryption.encrypt(it) },
+                        isPinned       = false,
+                        isArchived     = false,
+                        isTrashed      = false,
+                        folderId       = null
+                    )
+                )
+                imported++
+            }
+        } catch (e: Exception) {
+            return ImportResult(0, 0, 0, 0, 0, error = "Evernote import failed: ${e.message}")
+        }
+        return ImportResult(notesImported = imported, foldersImported = 0,
+            blocksImported = 0, mediaFilesRestored = 0, skippedDuplicates = 0)
+    }
+
+    // ─── GOOGLE KEEP (Takeout ZIP) ────────────────────────────────────────────
+    //
+    // Google Takeout exports Keep notes as a ZIP containing:
+    //   Takeout/Keep/
+    //     *.json         ← one JSON file per note
+    //     *.html         ← HTML version (we ignore — JSON is cleaner)
+    //     *.3gp / *.mp3  ← audio attachments (we skip)
+    //     *.jpg / *.png  ← image attachments (we skip for now — no URI access)
+    //     Labels.json    ← label definitions (we use label names as tags)
+    //
+    // JSON structure per note (relevant fields):
+    //   {
+    //     "title": "...",
+    //     "textContent": "...",
+    //     "listContent": [{ "text": "...", "isChecked": false }, ...],
+    //     "labels": [{ "name": "..." }, ...],
+    //     "createdTimestampUsec": 1234567890000000,   ← microseconds
+    //     "userEditedTimestampUsec": ...,
+    //     "isArchived": false,
+    //     "isTrashed": false
+    //   }
+    //
+    // listContent → we format as plain text lines ("☑ text" / "☐ text")
+    // so checklists are human-readable even without proper InlineBlock support.
+    // A future migration could convert these to real TODO blocks.
+
+    /**
+     * Count importable JSON note files inside a Google Takeout ZIP.
+     *
+     * Google Takeout structure:
+     *   Takeout/Keep/My Note.json
+     *   Takeout/Keep/Labels.json   ← NOT a note, must be skipped
+     *   Takeout/Keep/image.jpg     ← media attachment, skip
+     *
+     * The path may vary (user renames the outer ZIP) so we match on
+     * the filename component only, not the full entry path.
+     */
+    fun countKeepNotes(contentResolver: ContentResolver, uri: Uri): Int {
+        return try {
+            contentResolver.openInputStream(uri)?.use { stream ->
+                ZipInputStream(stream).use { zip ->
+                    var count = 0
+                    var entry = zip.nextEntry
+                    while (entry != null) {
+                        if (isKeepNoteEntry(entry.name)) count++
+                        zip.closeEntry()
+                        entry = zip.nextEntry
+                    }
+                    count
+                }
+            } ?: 0
+        } catch (e: Exception) { 0 }
+    }
+
+    /**
+     * Import all notes from a Google Takeout Keep ZIP.
+     *
+     * Handles nested Takeout structure: Takeout/Keep/.json
+     * Archived and trashed notes are imported as-is.
+     */
+    suspend fun importGoogleKeep(contentResolver: ContentResolver, uri: Uri): ImportResult {
+        var imported = 0
+        var skipped  = 0
+
+        try {
+            contentResolver.openInputStream(uri)?.use { stream ->
+                ZipInputStream(stream).use { zip ->
+                    var entry = zip.nextEntry
+                    while (entry != null) {
+                        if (isKeepNoteEntry(entry.name)) {
+                            val jsonText = zip.readBytes().toString(Charsets.UTF_8)
+                            val success  = importKeepNote(jsonText)
+                            if (success) imported++ else skipped++
+                        }
+                        zip.closeEntry()
+                        entry = zip.nextEntry
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            return ImportResult(0, 0, 0, 0, 0, error = "Google Keep import failed: ${e.message}")
+        }
+
+        return ImportResult(
+            notesImported      = imported,
+            foldersImported    = 0,
+            blocksImported     = 0,
+            mediaFilesRestored = 0,
+            skippedDuplicates  = skipped
+        )
+    }
+
+    /**
+     * Parse a single Keep note JSON and insert it.
+     * Returns true on success, false if the note should be skipped (e.g. empty).
+     */
+    private suspend fun importKeepNote(jsonText: String): Boolean {
+        return try {
+            val obj = org.json.JSONObject(jsonText)
+
+            val title       = obj.optString("title", "").trim()
+            val textContent = obj.optString("textContent", "").trim()
+
+            // listContent → plain text checklist lines
+            val listContent = buildString {
+                val arr = obj.optJSONArray("listContent") ?: return@buildString
+                for (i in 0 until arr.length()) {
+                    val item      = arr.getJSONObject(i)
+                    val text      = item.optString("text", "").trim()
+                    val isChecked = item.optBoolean("isChecked", false)
+                    if (text.isNotBlank()) {
+                        appendLine("${if (isChecked) "☑" else "☐"} $text")
+                    }
+                }
+            }.trimEnd()
+
+            val fullContent = listOf(textContent, listContent)
+                .filter { it.isNotBlank() }
+                .joinToString("\n\n")
+
+            // Skip completely empty notes (title AND content blank)
+            if (title.isBlank() && fullContent.isBlank()) return false
+
+            // Labels → tags (max 5)
+            val tags = run {
+                val labelsArr = obj.optJSONArray("labels") ?: return@run emptyList<String>()
+                (0 until minOf(labelsArr.length(), 5))
+                    .mapNotNull { labelsArr.getJSONObject(it).optString("name").ifBlank { null } }
+            }
+
+            // Timestamps — Keep uses microseconds
+            val createdUsec = obj.optLong("createdTimestampUsec", 0L)
+            val editedUsec  = obj.optLong("userEditedTimestampUsec", 0L)
+            val createdAt   = if (createdUsec > 0) createdUsec / 1000L else System.currentTimeMillis()
+            val updatedAt   = if (editedUsec  > 0) editedUsec  / 1000L else createdAt
+
+            val isArchived = obj.optBoolean("isArchived", false)
+            val isTrashed  = obj.optBoolean("isTrashed",  false)
+            val isPinned   = obj.optBoolean("isPinned",   false)
+
+            noteDao.insertNote(
+                NoteEntity(
+                    id             = java.util.UUID.randomUUID().toString(),
+                    title          = encryption.encrypt(title.ifBlank { "Keep Note" }),
+                    content        = encryption.encrypt(fullContent),
+                    contentFormats = emptyList(),
+                    createdAt      = createdAt,
+                    updatedAt      = updatedAt,
+                    isPinned       = isPinned,
+                    isArchived     = isArchived,
+                    isTrashed      = isTrashed,
+                    tags           = tags.map { encryption.encrypt(it) },
+                    folderId       = null
+                )
+            )
+            true
+        } catch (e: Exception) {
+            android.util.Log.w("Migrator", "Skipped Keep note: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Returns true if a ZIP entry is a Google Keep note JSON file.
+     *
+     * WHY THIS HELPER EXISTS:
+     * Google Takeout wraps Keep exports in a nested path:
+     *   Takeout/Keep/My Note.json
+     * The outer folder name varies (user can rename the ZIP). We cannot
+     * rely on a specific prefix. Instead we check three conditions:
+     *
+     *   1. Not a directory entry
+     *   2. Filename ends with .json (case-insensitive)
+     *   3. Filename is NOT "Labels.json" — that file lists tag names,
+     *      not note content. We extract just the filename from the full
+     *      entry path so "Takeout/Keep/Labels.json" is correctly excluded.
+     *
+     * This is robust against any outer folder naming.
+     */
+    private fun isKeepNoteEntry(entryName: String): Boolean {
+        if (entryName.endsWith("/")) return false                          // directory
+        val fileName = entryName.substringAfterLast('/')                  // e.g. "My Note.json"
+        if (!fileName.endsWith(".json", ignoreCase = true)) return false  // not JSON
+        if (fileName.equals("Labels.json", ignoreCase = true)) return false // tag index, not a note
+        return true
+    }
+
+    // ─── Shared helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Strip all XML/HTML tags from a string, leaving only inner text.
+     * Also decodes common HTML entities and collapses excessive whitespace.
+     * Used for ENML → plain text conversion.
+     */
+    private fun stripXmlTags(html: String): String {
+        return html
+            .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+            .replace(Regex("<div>", RegexOption.IGNORE_CASE), "\n")
+            .replace(Regex("<[^>]+>"), "")   // strip all remaining tags
+            .replace("&nbsp;", " ")
+            .replace("&amp;",  "&")
+            .replace("&lt;",   "<")
+            .replace("&gt;",   ">")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace(Regex("\n{3,}"), "\n\n") // collapse 3+ newlines → 2
+            .trim()
+    }
+
+    /**
+     * Parse an Evernote timestamp string "YYYYMMDDTHHmmssZ" into Unix millis.
+     * Returns null on any parse failure so callers can fall back to now().
+     */
+    private fun parseEnexTimestamp(value: String?): Long? {
+        if (value.isNullOrBlank()) return null
+        return try {
+            val fmt = SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US)
+            fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            fmt.parse(value)?.time
+        } catch (_: Exception) { null }
     }
 }

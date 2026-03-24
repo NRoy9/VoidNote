@@ -91,7 +91,11 @@ class MainActivity : AppCompatActivity() {
         // If they differ (or if nothing is stored = fresh install), show the dialog.
         lifecycleScope.launch {
             val lastSeen = preferencesManager.lastSeenVersionFlow.first()
-            if (lastSeen != ChangelogData.latestVersion) {
+            // lastSeen.isBlank() means fresh install — onboarding hasn't run yet.
+            // We only show What's New on UPDATES (user has seen a previous version).
+            // Fresh installs skip the dialog entirely; OnboardingViewModel marks
+            // the version as seen so the dialog never fires after onboarding either.
+            if (lastSeen.isNotBlank() && lastSeen != ChangelogData.latestVersion) {
                 showWhatsNew = true
             }
         }
@@ -178,22 +182,20 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    /**
-     * Re-lock the app when it goes to background.
-     *
-     * onStop() is called when the Activity is no longer visible — task switcher,
-     * another app, power button. We set isUnlocked = false so that when the
-     * user returns, they see the LockScreen.
-     *
-     * WHY onStop AND NOT onPause?
-     * onPause fires for things like notification drawers, permission dialogs, etc.
-     * We don't want to lock for those. onStop fires when the app is actually hidden.
-     */
-    override fun onStop() {
-        super.onStop()
-        if (isBiometricEnabled) {
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // Don't lock if a system picker/camera is about to cover us —
+        // the screen set suppressLock = true before launching the intent.
+        if (isBiometricEnabled && !AppActivityState.suppressLock) {
             isUnlocked = false
             lockErrorMessage = null
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Clear the suppress flag whenever we come back to the foreground,
+        // regardless of why we left. This is the safety reset.
+        AppActivityState.suppressLock = false
     }
 }

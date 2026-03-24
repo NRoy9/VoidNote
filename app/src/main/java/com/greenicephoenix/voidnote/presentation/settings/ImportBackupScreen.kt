@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.greenicephoenix.voidnote.AppActivityState
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 
 /**
@@ -123,6 +124,7 @@ fun ImportBackupScreen(
                 is ImportBackupUiState.Idle -> {
                     IdleContent(
                         onChooseFile = {
+                            AppActivityState.suppressLock = true
                             fileLauncher.launch(
                                 arrayOf(
                                     "application/octet-stream", // .vnbackup
@@ -163,6 +165,7 @@ fun ImportBackupScreen(
                         password     = password,
                         showPassword = showPassword,
                         onChooseFile = {
+                            AppActivityState.suppressLock = true
                             fileLauncher.launch(
                                 arrayOf("application/octet-stream", "application/zip", "text/markdown", "text/plain", "*/*")
                             )
@@ -183,6 +186,7 @@ fun ImportBackupScreen(
                     MarkdownReadyContent(
                         state        = state,
                         onChooseFile = {
+                            AppActivityState.suppressLock = true
                             fileLauncher.launch(
                                 arrayOf("application/octet-stream", "application/zip", "text/markdown", "text/plain", "*/*")
                             )
@@ -540,6 +544,10 @@ private fun FileReadyContent(
                     BackupStatItem(
                         value = state.noteCount.toString(),
                         label = "Notes"
+                    )
+                    BackupStatItem(
+                        value = state.diaryCount.toString(),
+                        label = "Journal"
                     )
                     BackupStatItem(
                         value = state.folderCount.toString(),

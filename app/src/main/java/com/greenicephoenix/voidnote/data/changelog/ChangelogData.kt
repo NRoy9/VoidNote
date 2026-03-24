@@ -51,6 +51,22 @@ object ChangelogData {
      */
     val entries: List<VersionEntry> = listOf(
 
+        // ── v1.1.1 — Bug fixes ────────────────────────────────────────────────
+        VersionEntry(
+            version     = "1.1.1",
+            releaseDate = "25 Mar 2026",
+            tagline     = "Quieter, sharper, and counts what matters.",
+            changes     = listOf(
+                ChangeItem(ChangeType.FIXED,    "Export file picker no longer opens twice when saving a backup"),
+                ChangeItem(ChangeType.FIXED,    "Journal entries are now counted separately from notes in Settings"),
+                ChangeItem(ChangeType.FIXED,    "Clear All Data now correctly removes journal entries alongside notes"),
+                ChangeItem(ChangeType.FIXED,    "Import preview now shows separate counts for notes, journal entries, and folders"),
+                ChangeItem(ChangeType.FIXED,    "Google Keep Takeout ZIP now imports correctly — nested Takeout/Keep/ folder structure is handled"),
+                ChangeItem(ChangeType.FIXED,    "Code blocks no longer scramble text when typing quickly"),
+                ChangeItem(ChangeType.FIXED,    "What's New dialog no longer appears on a fresh install"),
+            )
+        ),
+
         // ── v1.1.0 — The biggest update yet ──────────────────────────────────
         VersionEntry(
             version     = "1.1.0",

@@ -52,6 +52,7 @@ data class VoidNoteBackup(
     val appVersion: String = "1.0.0",
     val noteCount: Int,
     val folderCount: Int,
+    val diaryCount: Int = 0,
     val mediaCount: Int = 0,
     val notes: List<NoteBackup>,
     val folders: List<FolderBackup>
@@ -197,6 +198,7 @@ data class BackupHeader(
     val verificationBlob: String,
     val noteCount: Int,
     val folderCount: Int,
+    val diaryCount: Int = 0,
     val appVersion: String
 )
 

@@ -123,6 +123,9 @@ class NoteRepositoryImpl @Inject constructor(
     override fun getTrashedNoteCount(): Flow<Int> =
         noteDao.getTrashedNoteCount()
 
+    override fun getDiaryEntryCount(): Flow<Int> =
+        noteDao.getDiaryEntryCount()
+
     // ─── Write ────────────────────────────────────────────────────────────────
 
     override suspend fun insertNote(note: Note, folderId: String?) {

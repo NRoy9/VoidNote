@@ -29,6 +29,7 @@ import com.greenicephoenix.voidnote.presentation.tags.TagsScreen
 import com.greenicephoenix.voidnote.presentation.settings.ExportNotesScreen
 import com.greenicephoenix.voidnote.presentation.settings.SupportScreen
 import com.greenicephoenix.voidnote.presentation.diary.DiaryScreen
+import com.greenicephoenix.voidnote.presentation.settings.MigratorScreen
 
 /**
  * SetupNavGraph — the complete navigation map for Void Note.
@@ -254,7 +255,8 @@ fun SetupNavGraph(navController: NavHostController) {
                     onNavigateToExport         = { navController.navigate(Screen.ExportNotes.route) },
                     onNavigateToImport        = { navController.navigate(Screen.ImportBackup.route) },
                     onNavigateToChangePassword = { navController.navigate(Screen.ChangeVaultPassword.route) },
-                    onNavigateToSupport       = { navController.navigate(Screen.Support.route) }
+                    onNavigateToSupport       = { navController.navigate(Screen.Support.route) },
+                    onNavigateToMigrator       = { navController.navigate(Screen.Migrator.route) }
                 )
             }
 
@@ -275,6 +277,10 @@ fun SetupNavGraph(navController: NavHostController) {
                 ImportBackupScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
+            }
+
+            composable(Screen.Migrator.route) {
+                MigratorScreen(onNavigateBack = { navController.popBackStack() })
             }
 
             // ── Change Vault Password (Settings → Security) ───────────────────────

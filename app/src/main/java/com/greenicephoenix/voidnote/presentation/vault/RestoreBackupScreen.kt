@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.greenicephoenix.voidnote.AppActivityState
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 
 /**
@@ -143,7 +144,10 @@ fun RestoreBackupScreen(
 
             // ── Step 1: File picker ───────────────────────────────────────────
             OutlinedButton(
-                onClick  = { filePicker.launch(arrayOf("application/octet-stream", "*/*")) },
+                onClick  = {
+                    AppActivityState.suppressLock = true
+                    filePicker.launch(arrayOf("application/octet-stream", "*/*"))
+                },
                 enabled  = !isLoading,
                 modifier = Modifier.fillMaxWidth()
             ) {

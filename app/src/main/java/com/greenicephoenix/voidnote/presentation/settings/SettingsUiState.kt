@@ -8,6 +8,7 @@ data class SettingsUiState(
     val folderCount: Int = 0,
     val archiveCount: Int = 0,   // How many notes are currently archived
     val trashCount: Int = 0,     // How many notes are currently in the trash
+    val diaryCount: Int = 0,     // How many diary/journal entries exist (not trashed)
     val currentTheme: AppTheme = AppTheme.DARK,
     val appVersion: String = "1.0.0",
     val updateCheckState: UpdateCheckState = UpdateCheckState.Idle

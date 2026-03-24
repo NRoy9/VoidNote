@@ -185,9 +185,10 @@ interface NoteDao {
     suspend fun trashNotesByFolder(folderId: String, timestamp: Long)
 
     /**
-     * Total count of non-trashed notes (reactive, for the Settings storage card).
+     * Count of non-trashed, non-diary notes (regular notes only).
+     * Diary entries are counted separately by getDiaryEntryCount().
      */
-    @Query("SELECT COUNT(*) FROM notes WHERE isTrashed = 0")
+    @Query("SELECT COUNT(*) FROM notes WHERE isTrashed = 0 AND isDiaryEntry = 0")
     fun getNoteCount(): Flow<Int>
 
     /**
@@ -205,6 +206,13 @@ interface NoteDao {
     fun getTrashedNoteCount(): Flow<Int>
 
     /**
+     * Count of non-trashed diary entries.
+     * Shown separately from regular notes in the Settings storage card.
+     */
+    @Query("SELECT COUNT(*) FROM notes WHERE isDiaryEntry = 1 AND isTrashed = 0")
+    fun getDiaryEntryCount(): Flow<Int>
+
+    /**
      * One-shot count of non-trashed notes. Used to generate "Untitled Note N" titles.
      *
      * WHY NOT searchable by title pattern?
@@ -217,7 +225,7 @@ interface NoteDao {
      * We need a single value at the moment of title generation, not a live stream.
      * A suspend fun runs once, returns, done — no open cursor kept alive.
      */
-    @Query("SELECT COUNT(*) FROM notes WHERE isTrashed = 0")
+    @Query("SELECT COUNT(*) FROM notes WHERE isTrashed = 0 AND isDiaryEntry = 0")
     suspend fun getNoteCountOnce(): Int
 
     // ─── Trash auto-delete (v5) ───────────────────────────────────────────────

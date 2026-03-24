@@ -73,6 +73,7 @@ sealed class ImportBackupUiState {
         val fileName: String,
         val noteCount: Int,
         val folderCount: Int,
+        val diaryCount: Int = 0,
         val appVersion: String,
         val errorMessage: String? = null,
         val isVerifying: Boolean = false
@@ -187,7 +188,7 @@ class ImportBackupViewModel @Inject constructor(
                     // Count how many notes we'll import — shows in the preview card.
                     // countMarkdownNotes() is fast (no decryption, just walks entries).
                     val count = try {
-                        importExportManager.countMarkdownNotes(contentResolver, uri)
+                        importExportManager.countMarkdownNotes(contentResolver, uri, fileName)
                     } catch (e: Exception) { 0 }
 
                     selectedUri = uri
@@ -219,6 +220,7 @@ class ImportBackupViewModel @Inject constructor(
                             fileName    = fileName,
                             noteCount   = header.noteCount,
                             folderCount = header.folderCount,
+                            diaryCount  = header.diaryCount,
                             appVersion  = header.appVersion
                         )
 
@@ -246,11 +248,12 @@ class ImportBackupViewModel @Inject constructor(
      */
     fun confirmMarkdownImport(contentResolver: ContentResolver) {
         val uri = selectedUri ?: return
+        val markdownState = _uiState.value as? ImportBackupUiState.MarkdownReady
         viewModelScope.launch {
             _uiState.value = ImportBackupUiState.Importing
 
             val result = try {
-                importExportManager.importMarkdown(contentResolver, uri)
+                importExportManager.importMarkdown(contentResolver, uri, markdownState?.fileName ?: "")
             } catch (e: Exception) {
                 _uiState.value = ImportBackupUiState.Error(
                     "Markdown import failed: ${e.message}"

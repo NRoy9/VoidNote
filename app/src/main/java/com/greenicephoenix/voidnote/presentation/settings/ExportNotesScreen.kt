@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.greenicephoenix.voidnote.AppActivityState
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 
 /**
@@ -62,6 +63,7 @@ fun ExportNotesScreen(
     val secureBackupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
+        // onResume will clear suppressLock
         if (uri != null) viewModel.startExport(context.contentResolver, uri)
         else viewModel.reset()
     }
@@ -69,14 +71,18 @@ fun ExportNotesScreen(
     val plainTextLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
+        // onResume will clear suppressLock
         if (uri != null) viewModel.startExport(context.contentResolver, uri)
         else viewModel.reset()
     }
 
     // ── Trigger file picker when ViewModel is ready ───────────────────────────
+    // suppressLock must be set BEFORE launching the system picker, otherwise the
+    // biometric gate fires when the picker closes and the user returns to the app.
     LaunchedEffect(exportState) {
         if (exportState is ExportState.ReadyToExport) {
             val state = exportState as ExportState.ReadyToExport
+            AppActivityState.suppressLock = true
             when (state.format) {
                 ExportFormat.SECURE_BACKUP  -> secureBackupLauncher.launch(viewModel.secureBackupFilename())
                 ExportFormat.PLAIN_TEXT_ZIP -> plainTextLauncher.launch(viewModel.plainTextFilename())

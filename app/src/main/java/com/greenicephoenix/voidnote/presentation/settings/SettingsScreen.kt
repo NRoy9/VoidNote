@@ -48,6 +48,7 @@ fun SettingsScreen(
     onNavigateToImport: () -> Unit = {},            // → ImportBackupScreen
     onNavigateToChangePassword: () -> Unit = {},    // → ChangeVaultPasswordScreen
     onNavigateToSupport: () -> Unit = {},           // → SupportScreen
+    onNavigateToMigrator: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState            by viewModel.uiState.collectAsState()
@@ -245,7 +246,8 @@ fun SettingsScreen(
                     noteCount    = uiState.noteCount,
                     folderCount  = uiState.folderCount,
                     archiveCount = uiState.archiveCount,
-                    trashCount   = uiState.trashCount
+                    trashCount   = uiState.trashCount,
+                    diaryCount   = uiState.diaryCount
                 )
             }
 
@@ -265,6 +267,15 @@ fun SettingsScreen(
                     title    = "Import Backup",
                     subtitle = "Merge notes from a .vnbackup file",
                     onClick  = onNavigateToImport
+                )
+            }
+
+            item {
+                SettingsItem(
+                    icon     = Icons.Default.MoveToInbox,
+                    title    = "Import from Another App",
+                    subtitle = "Evernote · Google Keep · Notion",
+                    onClick  = onNavigateToMigrator
                 )
             }
 
@@ -758,30 +769,28 @@ private fun StorageInfoCard(
     noteCount: Int,
     folderCount: Int,
     archiveCount: Int,
-    trashCount: Int
+    trashCount: Int,
+    diaryCount: Int     // NEW
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.large),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.medium),
         colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
-            modifier              = Modifier.fillMaxWidth().padding(Spacing.large),
+            modifier              = Modifier.fillMaxWidth().padding(Spacing.medium),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            // Helper so each stat column is identical
             @Composable
             fun StatColumn(value: Int, label: String) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text  = value.toString(),
-                        // headlineSmall keeps numbers prominent without being oversized
-                        style = MaterialTheme.typography.headlineSmall,
+                        text       = value.toString(),
+                        style      = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color      = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        // Uppercase label — subtle command-palette flavour
                         text  = label.uppercase(),
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
@@ -789,7 +798,6 @@ private fun StorageInfoCard(
                 }
             }
 
-            // Thin vertical dividers between the 4 stat columns
             @Composable
             fun StatDivider() {
                 VerticalDivider(
@@ -800,6 +808,8 @@ private fun StorageInfoCard(
             }
 
             StatColumn(noteCount,    "Notes")
+            StatDivider()
+            StatColumn(diaryCount,   "Journal")   // NEW column
             StatDivider()
             StatColumn(folderCount,  "Folders")
             StatDivider()

@@ -65,17 +65,16 @@ class SettingsViewModel @Inject constructor(
     private val _updateCheckState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        // Inner combine: the four DB count streams → one data class to keep
-        // the outer combine under the 5-parameter limit.
+        // Inner combine: five DB count streams → one array so outer combine
+        // stays under the 5-parameter limit.
         combine(
             noteRepository.getNoteCount(),
             folderRepository.getFolderCount(),
             noteRepository.getArchivedNoteCount(),
-            noteRepository.getTrashedNoteCount()
-        ) { noteCount, folderCount, archiveCount, trashCount ->
-            // Pack all four counts into a simple array so the outer combine
-            // receives a single value instead of four separate parameters.
-            intArrayOf(noteCount, folderCount, archiveCount, trashCount)
+            noteRepository.getTrashedNoteCount(),
+            noteRepository.getDiaryEntryCount()   // NEW: diary entries counted separately
+        ) { noteCount, folderCount, archiveCount, trashCount, diaryCount ->
+            intArrayOf(noteCount, folderCount, archiveCount, trashCount, diaryCount)
         },
         currentTheme,
         _updateCheckState
@@ -85,6 +84,7 @@ class SettingsViewModel @Inject constructor(
             folderCount      = counts[1],
             archiveCount     = counts[2],
             trashCount       = counts[3],
+            diaryCount       = counts[4],  // NEW
             currentTheme     = theme,
             appVersion       = getAppVersion(),
             updateCheckState = updateState
@@ -132,8 +132,16 @@ class SettingsViewModel @Inject constructor(
     fun clearAllNotes() {
         viewModelScope.launch {
             try {
+                // getAllNotes() only returns regular notes (isDiaryEntry = 0).
+                // We must ALSO fetch diary entries separately, otherwise they
+                // survive the clear and still appear in the Journal screen.
                 noteRepository.getAllNotes().first().forEach { note ->
                     noteRepository.deleteNotePermanently(note.id)
+                }
+                // Fetch and delete diary entries explicitly — they are excluded
+                // from getAllNotes() because the DAO filters isDiaryEntry = 0.
+                noteRepository.getDiaryEntries().first().forEach { entry ->
+                    noteRepository.deleteNotePermanently(entry.id)
                 }
                 folderRepository.getAllFolders().first().forEach { folder ->
                     folderRepository.deleteFolder(folder.id)

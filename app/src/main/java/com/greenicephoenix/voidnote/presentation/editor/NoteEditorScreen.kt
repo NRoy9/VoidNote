@@ -78,6 +78,7 @@ import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import com.greenicephoenix.voidnote.AppActivityState
 
 /**
  * Note Editor Screen.
@@ -174,6 +175,7 @@ fun NoteEditorScreen(
     // Watch for pending camera URI (set after permission callback grants access)
     LaunchedEffect(uiState.pendingCameraUri) {
         uiState.pendingCameraUri?.let { uri ->
+            AppActivityState.suppressLock = true
             cameraLauncher.launch(uri)
             viewModel.clearPendingCameraUri()
         }
@@ -184,7 +186,10 @@ fun NoteEditorScreen(
         when {
             cameraPermissionState.status.isGranted -> {
                 val uri = viewModel.prepareCameraCapture()
-                uri?.let { cameraLauncher.launch(it) }
+                uri?.let {
+                    AppActivityState.suppressLock = true
+                    cameraLauncher.launch(it)
+                }
             }
 
             cameraPermissionState.status.shouldShowRationale -> showCameraRationale = true
@@ -500,6 +505,7 @@ fun NoteEditorScreen(
                         onChecklistClick = { showInsertSheet = false; viewModel.insertTodoBlock() },
                         onGalleryClick = {
                             showInsertSheet = false
+                            AppActivityState.suppressLock = true
                             imagePickerLauncher.launch(
                                 PickVisualMediaRequest(
                                     ActivityResultContracts.PickVisualMedia.ImageOnly

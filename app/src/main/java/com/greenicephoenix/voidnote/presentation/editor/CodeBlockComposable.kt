@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.greenicephoenix.voidnote.domain.model.InlineBlockPayload
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
+import androidx.compose.ui.text.input.TextFieldValue
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CODE BLOCK COMPOSABLE  (Sprint 12)
@@ -208,9 +209,17 @@ fun CodeBlockComposable(
             // ── Divider between header and code ───────────────────────────────
             HorizontalDivider(color = borderColor)
 
-            // ── Code text area ────────────────────────────────────────────────
-            // horizontalScroll allows long lines without wrapping — essential for code.
-            // The outer Box sets a minimum height so empty blocks don't collapse.
+            // ── Code text area ────────────────────────────────────────────────────────────
+// WHY LOCAL TextFieldValue?
+// payload.code comes from the ViewModel and updates asynchronously on recompose.
+// During fast typing, the ViewModel hasn't caught up yet, so feeding payload.code
+// directly as the field value causes cursor jumps and scrambled characters.
+// Local TextFieldValue owns the cursor + text in sync, and we push to the
+// ViewModel via onCodeChange on every change — same pattern as TodoBlockComposable.
+            var localValue by remember(payload.code) {
+                mutableStateOf(TextFieldValue(payload.code))
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -218,8 +227,7 @@ fun CodeBlockComposable(
                     .horizontalScroll(rememberScrollState())
                     .padding(Spacing.medium)
             ) {
-                if (payload.code.isEmpty() && !isFocused) {
-                    // Placeholder — shown when empty and unfocused
+                if (localValue.text.isEmpty() && !isFocused) {
                     Text(
                         text  = "// Start typing your code…",
                         style = TextStyle(
@@ -231,8 +239,11 @@ fun CodeBlockComposable(
                 }
 
                 BasicTextField(
-                    value         = payload.code,
-                    onValueChange = onCodeChange,
+                    value         = localValue,
+                    onValueChange = { newValue ->
+                        localValue = newValue          // update local state immediately (cursor safe)
+                        onCodeChange(newValue.text)    // push plain text to ViewModel
+                    },
                     textStyle     = TextStyle(
                         fontFamily = FontFamily.Monospace,
                         fontSize   = 13.sp,
@@ -240,10 +251,10 @@ fun CodeBlockComposable(
                         lineHeight = 20.sp
                     ),
                     cursorBrush   = SolidColor(codeTextColor),
-                    // Disable autocorrect and capitalisation — code is literal text
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization     = KeyboardCapitalization.None,
                         autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.Ascii
+                        keyboardType       = KeyboardType.Ascii
                     ),
                     modifier      = Modifier
                         .fillMaxWidth()

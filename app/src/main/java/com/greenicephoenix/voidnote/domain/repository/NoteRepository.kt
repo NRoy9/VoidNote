@@ -104,6 +104,9 @@ interface NoteRepository {
     /** Count of notes in the trash as a reactive stream. */
     fun getTrashedNoteCount(): Flow<Int>
 
+    /** Count of non-trashed diary entries as a reactive stream. */
+    fun getDiaryEntryCount(): Flow<Int>
+
     /** Move a note to a different folder (or null for root level). */
     suspend fun moveNoteToFolder(noteId: String, folderId: String?)
 
