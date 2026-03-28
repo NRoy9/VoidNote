@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.sp
 import com.greenicephoenix.voidnote.domain.model.InlineBlockPayload
 import com.greenicephoenix.voidnote.presentation.theme.Spacing
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.TextRange
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CODE BLOCK COMPOSABLE  (Sprint 12)
@@ -209,15 +211,32 @@ fun CodeBlockComposable(
             // ── Divider between header and code ───────────────────────────────
             HorizontalDivider(color = borderColor)
 
-            // ── Code text area ────────────────────────────────────────────────────────────
-// WHY LOCAL TextFieldValue?
-// payload.code comes from the ViewModel and updates asynchronously on recompose.
-// During fast typing, the ViewModel hasn't caught up yet, so feeding payload.code
-// directly as the field value causes cursor jumps and scrambled characters.
-// Local TextFieldValue owns the cursor + text in sync, and we push to the
-// ViewModel via onCodeChange on every change — same pattern as TodoBlockComposable.
-            var localValue by remember(payload.code) {
-                mutableStateOf(TextFieldValue(payload.code))
+            // ── Code text area ─────────────────────────────────────────────────────────
+            //
+            // WHY remember(block id via stable key) and NOT remember(payload.code)?
+            //
+            // Every keystroke calls onCodeChange → ViewModel → DB → observeBlocks() emits
+            // → new payload arrives → if we key remember() on payload.code, the TextFieldValue
+            // resets on every character, placing the cursor at position 0 (front of text).
+            //
+            // Solution: key remember() on Unit (never resets during the block's lifetime),
+            // then manually sync ONLY when the payload changes from outside
+            // (initial load, external edit) using a SideEffect. During active typing,
+            // localValue.text == payload.code so the sync is a no-op — cursor is preserved.
+            var localValue by remember { mutableStateOf(TextFieldValue(payload.code)) }
+
+            // Sync if the payload was changed from outside this composable (e.g. initial
+            // load, undo). During normal typing localValue.text already equals payload.code
+            // so this block is skipped and the cursor position is never disturbed.
+            val latestCode = payload.code
+            LaunchedEffect(latestCode) {
+                if (localValue.text != latestCode) {
+                    // External change — reset with cursor at end
+                    localValue = TextFieldValue(
+                        text      = latestCode,
+                        selection = TextRange(latestCode.length)
+                    )
+                }
             }
 
             Box(
@@ -241,8 +260,8 @@ fun CodeBlockComposable(
                 BasicTextField(
                     value         = localValue,
                     onValueChange = { newValue ->
-                        localValue = newValue          // update local state immediately (cursor safe)
-                        onCodeChange(newValue.text)    // push plain text to ViewModel
+                        localValue = newValue        // own the cursor immediately
+                        onCodeChange(newValue.text)  // push plain text to ViewModel
                     },
                     textStyle     = TextStyle(
                         fontFamily = FontFamily.Monospace,

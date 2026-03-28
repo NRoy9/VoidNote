@@ -1,6 +1,7 @@
 package com.greenicephoenix.voidnote.presentation.editor
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -36,6 +37,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 
@@ -270,18 +275,11 @@ class NoteEditorViewModel @Inject constructor(
             val blockId = UUID.randomUUID().toString()
             val itemId = UUID.randomUUID().toString()
             val newBlock = InlineBlock(
-                id = blockId,
-                noteId = currentNoteId,
-                type = InlineBlockType.TODO,
-                payload = InlineBlockPayload.Todo(
-                    items = listOf(
-                        TodoItem(
-                            id = itemId,
-                            text = "",
-                            isChecked = false,
-                            sortOrder = 0
-                        )
-                    )
+                id        = blockId,
+                noteId    = currentNoteId,
+                type      = InlineBlockType.TODO,
+                payload   = InlineBlockPayload.Todo(
+                    items = listOf(TodoItem(id = itemId, text = "", isChecked = false, sortOrder = 0))
                 ),
                 createdAt = System.currentTimeMillis()
             )
@@ -307,10 +305,10 @@ class NoteEditorViewModel @Inject constructor(
             ensureNotePersisted()
             val blockId = UUID.randomUUID().toString()
             val newBlock = InlineBlock(
-                id = blockId,
-                noteId = currentNoteId,
-                type = InlineBlockType.CODE,
-                payload = InlineBlockPayload.Code(code = "", language = ""),
+                id        = blockId,
+                noteId    = currentNoteId,
+                type      = InlineBlockType.CODE,
+                payload   = InlineBlockPayload.Code(code = "", language = ""),
                 createdAt = System.currentTimeMillis()
             )
             inlineBlockRepository.insertBlock(newBlock)
@@ -486,7 +484,7 @@ class NoteEditorViewModel @Inject constructor(
 
             val encFilePath = imageStorage.saveFromUri(imageUri, blockId)
             if (encFilePath == null) {
-                android.util.Log.e("NoteEditor", "insertImageBlock: save failed")
+                Log.e("NoteEditor", "insertImageBlock: save failed")
                 return@launch
             }
 
@@ -521,7 +519,7 @@ class NoteEditorViewModel @Inject constructor(
 
             val encFilePath = imageStorage.encryptCameraTempFile(tempFilePath, blockId)
             if (encFilePath == null) {
-                android.util.Log.e("NoteEditor", "insertCameraImage: encryption failed")
+                Log.e("NoteEditor", "insertCameraImage: encryption failed")
                 return@launch
             }
 
@@ -596,7 +594,7 @@ class NoteEditorViewModel @Inject constructor(
             val started = voiceRecorder.startRecording(tempPath)
 
             if (!started) {
-                android.util.Log.e("NoteEditor", "startRecording: MediaRecorder failed to start")
+                Log.e("NoteEditor", "startRecording: MediaRecorder failed to start")
                 return@launch
             }
 
@@ -642,7 +640,7 @@ class NoteEditorViewModel @Inject constructor(
             // Stop MediaRecorder — writes final bytes to the plain temp file
             val stopped = voiceRecorder.stopRecording()
             if (!stopped) {
-                android.util.Log.e("NoteEditor", "stopRecording: MediaRecorder stop failed")
+                Log.e("NoteEditor", "stopRecording: MediaRecorder stop failed")
                 _uiState.value = _uiState.value.copy(
                     isRecording = false, recordingTempPath = null, recordingElapsedMs = 0L
                 )
@@ -654,7 +652,7 @@ class NoteEditorViewModel @Inject constructor(
             // Encrypt the plain .aac → permanent .enc + delete plain
             val encFilePath = audioStorage.encryptRecordingTempFile(tempPath, blockId)
             if (encFilePath == null) {
-                android.util.Log.e("NoteEditor", "stopRecording: encryption failed")
+                Log.e("NoteEditor", "stopRecording: encryption failed")
                 _uiState.value = _uiState.value.copy(
                     isRecording = false, recordingTempPath = null, recordingElapsedMs = 0L
                 )
@@ -1341,9 +1339,9 @@ class NoteEditorViewModel @Inject constructor(
     private fun loadDiaryNeighbours(currentTitle: String) {
         viewModelScope.launch {
             val titleFormatter =
-                java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.getDefault())
+                SimpleDateFormat("MMMM d, yyyy", Locale.getDefault())
             val keyFormatter =
-                java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
             val stripped = currentTitle.removePrefix("📅 ").trim()
             val currentDate = try {
@@ -1353,19 +1351,19 @@ class NoteEditorViewModel @Inject constructor(
             }
                 ?: return@launch
 
-            val todayKey = keyFormatter.format(java.util.Date())
+            val todayKey = keyFormatter.format(Date())
             val currentKey = keyFormatter.format(currentDate)
 
-            val currentCal = java.util.Calendar.getInstance().apply { time = currentDate }
-            val prevCal = (currentCal.clone() as java.util.Calendar).apply {
+            val currentCal = Calendar.getInstance().apply { time = currentDate }
+            val prevCal = (currentCal.clone() as Calendar).apply {
                 add(
-                    java.util.Calendar.DAY_OF_YEAR,
+                    Calendar.DAY_OF_YEAR,
                     -1
                 )
             }
-            val nextCal = (currentCal.clone() as java.util.Calendar).apply {
+            val nextCal = (currentCal.clone() as Calendar).apply {
                 add(
-                    java.util.Calendar.DAY_OF_YEAR,
+                    Calendar.DAY_OF_YEAR,
                     +1
                 )
             }
@@ -1390,9 +1388,9 @@ class NoteEditorViewModel @Inject constructor(
             saveNote()
 
             val titleFormatter =
-                java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.getDefault())
+                SimpleDateFormat("MMMM d, yyyy", Locale.getDefault())
             val keyFormatter =
-                java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
             // Check if an entry already exists for this date
             val allDiary = noteRepository.getDiaryEntries().first()
@@ -1422,7 +1420,7 @@ class NoteEditorViewModel @Inject constructor(
             val now = System.currentTimeMillis()
 
             noteRepository.insertNote(
-                com.greenicephoenix.voidnote.domain.model.Note(
+                Note(
                     id = noteId,
                     title = title,
                     content = "",

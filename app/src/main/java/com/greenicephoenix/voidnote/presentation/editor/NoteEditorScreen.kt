@@ -79,6 +79,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import com.greenicephoenix.voidnote.AppActivityState
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 
 /**
  * Note Editor Screen.
@@ -121,6 +123,8 @@ fun NoteEditorScreen(
     val folders by viewModel.folders.collectAsState()
     val noteColor = uiState.noteColor   // Sprint 6 — current color accent
     val context = LocalContext.current
+
+    val contentFocusRequester = remember { FocusRequester() }
 
     // ── Singletons via Hilt EntryPoints ───────────────────────────────────────
     val imageLoader: VoidNoteImageLoader = remember {
@@ -308,16 +312,17 @@ fun NoteEditorScreen(
         if (titleFieldValue.text != uiState.title) titleFieldValue =
             titleFieldValue.copy(text = uiState.title)
     }
-    LaunchedEffect(uiState.content) {
-        if (contentFieldValue.text != uiState.content) contentFieldValue =
-            contentFieldValue.copy(text = uiState.content)
-    }
 
     // Sprint 12: collect diary prev/next navigation events from ViewModel
     LaunchedEffect(Unit) {
         viewModel.diaryNavEvent.collectLatest { noteId ->
             onNavigateToDiaryEntry(noteId)
         }
+    }
+
+    LaunchedEffect(uiState.content) {
+        if (contentFieldValue.text != uiState.content) contentFieldValue =
+            contentFieldValue.copy(text = uiState.content)
     }
 
     val hasSelection = contentFieldValue.selection.start != contentFieldValue.selection.end
@@ -617,7 +622,10 @@ fun NoteEditorScreen(
                         placeholder = "Start writing...",
                         textStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
                         formats = uiState.contentFormats,
-                        modifier = Modifier.fillMaxWidth().then(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(contentFocusRequester)
+                            .then(
                             if (sortedBlocks.isEmpty()) Modifier.heightIn(min = 400.dp) else Modifier
                         )
                     )

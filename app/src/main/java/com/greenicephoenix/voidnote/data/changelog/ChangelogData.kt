@@ -54,7 +54,7 @@ object ChangelogData {
         // ── v1.1.1 — Bug fixes ────────────────────────────────────────────────
         VersionEntry(
             version     = "1.1.1",
-            releaseDate = "25 Mar 2026",
+            releaseDate = "29 Mar 2026",
             tagline     = "Quieter, sharper, and counts what matters.",
             changes     = listOf(
                 ChangeItem(ChangeType.FIXED,    "Export file picker no longer opens twice when saving a backup"),
