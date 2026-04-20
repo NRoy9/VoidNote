@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    widget_record_info.xml — 1×1 Voice Record Widget
+
+    minWidth  = 72dp → 1 cell wide
+    minHeight = 72dp → 1 cell tall
+-->
+<appwidget-provider
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="MissingClass"
+    android:minWidth="72dp"
+    android:minHeight="72dp"
+    android:targetCellWidth="1"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_record"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_record_description" />

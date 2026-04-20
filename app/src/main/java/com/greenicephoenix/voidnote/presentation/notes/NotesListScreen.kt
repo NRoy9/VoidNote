@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material.icons.filled.Lock
 import com.greenicephoenix.voidnote.domain.model.NoteSort
 import com.greenicephoenix.voidnote.domain.model.NoteTemplate
 import com.greenicephoenix.voidnote.domain.model.BuiltInTemplates
@@ -75,6 +76,10 @@ fun NotesListScreen(
     val newFolderName by viewModel.newFolderName.collectAsState()
     val noteSort by viewModel.noteSort.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
+    // Sprint 15 — folder unlock dialog state
+    val pendingUnlockFolder by viewModel.pendingUnlockFolder.collectAsState()
+    val unlockPasswordInput  by viewModel.unlockPasswordInput.collectAsState()
+    val wrongPassword        by viewModel.wrongPassword.collectAsState()
     val context = LocalContext.current
 
     // Quick actions sheet state
@@ -161,7 +166,9 @@ fun NotesListScreen(
                         uiState          = uiState,
                         updateInfo       = updateInfo,
                         onNoteClick      = { note -> onNavigateToEditor(note.id) },
-                        onFolderClick    = { folder -> onNavigateToFolderNotes(folder.id) },
+                        onFolderClick = { folder ->
+                            viewModel.onFolderClick(folder, onNavigateToFolderNotes)
+                        },
                         onTogglePin      = { noteId -> viewModel.onTogglePin(noteId) },
                         onArchiveNote    = { note ->
                             viewModel.onArchiveNote(note.id)
@@ -194,6 +201,18 @@ fun NotesListScreen(
         onDismiss    = { viewModel.hideCreateFolderDialog() },
         onCreate     = { viewModel.createFolder() }
     )
+
+    // Sprint 15 — unlock dialog for password-protected folders
+    pendingUnlockFolder?.let { folder ->
+        UnlockFolderDialog(
+            folderName       = folder.name,
+            passwordInput    = unlockPasswordInput,
+            onPasswordChange = { viewModel.onUnlockPasswordChange(it) },
+            isError          = wrongPassword,
+            onConfirm        = { viewModel.submitUnlockPassword(onNavigateToFolderNotes) },
+            onDismiss        = { viewModel.dismissUnlockDialog() }
+        )
+    }
 
     // Quick actions bottom sheet — shown on long-press of any note card
     quickActionNote?.let { note ->
@@ -757,4 +776,57 @@ private fun TemplateRow(
             modifier           = Modifier.size(16.dp)
         )
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPRINT 15: UNLOCK FOLDER DIALOG
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun UnlockFolderDialog(
+    folderName: String,
+    passwordInput: String,
+    onPasswordChange: (String) -> Unit,
+    isError: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.Lock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = { Text("Unlock \"$folderName\"") },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(
+                    value                = passwordInput,
+                    onValueChange        = onPasswordChange,
+                    label                = { Text("Password") },
+                    singleLine           = true,
+                    isError              = isError,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions      = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Password
+                    ),
+                    supportingText = if (isError) {
+                        { Text("Incorrect password", color = MaterialTheme.colorScheme.error) }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = passwordInput.isNotBlank()) {
+                Text("Unlock")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }

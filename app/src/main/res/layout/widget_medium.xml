@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    widget_medium.xml — Layout for the 4×2 Medium Quick Capture Widget.
+
+    STRUCTURE:
+    - Header row: VOID label | New Note button | Record button
+    - Divider
+    - ListView of recent notes (populated by WidgetNotesRemoteViewsService)
+    - Empty state TextView (shown when no notes exist)
+
+    LISTVIEW IN WIDGETS:
+    ListView is one of the few Views that can display dynamic data in a widget.
+    It is populated via RemoteViewsService + RemoteViewsFactory (not a standard Adapter).
+    The android:id MUST be @+id/widget_notes_list — referenced in VoidNoteWidget.kt.
+
+    EMPTY VIEW:
+    setEmptyView() on the RemoteViews points to widget_empty_text.
+    Android automatically shows/hides it based on whether the adapter returns count > 0.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FF0D0D0D"
+    android:padding="12dp">
+
+    <!-- ── Header Row ──────────────────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="10dp">
+
+        <!-- App label -->
+        <TextView
+            android:id="@+id/widget_label_medium"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="VOID NOTE"
+            android:textColor="#FFFFFFFF"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.15" />
+
+        <!-- New Note button -->
+        <LinearLayout
+            android:id="@+id/btn_widget_new_note_medium"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="8dp"
+            android:background="#FF1A1A1A">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✏"
+                android:textSize="14sp"
+                android:textColor="#FFFFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=" NOTE"
+                android:textSize="10sp"
+                android:textColor="#FFAAAAAA"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <TextView android:layout_width="8dp" android:layout_height="1dp" android:text="" />
+
+        <!-- Record button -->
+        <LinearLayout
+            android:id="@+id/btn_widget_record_medium"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="8dp"
+            android:background="#FF1A1A1A">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎙"
+                android:textSize="14sp"
+                android:textColor="#FFFFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=" REC"
+                android:textSize="10sp"
+                android:textColor="#FFAAAAAA"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Divider -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#FF2A2A2A"
+        android:layout_marginBottom="8dp"
+        android:text="" />
+
+    <!-- ── Recent Notes List ────────────────────────────────────────────── -->
+    <!--
+        FrameLayout wrapper needed so both the ListView AND the empty view
+        can occupy the same space — Android shows one or the other.
+    -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <ListView
+            android:id="@+id/widget_notes_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="#FF1A1A1A"
+            android:dividerHeight="1dp"
+            android:scrollbars="none" />
+
+        <!-- Empty state — shown when there are no notes -->
+        <TextView
+            android:id="@+id/widget_empty_text"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="No notes yet.\nTap ✏ to create one."
+            android:textColor="#FF666666"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:lineSpacingMultiplier="1.4" />
+
+    </FrameLayout>
+
+</LinearLayout>

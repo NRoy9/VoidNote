@@ -46,7 +46,7 @@ import com.greenicephoenix.voidnote.data.local.entity.NoteEntity
         FolderEntity::class,
         InlineBlockEntity::class
     ],
-    version = 9,            // ← BUMPED from 8 to 9 (isDiaryEntry column added)
+    version = 10,            // ← Sprint 15: passwordHash + passwordSalt added to folders
     exportSchema = false
 )
 @TypeConverters(
@@ -139,6 +139,29 @@ abstract class VoidNoteDatabase : RoomDatabase() {
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE notes ADD COLUMN isDiaryEntry INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * MIGRATION_9_10 — Adds per-folder password columns to the folders table.
+         *
+         * WHY TWO COLUMNS?
+         * passwordHash alone is insufficient — without a unique salt per folder,
+         * two folders with the same password would have identical hashes, which
+         * leaks information. Salt + hash together is the minimum secure design.
+         *
+         * WHY NULLABLE?
+         * NULL = no password set. This is the correct default for all existing
+         * folders — they were created without a password and should remain
+         * accessible without one after the migration.
+         *
+         * SQLite ALTER TABLE can only add one column at a time, so we run
+         * two execSQL statements.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE folders ADD COLUMN passwordHash TEXT")
+                db.execSQL("ALTER TABLE folders ADD COLUMN passwordSalt TEXT")
             }
         }
     }

@@ -51,6 +51,25 @@ object ChangelogData {
      */
     val entries: List<VersionEntry> = listOf(
 
+        // ── v1.2.0 —  ────────────────────────────────────────────────
+        VersionEntry(
+            version = "1.2.0",
+            releaseDate = "19 Apr 2026",
+            tagline     = "One tap to capture, one pass to protect.",
+            changes = listOf(
+                ChangeItem(ChangeType.NEW, "Quick Capture Widget — add notes or voice memos directly from your home screen"),
+                ChangeItem(ChangeType.NEW, "Small widget (2×1): one-tap new note and voice recording buttons"),
+                ChangeItem(ChangeType.NEW, "Medium widget (4×2): recent notes list plus quick capture and voice buttons"),
+                ChangeItem(ChangeType.NEW, "Widget settings: choose whether saving a quick note opens the full editor"),
+                ChangeItem(ChangeType.NEW, "Password-protected folders — lock any folder with its own independent password"),
+                ChangeItem(ChangeType.NEW, "Folders re-lock automatically when the app is backgrounded or vault locks"),
+                ChangeItem(ChangeType.NEW, "Set, change, or remove folder passwords from inside the folder"),
+                ChangeItem(ChangeType.NEW, "Lock a folder instantly from the folder menu"),
+                ChangeItem(ChangeType.IMPROVED, "Protected folders show a lock icon and 'Protected' label in the folder list"),
+
+            )
+        ),
+
         // ── v1.1.1 — Bug fixes ────────────────────────────────────────────────
         VersionEntry(
             version     = "1.1.1",
@@ -89,7 +108,7 @@ object ChangelogData {
         VersionEntry(
             version     = "1.0.2",
             releaseDate = "11 Mar 2026",
-            tagline     = "Shared notes now look the way they should.",
+            tagline     = "Cleaner shares, better sheets, and a place for community.",
             changes     = listOf(
                 ChangeItem(ChangeType.FIXED,    "Share note — checklist items were completely missing from shared text"),
                 //ChangeItem(ChangeType.NEW,      "Support the Developer screen — Ko-fi and Buy Me a Coffee, accessible from Settings"),
@@ -120,7 +139,7 @@ object ChangelogData {
         VersionEntry(
             version     = "1.0.0",
             releaseDate = "07 Mar 2026",
-            tagline     = "Into the void. The first full release.",
+            tagline     = "Out of alpha, into the void, and ready for the world.",
             changes     = listOf(
                 ChangeItem(ChangeType.NEW,      "Official launch — Void Note is no longer alpha. All free-tier features are complete and stable"),
                 ChangeItem(ChangeType.NEW,      "Website — visit voidnote.pages.dev for the latest APK, privacy policy and release notes"),
@@ -138,7 +157,7 @@ object ChangelogData {
         VersionEntry(
             version     = "0.2.0-alpha",
             releaseDate = "06 Mar 2026",
-            tagline     = "Colour, order, and always up to date.",
+            tagline     = "Smarter sorting, brighter notes, and a vault that stays current.",
             changes     = listOf(
                 ChangeItem(ChangeType.NEW,      "Color accents — tag any note with one of 6 colors, visible in the list"),
                 ChangeItem(ChangeType.NEW,      "Sort notes — by last modified, date created, or title A→Z / Z→A"),
@@ -204,7 +223,7 @@ object ChangelogData {
         VersionEntry(
             version = "0.0.1-alpha",
             releaseDate = "28 Feb 2026",
-            tagline = "First alpha — the void opens.",
+            tagline = "The first block, the first lock, and the opening of the void.",
             changes = listOf(
                 ChangeItem(ChangeType.NEW, "Rich text editor with bold, italic, underline and strikethrough"),
                 ChangeItem(ChangeType.NEW, "Heading styles — H1, H2, H3"),

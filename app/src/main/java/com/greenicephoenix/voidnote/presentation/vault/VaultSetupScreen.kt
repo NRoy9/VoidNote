@@ -81,7 +81,7 @@ fun VaultSetupScreen(
                 imageVector = Icons.Default.Lock,
                 contentDescription = null,
                 modifier = Modifier.size(56.dp),
-                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f)
+                tint = MaterialTheme.colorScheme.primary
             )
 
             Spacer(modifier = Modifier.height(Spacing.small))

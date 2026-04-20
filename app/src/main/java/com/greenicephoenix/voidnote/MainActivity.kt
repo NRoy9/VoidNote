@@ -20,6 +20,7 @@ import com.greenicephoenix.voidnote.presentation.navigation.SetupNavGraph
 import com.greenicephoenix.voidnote.presentation.settings.AppTheme
 import com.greenicephoenix.voidnote.presentation.theme.VoidNoteTheme
 import com.greenicephoenix.voidnote.presentation.theme.rememberThemeState
+import com.greenicephoenix.voidnote.data.manager.FolderLockManager
 import com.greenicephoenix.voidnote.security.BiometricLockManager
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.core.view.WindowCompat
@@ -58,6 +59,9 @@ class MainActivity : AppCompatActivity() {
 
     @Inject
     lateinit var preferencesManager: PreferencesManager
+
+    @Inject
+    lateinit var folderLockManager: FolderLockManager
 
     // Whether the user has successfully authenticated this session.
     // Backed by mutableStateOf so the Compose UI reacts when it changes.
@@ -189,6 +193,7 @@ class MainActivity : AppCompatActivity() {
         if (isBiometricEnabled && !AppActivityState.suppressLock) {
             isUnlocked = false
             lockErrorMessage = null
+            folderLockManager.lockAll() // Sprint 15: re-lock all folders when vault locks
         }
     }
 

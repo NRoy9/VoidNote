@@ -174,7 +174,7 @@
       <li><a href="#security" class="nav__link">SECURITY</a></li>
       <li><a href="#download" class="nav__link">DOWNLOAD</a></li>
       <li>
-        <a href="https://discord.gg/NUZVzE9XGC"
+        <a href="https://discord.gg/WguVY8wmzT"
            class="nav__link"
            target="_blank"
            rel="noopener noreferrer">DISCORD</a>
@@ -236,7 +236,7 @@
         <a href="#download" class="btn btn--primary">
           DOWNLOAD APK <span class="btn__arrow">↓</span>
         </a>
-        <a href="https://discord.gg/NUZVzE9XGC"
+        <a href="https://discord.gg/WguVY8wmzT"
            class="btn btn--ghost"
            target="_blank"
            rel="noopener noreferrer">
@@ -335,19 +335,7 @@
 
     <div class="features__grid">
 
-      <!-- Wide card: Rich text editor -->
       <div class="feature-card feature-card--wide feature-card--highlighted animate-in">
-        <div class="feature-card__icon">✍</div>
-        <div class="feature-card__title">RICH TEXT EDITOR</div>
-        <p class="feature-card__desc">
-          Bold, italic, underline, strikethrough. H1/H2/H3 headings.
-          Numbered lists with auto-continue. Interactive checklists.
-          Color-coded notes. All the formatting tools you need — none of the bloat.
-        </p>
-      </div>
-
-      <!-- AES Encryption -->
-      <div class="feature-card animate-in">
         <div class="feature-card__icon">🔐</div>
         <div class="feature-card__title">AES-256-GCM ENCRYPTION</div>
         <p class="feature-card__desc">
@@ -357,8 +345,16 @@
         </p>
       </div>
 
-      <!-- Biometric -->
-      <div class="feature-card animate-in">
+      <div class="feature-card feature-card--highlighted animate-in">
+        <div class="feature-card__icon">✈</div>
+        <div class="feature-card__title">100% OFFLINE-FIRST</div>
+        <p class="feature-card__desc">
+          No network required. Ever. Your data never leaves your device unless
+          you explicitly choose to export it. No accounts needed.
+        </p>
+      </div>
+
+      <div class="feature-card feature-card--highlighted animate-in">
         <div class="feature-card__icon">👁</div>
         <div class="feature-card__title">BIOMETRIC LOCK</div>
         <p class="feature-card__desc">
@@ -367,49 +363,27 @@
         </p>
       </div>
 
-      <!-- Folders + Tags -->
-      <div class="feature-card animate-in">
-        <div class="feature-card__icon">📁</div>
-        <div class="feature-card__title">FOLDERS + TAGS</div>
+      <div class="feature-card feature-card--highlighted feature-card--wide animate-in">
+        <div class="feature-card__icon">🔒</div>
+        <div class="feature-card__title">PASSWORD-PROTECTED FOLDERS</div>
         <p class="feature-card__desc">
-          Organise with nested folders and up to 5 tags per note.
-          Browse by tag, folder, or search everything at once.
+          Lock any folder with its own independent password — separate from your vault password.
+          Protected folders re-lock automatically when the app is backgrounded.
+          Set, change, or remove folder passwords at any time.
         </p>
       </div>
 
-      <!-- Media blocks -->
-      <div class="feature-card animate-in">
-        <div class="feature-card__icon">🎙</div>
-        <div class="feature-card__title">MEDIA BLOCKS</div>
+      <div class="feature-card feature-card--highlighted feature-card--wide animate-in">
+        <div class="feature-card__icon">✍</div>
+        <div class="feature-card__title">RICH TEXT EDITOR</div>
         <p class="feature-card__desc">
-          Attach encrypted voice recordings and images directly to notes.
-          Captured from camera or gallery. All files encrypted at rest.
+          Bold, italic, underline, strikethrough. H1/H2/H3 headings.
+          Numbered lists with auto-continue. Interactive checklists.
+          Color-coded notes. All the formatting tools you need — none of the bloat.
         </p>
       </div>
 
-      <!-- Offline-first -->
-      <div class="feature-card animate-in">
-        <div class="feature-card__icon">✈</div>
-        <div class="feature-card__title">100% OFFLINE-FIRST</div>
-        <p class="feature-card__desc">
-          No network required. Ever. Your data never leaves your device unless
-          you explicitly choose to export it. No accounts needed for core features.
-        </p>
-      </div>
-
-      <!-- Wide card: Dark modes -->
-      <div class="feature-card feature-card--wide animate-in">
-        <div class="feature-card__icon">🌑</div>
-        <div class="feature-card__title">DARK · LIGHT · EXTRA DARK (OLED)</div>
-        <p class="feature-card__desc">
-          Three carefully crafted themes. Extra Dark mode uses true #000000 black for OLED screens —
-          saves battery and looks stunning. Nothing-inspired monochromatic design throughout.
-          Note color accents (6 colours) add personal touches without breaking the aesthetic.
-        </p>
-      </div>
-
-      <!-- Backup -->
-      <div class="feature-card animate-in">
+      <div class="feature-card feature-card--highlighted animate-in">
         <div class="feature-card__icon">💾</div>
         <div class="feature-card__title">ENCRYPTED BACKUPS</div>
         <p class="feature-card__desc">
@@ -418,92 +392,93 @@
         </p>
       </div>
 
-      <!-- Trash + Archive -->
-      <div class="feature-card animate-in">
-        <div class="feature-card__icon">🗂</div>
-        <div class="feature-card__title">ARCHIVE + TRASH</div>
-        <p class="feature-card__desc">
-          Archive notes without deleting. Trash with 30-day auto-cleanup.
-          WorkManager runs the cleanup in the background — no manual purging needed.
-        </p>
-      </div>
-
-      <!-- Sort -->
-      <div class="feature-card animate-in">
-        <div class="feature-card__icon">↕</div>
-        <div class="feature-card__title">SORT &amp; FILTER</div>
-        <p class="feature-card__desc">
-          Sort by last modified, created date, or title A→Z / Z→A.
-          Filter chips for All, Pinned, Folders, and Tags.
-          Sort preference persists across sessions.
-        </p>
-      </div>
-
-      <!-- Gestures + Quick Actions -->
-      <div class="feature-card animate-in">
-        <div class="feature-card__icon">👆</div>
-        <div class="feature-card__title">GESTURES + QUICK ACTIONS</div>
-        <p class="feature-card__desc">
-          Swipe right to pin, swipe left to archive — directly from the list.
-          Long-press any note for instant actions without opening it.
-          Haptic feedback confirms every swipe.
-        </p>
-      </div>
-
-      <!-- Journal — wide card -->
-      <div class="feature-card feature-card--wide animate-in">
+      <div class="feature-card feature-card--highlighted animate-in">
         <div class="feature-card__icon">🗓</div>
         <div class="feature-card__title">JOURNAL — CALENDAR DIARY</div>
         <p class="feature-card__desc">
-          A dedicated diary completely separate from your regular notes.
+          A dedicated diary separate from your regular notes.
           Month-view calendar with dot indicators on days that have entries.
-          Tap any day to open or create that day's entry — tap Today to jump straight to now.
-          Flip between consecutive days with prev/next arrows right inside the editor.
-          Navigate to any past month with the month/year picker.
         </p>
       </div>
 
-      <!-- Note Linking -->
-      <div class="feature-card animate-in">
+      <div class="feature-card feature-card--highlighted feature-card--wide animate-in">
+        <div class="feature-card__icon">🪟</div>
+        <div class="feature-card__title">QUICK CAPTURE HOME SCREEN WIDGET</div>
+        <p class="feature-card__desc">
+          Two widget sizes for your home screen. Instant note and voice recording
+          one tap away. Notes from password-protected folders never appear in the widget.
+        </p>
+      </div>
+
+      <div class="feature-card feature-card--highlighted animate-in">
+        <div class="feature-card__icon">📁</div>
+        <div class="feature-card__title">FOLDERS + TAGS</div>
+        <p class="feature-card__desc">
+          Organise with nested folders and up to 5 tags per note.
+          Browse by tag, folder, or search everything at once.
+        </p>
+      </div>
+
+      <div class="feature-card feature-card--highlighted animate-in">
         <div class="feature-card__icon">🔗</div>
         <div class="feature-card__title">NOTE LINKING</div>
         <p class="feature-card__desc">
           Connect related notes with a tap.
-          Linked notes appear as chips above the tags bar — tap to jump, long-press to unlink.
-          Links survive encrypted backups and full restores.
+          Linked notes appear as chips above the tags bar.
         </p>
       </div>
 
-      <!-- Templates -->
-      <div class="feature-card animate-in">
+      <div class="feature-card feature-card--highlighted animate-in">
         <div class="feature-card__icon">📋</div>
         <div class="feature-card__title">NOTE TEMPLATES</div>
         <p class="feature-card__desc">
           Five built-in structures: Meeting Notes, Self-Reflection,
           Prioritised Todo List, Book/Movie Review, and Blank.
-          Pick from the speed-dial FAB when creating a note.
         </p>
       </div>
 
-      <!-- Code Blocks -->
-      <div class="feature-card animate-in">
+      <div class="feature-card feature-card--highlighted animate-in">
+        <div class="feature-card__icon">🎙</div>
+        <div class="feature-card__title">MEDIA BLOCKS</div>
+        <p class="feature-card__desc">
+          Attach encrypted voice recordings and images directly to notes.
+          All files encrypted at rest.
+        </p>
+      </div>
+
+      <div class="feature-card feature-card--highlighted feature-card--wide animate-in">
+        <div class="feature-card__icon">🌑</div>
+        <div class="feature-card__title">DARK · LIGHT · EXTRA DARK (OLED)</div>
+        <p class="feature-card__desc">
+          Three carefully crafted themes. Extra Dark mode uses true #000000 black for OLED screens.
+          Nothing-inspired monochromatic design throughout.
+        </p>
+      </div>
+
+      <div class="feature-card feature-card--highlighted animate-in">
         <div class="feature-card__icon">💻</div>
         <div class="feature-card__title">CODE BLOCKS</div>
         <p class="feature-card__desc">
-          Monospace dark-surface blocks embedded right inside your notes — always dark regardless of theme.
-          Optional language label. Horizontal scroll for long lines.
-          Autocorrect and autocapitalise disabled inside the block.
+          Monospace dark-surface blocks embedded right inside your notes.
+          Optional language label and horizontal scroll.
         </p>
       </div>
 
-      <!-- Focus Mode + Format Preview -->
-      <div class="feature-card animate-in">
+      <div class="feature-card feature-card--highlighted animate-in">
         <div class="feature-card__icon">🎯</div>
         <div class="feature-card__title">FOCUS MODE + PREVIEW</div>
         <p class="feature-card__desc">
-          Focus Mode hides every UI element so it's just you and the canvas.
-          Format Preview renders bold, italic, and headings as styled text —
-          see the finished note without leaving the editor.
+          Focus Mode hides UI elements for a pure canvas.
+          Format Preview renders styles without leaving the editor.
+        </p>
+      </div>
+
+      <div class="feature-card feature-card--highlighted animate-in">
+        <div class="feature-card__icon">🗂</div>
+        <div class="feature-card__title">ARCHIVE + TRASH</div>
+        <p class="feature-card__desc">
+          Archive notes without deleting. Trash with 30-day auto-cleanup
+          running in the background.
         </p>
       </div>
 
@@ -527,6 +502,7 @@
           <span class="security__badge">ANDROID KEYSTORE</span>
           <span class="security__badge">PBKDF2</span>
           <span class="security__badge">ZERO-KNOWLEDGE</span>
+          <span class="security__badge">FOLDER PASSWORDS</span>
         </div>
 
         <h2 class="security__title">
@@ -580,6 +556,18 @@
               <p class="security__spec-desc">
                 Images and audio recordings are encrypted as .enc files
                 in app-private storage. No unencrypted files are ever written to disk.
+              </p>
+            </div>
+          </div>
+
+          <div class="security__spec">
+            <div class="security__spec-icon">🔒</div>
+            <div>
+              <div class="security__spec-title">PER-FOLDER PASSWORDS</div>
+              <p class="security__spec-desc">
+                Each folder can have its own PBKDF2 password with a unique random salt —
+                completely independent from your vault password.
+                Folder contents never appear in widgets or search while locked.
               </p>
             </div>
           </div>
@@ -725,7 +713,7 @@
         </a>
 
         <!-- Secondary: community Discord -->
-        <a href="https://discord.gg/NUZVzE9XGC"
+        <a href="https://discord.gg/WguVY8wmzT"
            class="btn btn--ghost"
            target="_blank"
            rel="noopener noreferrer">
@@ -872,7 +860,7 @@
           <p class="footer__col-title">COMMUNITY</p>
           <ul class="footer__col-links" role="list">
             <li>
-              <a href="https://discord.gg/NUZVzE9XGC"
+              <a href="https://discord.gg/WguVY8wmzT"
                  class="footer__col-link"
                  target="_blank"
                  rel="noopener noreferrer">Discord</a>

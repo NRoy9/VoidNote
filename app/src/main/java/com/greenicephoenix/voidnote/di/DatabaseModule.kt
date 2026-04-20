@@ -10,6 +10,7 @@ import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRAT
 import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRATION_6_7
 import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRATION_7_8
 import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRATION_8_9
+import com.greenicephoenix.voidnote.data.local.VoidNoteDatabase.Companion.MIGRATION_9_10
 import com.greenicephoenix.voidnote.data.local.dao.FolderDao
 import com.greenicephoenix.voidnote.data.local.dao.InlineBlockDao
 import com.greenicephoenix.voidnote.data.local.dao.NoteDao
@@ -76,7 +77,8 @@ object DatabaseModule {
                 MIGRATION_5_6,   // v5 → v6: no schema change (chain establishment)
                 MIGRATION_6_7,   // v6 → v7: adds color TEXT column to notes
                 MIGRATION_7_8,   // v7 → v8: adds linkedNoteIds TEXT column to notes
-                MIGRATION_8_9    // v8 → v9: adds isDiaryEntry INTEGER column to notes
+                MIGRATION_8_9,    // v8 → v9: adds isDiaryEntry INTEGER column to notes
+                MIGRATION_9_10   // v9 → v10: passwordHash + passwordSalt columns on folders
             )
 
             // ── SQLite foreign key enforcement ────────────────────────────────
@@ -106,4 +108,5 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideNoteEncryptionManager(): NoteEncryptionManager = NoteEncryptionManager()
+
 }

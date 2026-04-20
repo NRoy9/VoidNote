@@ -4,20 +4,20 @@ import com.greenicephoenix.voidnote.data.local.entity.FolderEntity
 import com.greenicephoenix.voidnote.domain.model.Folder
 
 /**
- * Mapper functions for Folder
- */
-
-/**
- * Convert FolderEntity (database) to Folder (domain)
+ * Mapper functions for Folder.
+ *
+ * SPRINT 15: passwordHash and passwordSalt fields added to both directions.
  */
 fun FolderEntity.toDomainModel(): Folder {
     return Folder(
-        id = this.id,
-        name = this.name,
+        id             = this.id,
+        name           = this.name,
         parentFolderId = this.parentFolderId,
-        color = this.color,
-        createdAt = this.createdAt,
-        updatedAt = this.updatedAt
+        color          = this.color,
+        createdAt      = this.createdAt,
+        updatedAt      = this.updatedAt,
+        passwordHash   = this.passwordHash,
+        passwordSalt   = this.passwordSalt
     )
 }
 
@@ -26,12 +26,14 @@ fun FolderEntity.toDomainModel(): Folder {
  */
 fun Folder.toEntity(): FolderEntity {
     return FolderEntity(
-        id = this.id,
-        name = this.name,
+        id             = this.id,
+        name           = this.name,
         parentFolderId = this.parentFolderId,
-        color = this.color,
-        createdAt = this.createdAt,
-        updatedAt = this.updatedAt
+        color          = this.color,
+        createdAt      = this.createdAt,
+        updatedAt      = this.updatedAt,
+        passwordHash   = this.passwordHash,  // Sprint 15
+        passwordSalt   = this.passwordSalt   // Sprint 15
     )
 }
 

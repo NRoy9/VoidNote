@@ -266,4 +266,26 @@ interface NoteDao {
         AND trashedAt < :cutoffTime
     """)
     suspend fun deleteExpiredTrashedNotes(cutoffTime: Long)
+
+    // ─── ADD THIS FUNCTION TO NoteDao.kt ─────────────────────────────────────────
+    //
+    // Place this inside the existing NoteDao interface, alongside the other @Query functions.
+    // It fetches the N most recently updated non-trashed, non-archived, non-diary notes
+    // for the widget's recent notes list.
+    //
+    // WHY NOT USE getAllNotes()?
+    // getAllNotes() returns a Flow<List<NoteEntity>>. The widget uses runBlocking
+    // and needs a one-shot suspend function, not a Flow. Also, we only need 3 rows,
+    // not the full list — LIMIT makes this much faster.
+    @Query("""
+        SELECT notes.* FROM notes
+        LEFT JOIN folders ON notes.folderId = folders.id
+        WHERE notes.isTrashed = 0
+        AND notes.isArchived = 0
+        AND notes.isDiaryEntry = 0
+        AND (notes.folderId IS NULL OR folders.passwordHash IS NULL)
+        ORDER BY notes.updatedAt DESC
+        LIMIT :limit
+    """)
+    suspend fun getRecentNotesForWidget(limit: Int): List<NoteEntity>
 }

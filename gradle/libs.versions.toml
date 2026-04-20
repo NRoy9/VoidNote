@@ -5,10 +5,10 @@ minSdk = "26"
 targetSdk = "35"
 
 # Plugin Versions
-agp = "8.7.3"
-kotlin = "2.1.0"
-ksp = "2.1.0-1.0.29"
-hilt = "2.54"
+agp = "9.1.0"
+kotlin = "2.2.10"
+ksp = "2.3.2"
+hilt = "2.57.1"
 
 # AndroidX Core
 coreKtx = "1.15.0"
@@ -26,7 +26,7 @@ navigationCompose = "2.8.5"
 hiltNavigationCompose = "1.2.0"
 
 # Room
-room = "2.6.1"
+room = "2.7.0"
 
 # Coroutines
 coroutines = "1.9.0"

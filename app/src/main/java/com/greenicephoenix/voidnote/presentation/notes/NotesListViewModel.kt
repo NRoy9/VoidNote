@@ -18,6 +18,8 @@ import com.greenicephoenix.voidnote.domain.repository.NoteRepository
 import com.greenicephoenix.voidnote.presentation.editor.DocumentParser
 import com.greenicephoenix.voidnote.util.UpdateCheckerManager
 import com.greenicephoenix.voidnote.util.UpdateInfo
+import com.greenicephoenix.voidnote.data.manager.FolderLockManager
+import com.greenicephoenix.voidnote.data.security.FolderPasswordManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,7 +71,9 @@ class NotesListViewModel @Inject constructor(
     private val folderRepository: FolderRepository,
     private val inlineBlockRepository: InlineBlockRepository,
     private val preferencesManager: PreferencesManager,
-    private val updateChecker: UpdateCheckerManager
+    private val updateChecker: UpdateCheckerManager,
+    private val folderLockManager: FolderLockManager,        // Sprint 15
+    private val folderPasswordManager: FolderPasswordManager  // Sprint 15
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -80,6 +84,63 @@ class NotesListViewModel @Inject constructor(
 
     private val _newFolderName = MutableStateFlow("")
     val newFolderName: StateFlow<String> = _newFolderName.asStateFlow()
+
+    // ── Sprint 15: Folder unlock state ───────────────────────────────────────
+    // Non-null = show unlock dialog for this folder
+    private val _pendingUnlockFolder = MutableStateFlow<Folder?>(null)
+    val pendingUnlockFolder: StateFlow<Folder?> = _pendingUnlockFolder.asStateFlow()
+
+    private val _unlockPasswordInput = MutableStateFlow("")
+    val unlockPasswordInput: StateFlow<String> = _unlockPasswordInput.asStateFlow()
+
+    private val _wrongPassword = MutableStateFlow(false)
+    val wrongPassword: StateFlow<Boolean> = _wrongPassword.asStateFlow()
+
+    /**
+     * Called when a folder card is tapped on the home screen.
+     * Checks lock state — navigates directly if unlocked, shows dialog if locked.
+     */
+    fun onFolderClick(folder: Folder, onNavigate: (String) -> Unit) {
+        when {
+            !folder.isPasswordProtected()        -> onNavigate(folder.id)
+            folderLockManager.isUnlocked(folder.id) -> onNavigate(folder.id)
+            else -> {
+                _pendingUnlockFolder.value = folder
+                _unlockPasswordInput.value = ""
+                _wrongPassword.value = false
+            }
+        }
+    }
+
+    fun onUnlockPasswordChange(input: String) {
+        _unlockPasswordInput.value = input
+        if (_wrongPassword.value) _wrongPassword.value = false
+    }
+
+    fun dismissUnlockDialog() {
+        _pendingUnlockFolder.value = null
+        _unlockPasswordInput.value = ""
+        _wrongPassword.value = false
+    }
+
+    fun submitUnlockPassword(onNavigate: (String) -> Unit) {
+        val folder   = _pendingUnlockFolder.value ?: return
+        val password = _unlockPasswordInput.value
+        viewModelScope.launch {
+            val correct = folderPasswordManager.verifyPassword(
+                password      = password,
+                storedHashB64 = folder.passwordHash ?: return@launch,
+                storedSaltB64 = folder.passwordSalt ?: return@launch
+            )
+            if (correct) {
+                folderLockManager.unlock(folder.id)
+                dismissUnlockDialog()
+                onNavigate(folder.id)
+            } else {
+                _wrongPassword.value = true
+            }
+        }
+    }
 
     // ─── Sort state ───────────────────────────────────────────────────────────
 

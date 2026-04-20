@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">Void Note</string>
-    <string name="app_version">v1.0.1</string>
+    <string name="app_version">v1.2.0</string>
+    <string name="widget_description">Quick capture notes and voice memos from your home screen</string>
+    <string name="widget_new_note_description">One tap to capture a quick note</string>
+    <string name="widget_record_description">One tap to record a voice note</string>
 </resources>

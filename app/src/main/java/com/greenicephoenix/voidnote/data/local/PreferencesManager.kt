@@ -48,6 +48,9 @@ class PreferencesManager @Inject constructor(
         // ── Sprint 6 ──────────────────────────────────────────────────────
         private val NOTE_SORT_KEY               = stringPreferencesKey("note_sort")
         private val DISMISSED_UPDATE_VERSION_KEY = stringPreferencesKey("dismissed_update_version")
+
+        // ── Sprint 16 ──────────────────────────────────────────────────────
+        private val WIDGET_OPEN_IN_EDITOR_KEY = booleanPreferencesKey("widget_open_in_editor")
     }
 
     // ─── Theme ────────────────────────────────────────────────────────────────
@@ -162,5 +165,19 @@ class PreferencesManager @Inject constructor(
 
     suspend fun setDismissedUpdateVersion(version: String) {
         context.dataStore.edit { it[DISMISSED_UPDATE_VERSION_KEY] = version }
+    }
+
+    // ─── Widget settings (Sprint 16) ─────────────────────────────────────────────
+
+    /**
+     * Whether saving a quick note from the widget should open the full editor.
+     * Default = false (save silently and dismiss the widget dialog).
+     */
+    val widgetOpenInEditorFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[WIDGET_OPEN_IN_EDITOR_KEY] ?: false
+    }
+
+    suspend fun setWidgetOpenInEditor(openInEditor: Boolean) {
+        context.dataStore.edit { it[WIDGET_OPEN_IN_EDITOR_KEY] = openInEditor }
     }
 }
