@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     widget_new_note_info.xml — 1×1 Quick Note Widget
-
-    minWidth  = 72dp → 1 cell wide
-    minHeight = 72dp → 1 cell tall
 -->
 <appwidget-provider
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="MissingClass"
-    android:minWidth="72dp"
-    android:minHeight="72dp"
+    android:minWidth="60dp"
+    android:minHeight="60dp"
     android:targetCellWidth="1"
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"

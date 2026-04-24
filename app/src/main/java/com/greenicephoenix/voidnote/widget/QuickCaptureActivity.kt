@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.greenicephoenix.voidnote.MainActivity
-import com.greenicephoenix.voidnote.presentation.settings.AppTheme
+import androidx.compose.foundation.layout.imePadding
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -129,6 +129,7 @@ private fun QuickCaptureDialog(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .imePadding()
             .background(Color.Black.copy(alpha = 0.6f)),
         contentAlignment = Alignment.BottomCenter
     ) {

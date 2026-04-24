@@ -50,6 +50,17 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="remove">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
         <!-- ══════════════════════════════════════════════════════════════════
              SPRINT 16: QUICK CAPTURE WIDGET
              ══════════════════════════════════════════════════════════════════
@@ -107,15 +118,21 @@
         -->
         <activity
             android:name=".widget.QuickCaptureActivity"
-            android:exported="false"
+            android:exported="true"
             android:theme="@style/Theme.VoidNote.Transparent"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask" />
 
         <!-- ── Voice Capture Activity ──────────────────────────────────────── -->
         <activity
             android:name=".widget.VoiceCaptureActivity"
-            android:exported="false"
-            android:theme="@style/Theme.VoidNote.Transparent" />
+            android:exported="true"
+            android:theme="@style/Theme.VoidNote.Transparent"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask" />
 
         <!-- ── Widget Settings Activity ────────────────────────────────────── -->
         <!--

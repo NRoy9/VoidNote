@@ -25,7 +25,7 @@ class VoidNoteWidgetNewNote : AppWidgetProvider() {
                 R.id.btn_widget_new_note,
                 PendingIntent.getActivity(
                     context,
-                    0,
+                    1,
                     Intent(context, QuickCaptureActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     },

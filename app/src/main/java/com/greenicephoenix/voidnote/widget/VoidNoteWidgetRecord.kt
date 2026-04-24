@@ -25,7 +25,7 @@ class VoidNoteWidgetRecord : AppWidgetProvider() {
                 R.id.btn_widget_record,
                 PendingIntent.getActivity(
                     context,
-                    0,
+                    2,
                     Intent(context, VoiceCaptureActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     },

@@ -58,14 +58,20 @@ import kotlinx.coroutines.launch
  */
 class VoiceCaptureActivity : ComponentActivity() {
 
+    // Mutable state so that granting permission triggers recomposition and
+    // the LaunchedEffect(hasPermission) inside VoiceCaptureDialog fires with true.
+    private val hasPermissionState = mutableStateOf(false)
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (!isGranted) {
             Toast.makeText(this, "Microphone permission required", Toast.LENGTH_SHORT).show()
             finish()
+        } else {
+            // Update state → triggers recomposition → LaunchedEffect starts recording
+            hasPermissionState.value = true
         }
-        // If granted, the UI's LaunchedEffect will start recording
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,16 +88,21 @@ class VoiceCaptureActivity : ComponentActivity() {
         val audioStorageManager = entryPoint.audioStorageManager()
         val voiceRecorderManager = entryPoint.voiceRecorderManager()
 
-        // Check permission before showing recording UI
-        val hasPermission = ContextCompat.checkSelfPermission(
+        // Check permission — if already granted, set state to true immediately.
+        // If not, launch the system dialog; the result callback above updates the state.
+        val alreadyGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
 
-        if (!hasPermission) {
+        if (alreadyGranted) {
+            hasPermissionState.value = true
+        } else {
             requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
 
         setContent {
+            // Read the state here so Compose subscribes to it and recomposes when it changes
+            val hasPermission by hasPermissionState
             VoiceCaptureDialog(
                 hasPermission        = hasPermission,
                 audioStorageManager  = audioStorageManager,

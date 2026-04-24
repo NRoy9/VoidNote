@@ -54,7 +54,7 @@ object ChangelogData {
         // ── v1.2.0 —  ────────────────────────────────────────────────
         VersionEntry(
             version = "1.2.0",
-            releaseDate = "19 Apr 2026",
+            releaseDate = "22 Apr 2026",
             tagline     = "One tap to capture, one pass to protect.",
             changes = listOf(
                 ChangeItem(ChangeType.NEW, "Quick Capture Widget — add notes or voice memos directly from your home screen"),

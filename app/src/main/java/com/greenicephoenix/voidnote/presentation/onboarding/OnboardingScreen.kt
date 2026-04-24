@@ -46,22 +46,26 @@ private fun OnboardingContent(
         OnboardingPage(
             symbol      = "○",
             title       = "WELCOME TO\nVOID NOTE",
-            description = "A notes app built around one idea:\nyour thoughts are yours alone.\nMinimal by design. Private by default."
+            description = "A notes app built around one idea: your thoughts are yours alone. Minimal by design. Private by default."
+            //description = "A notes app built around one idea:\nyour thoughts are yours alone.\nMinimal by design. Private by default."
         ),
         OnboardingPage(
             symbol      = "⬡",
             title       = "PRIVATE\nBY DESIGN",
-            description = "AES-256 encryption before anything touches storage. Biometric lock.\nVault password you control. Password-protected folders for extra privacy.\nZero cloud. Zero tracking. Zero compromise."
+            description = "AES-256 encryption before anything touches storage. Biometric lock. Vault password you control. Password-protected folders for extra privacy. Zero cloud. Zero tracking. Zero compromise."
+            //description = "AES-256 encryption before anything touches storage. Biometric lock.\nVault password you control. Password-protected folders for extra privacy.\nZero cloud. Zero tracking. Zero compromise."
         ),
         OnboardingPage(
             symbol      = "◈",
             title       = "WRITE WITHOUT\nLIMITS",
-            description = "Rich text. Numbered lists. Checklists.\nVoice notes. Images. Code blocks.\nFocus Mode for distraction-free writing."
+            description = "Rich text. Numbered lists. Checklists. Voice notes. Images. Code blocks. Focus Mode for distraction-free writing."
+            //description = "Rich text. Numbered lists. Checklists.\nVoice notes. Images. Code blocks.\nFocus Mode for distraction-free writing."
         ),
         OnboardingPage(
             symbol      = "⊞",
             title       = "CAPTURE\nANYWHERE",
-            description = "Home screen widget for instant notes.\nFolders, tags, and a full Journal calendar.\nLink notes together. Templates to start faster.\nOffline-first. No account. No ads."
+            description = "Home screen widget for instant notes. Folders, tags, and a full Journal calendar. Link notes together. Templates to start faster. Offline-first. No account. No ads."
+            //description = "Home screen widget for instant notes.\nFolders, tags, and a full Journal calendar.\nLink notes together. Templates to start faster.\nOffline-first. No account. No ads."
         )
     )
 
