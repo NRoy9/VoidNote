@@ -8,129 +8,133 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 /**
- * Dark Color Scheme - Lifted blacks for better contrast
+ * Dark Color Scheme — GIP Ecosystem Void Deep
  *
- * This is the DEFAULT dark theme (not pure OLED)
- * Background: #121212 (Material Design standard)
- * Provides better depth perception and reduces eye strain
+ * Background: Void Deep #050508 (GIP spec)
+ * Primary accent: Ice Blue #00D4FF (VoidNote Cryo element)
+ * Error: Red #FF3B30 (retained for destructive actions only)
  */
 private val DarkColorScheme = darkColorScheme(
-    // Primary colors
-    primary = VoidAccent,
-    onPrimary = VoidWhite,
-    primaryContainer = VoidDarkGray,
-    onPrimaryContainer = VoidWhite,
+    // Primary — Ice Blue accent
+    primary            = VoidIceBlue,
+    onPrimary          = Color(0xFF001F26),          // Dark text on ice blue button
+    primaryContainer   = VoidIceBlueDarkContainer,   // #003A47 — tinted dark container
+    onPrimaryContainer = VoidIceBlue,                // Ice blue text on dark container
 
-    // Secondary colors
-    secondary = VoidLightGray,
-    onSecondary = VoidWhite,
-    secondaryContainer = VoidGray,
-    onSecondaryContainer = VoidWhite,
+    // Secondary — neutral surface tones
+    secondary             = VoidTextSecondary,
+    onSecondary           = VoidWhite,
+    secondaryContainer    = VoidSurfaceVariant,
+    onSecondaryContainer  = VoidWhite,
 
-    // Background colors - LIFTED from pure black
-    background = VoidBlack,  // ✅ #121212 - Visible difference from Extra Dark!
+    // Backgrounds — GIP Void Deep spec
+    background   = VoidDeep,     // #050508
     onBackground = VoidWhite,
 
-    // Surface colors - Cards, bottom sheets, etc.
-    surface = VoidDarkGray,  // ✅ #1E1E1E - Clear elevation
-    onSurface = VoidWhite,
+    // Surfaces — cards, bottom sheets, dialogs
+    surface            = VoidSurface,         // #0F0F18
+    onSurface          = VoidWhite,
+    surfaceVariant     = VoidSurfaceVariant,  // #1A1A28
+    onSurfaceVariant   = VoidTextSecondary,
 
-    surfaceVariant = VoidGray,  // ✅ #2A2A2A - Secondary surfaces
-    onSurfaceVariant = VoidTextSecondary,
+    // Borders
+    outline        = VoidBorderDark,     // #2A2A3A
+    outlineVariant = VoidBorderVariant,  // #3A3A4A
 
-    // Outline colors - Borders and dividers
-    outline = VoidLightGray,  // ✅ #3A3A3A - More visible borders
-    outlineVariant = VoidBorderGray,
-
-    // Error colors
-    error = VoidAccent,
+    // Error — red stays here only
+    error   = VoidError,  // #FF3B30
     onError = VoidWhite
 )
 
 /**
- * Light Color Scheme - Clean, minimal light theme
+ * Light Color Scheme — clean light background, Ice Blue accent
  *
- * Background: #FAFAFA (off-white to reduce eye strain)
- * Follows Material Design 3 guidelines
+ * Background: #FAFAFA (off-white)
+ * Primary accent: Ice Blue #00D4FF
+ * Error: Red #FF3B30
  */
 private val LightColorScheme = lightColorScheme(
-    primary = VoidAccent,
-    onPrimary = VoidWhite,
-    primaryContainer = Color(0xFFFFDAD6),
-    onPrimaryContainer = Color(0xFF410002),
+    // Primary — Ice Blue accent
+    primary            = VoidIceBlueDark,          // Slightly darker for contrast on white
+    onPrimary          = VoidWhite,
+    primaryContainer   = VoidIceBlueContainer,     // #CCF4FF — light ice tint
+    onPrimaryContainer = VoidIceBlueOnContainer,   // #001F26 — dark readable text
 
-    secondary = Color(0xFF775652),
-    onSecondary = VoidWhite,
-    secondaryContainer = Color(0xFFFFDAD6),
-    onSecondaryContainer = Color(0xFF2C1512),
+    // Secondary — warm neutral
+    secondary             = Color(0xFF4A6070),
+    onSecondary           = VoidWhite,
+    secondaryContainer    = Color(0xFFCCE8F4),
+    onSecondaryContainer  = Color(0xFF001F2C),
 
-    background = VoidLightBg,
-    onBackground = VoidLightText,
+    // Backgrounds — light
+    background   = VoidLightBg,    // #FAFAFA
+    onBackground = VoidLightText,  // #050508
 
-    surface = VoidLightCard,
-    onSurface = VoidLightText,
+    // Surfaces
+    surface            = VoidLightCard,
+    onSurface          = VoidLightText,
+    surfaceVariant     = Color(0xFFDCF0F8),    // Subtle ice tint for variant surfaces
+    onSurfaceVariant   = Color(0xFF405060),
 
-    surfaceVariant = Color(0xFFF4DDDB),
-    onSurfaceVariant = Color(0xFF534341),
+    // Borders
+    outline        = VoidLightBorder,     // #E0E0E0
+    outlineVariant = Color(0xFFB8D8E8),   // Subtle ice-tinted border
 
-    outline = VoidLightBorder,
-    outlineVariant = Color(0xFFD8C2BF),
-
-    error = Color(0xFFBA1A1A),
+    // Error — red
+    error   = VoidError,
     onError = VoidWhite
 )
 
 /**
- * Extra Dark Color Scheme - Pure OLED black
+ * Extra Dark Color Scheme — Pure OLED black
  *
- * Background: #000000 (true black for AMOLED screens)
- * Maximum battery saving and aggressive dark mode
- * Best for night use and OLED devices
+ * Background: #000000 (true black for AMOLED)
+ * Primary accent: Ice Blue #00D4FF
+ * Error: Red #FF3B30
  */
 private val ExtraDarkColorScheme = darkColorScheme(
-    // Primary colors
-    primary = VoidAccent,
-    onPrimary = VoidWhite,
-    primaryContainer = VoidExtraDarkSurface,
-    onPrimaryContainer = VoidWhite,
+    // Primary — Ice Blue accent
+    primary            = VoidIceBlue,
+    onPrimary          = Color(0xFF001F26),
+    primaryContainer   = VoidExtraDarkSurface,   // Near-black container
+    onPrimaryContainer = VoidIceBlue,
 
-    // Secondary colors
-    secondary = VoidLightGray,
-    onSecondary = VoidWhite,
-    secondaryContainer = VoidExtraDarkSurface,
-    onSecondaryContainer = VoidWhite,
+    // Secondary
+    secondary             = VoidTextSecondary,
+    onSecondary           = VoidWhite,
+    secondaryContainer    = VoidExtraDarkSurface,
+    onSecondaryContainer  = VoidWhite,
 
-    // Background - PURE OLED BLACK
-    background = VoidExtraBlack,  // ✅ #000000 - True black for OLED!
+    // Backgrounds — OLED pure black
+    background   = VoidExtraBlack,  // #000000
     onBackground = VoidWhite,
 
-    // Surface colors - Minimal lift for depth
-    surface = VoidExtraDarkSurface,  // ✅ #0A0A0A - Barely visible elevation
-    onSurface = VoidWhite,
+    // Surfaces — minimal lift for depth
+    surface            = VoidExtraDarkSurface,    // #0A0A0A
+    onSurface          = VoidWhite,
+    surfaceVariant     = VoidExtraDarkSecondary,  // #151515
+    onSurfaceVariant   = VoidTextSecondary,
 
-    surfaceVariant = VoidExtraDarkSecondary,  // ✅ #151515 - Subtle layering
-    onSurfaceVariant = VoidTextSecondary,
-
-    // Outline colors - Very subtle
-    outline = VoidExtraDarkBorder,  // ✅ #1F1F1F - Minimal borders
+    // Borders — barely visible
+    outline        = VoidExtraDarkBorder,     // #1F1F1F
     outlineVariant = VoidExtraDarkSecondary,
 
-    // Error colors
-    error = VoidAccent,
+    // Error — red
+    error   = VoidError,
     onError = VoidWhite
 )
 
 /**
  * Main Theme Composable
  *
- * Provides three distinct visual themes:
- * 1. Light Mode - Off-white background, best for daytime
- * 2. Dark Mode - Lifted blacks (#121212), balanced dark theme
- * 3. Extra Dark - Pure OLED (#000000), maximum battery saving
+ * Three themes:
+ * 1. Light     — off-white (#FAFAFA) background, Ice Blue accent
+ * 2. Dark      — Void Deep (#050508) background, Ice Blue accent
+ * 3. Extra Dark — OLED black (#000000) background, Ice Blue accent
  *
- * @param darkTheme Whether to use dark theme (default: system preference)
- * @param extraDark Whether to use pure OLED black theme
- * @param content The content to theme
+ * @param darkTheme  Whether to use dark theme (default: system preference)
+ * @param extraDark  Whether to use pure OLED black theme
+ * @param content    The content to theme
  */
 @Composable
 fun VoidNoteTheme(
@@ -139,23 +143,14 @@ fun VoidNoteTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-        extraDark -> {
-            // Pure OLED black - Maximum battery saving
-            ExtraDarkColorScheme
-        }
-        darkTheme -> {
-            // Lifted blacks - Better contrast and readability
-            DarkColorScheme
-        }
-        else -> {
-            // Light theme - Off-white background
-            LightColorScheme
-        }
+        extraDark -> ExtraDarkColorScheme
+        darkTheme -> DarkColorScheme
+        else      -> LightColorScheme
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = VoidTypography,
-        content = content
+        typography  = VoidTypography,
+        content     = content
     )
 }

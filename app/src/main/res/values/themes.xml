@@ -2,10 +2,26 @@
 <resources>
 
     <style name="Theme.VoidNote" parent="Theme.AppCompat.DayNight.NoActionBar"/>
+
+    <!--
+        Splash screen style.
+        - windowSplashScreenBackground: Void Deep from GIP spec (#050508)
+        - windowSplashScreenAnimatedIcon: explicitly uses @mipmap/ic_launcher_foreground
+          (the new PNG) — prevents Android falling back to the old
+          res/drawable/ic_launcher_foreground.xml vector.
+        - postSplashScreenTheme: hands off to Theme.VoidNote once the app is ready.
+    -->
+    <style name="Theme.VoidNote.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#050508</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.VoidNote</item>
+    </style>
+
     <style name="Theme.VoidNote.Transparent" parent="Theme.VoidNote">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:backgroundDimEnabled">false</item>
     </style>
+
 </resources>
