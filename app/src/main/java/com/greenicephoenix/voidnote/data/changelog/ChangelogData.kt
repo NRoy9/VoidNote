@@ -54,9 +54,12 @@ object ChangelogData {
         // ── v1.2.0 —  ────────────────────────────────────────────────
         VersionEntry(
             version = "1.2.0",
-            releaseDate = "22 Apr 2026",
+            releaseDate = "25 Apr 2026",
             tagline     = "One tap to capture, one pass to protect.",
             changes = listOf(
+                ChangeItem(ChangeType.NEW, "App theme updated to GIP design system"),
+                ChangeItem(ChangeType.NEW, "New app icon — crystalline Ice/Cryo design aligned with the GIP ecosystem"),
+                ChangeItem(ChangeType.IMPROVED, "Dark mode now uses Void Deep (#050508) backgrounds per the GIP design system"),
                 ChangeItem(ChangeType.NEW, "Quick Capture Widget — add notes or voice memos directly from your home screen"),
                 ChangeItem(ChangeType.NEW, "Small widget (2×1): one-tap new note and voice recording buttons"),
                 ChangeItem(ChangeType.NEW, "Medium widget (4×2): recent notes list plus quick capture and voice buttons"),
